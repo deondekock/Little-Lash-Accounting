@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Little Lash Lounge Payments</title>
+  <style>
+    :root {
+      --bg: #fbf6f8;
+      --card: #ffffff;
+      --ink: #2b1d24;
+      --muted: #8a7580;
+      --line: #eadde3;
+      --brand: #b04a78;
+      --brand-soft: #f6e3ea;
+      --paid: #1f8a5b;
+      --paid-soft: #e1f4ea;
+      --unpaid: #c2410c;
+      --unpaid-soft: #fdece2;
+      --cash: #4d7c0f;
+      --card-m: #1d4ed8;
+      --eft: #7c3aed;
+      --radius: 14px;
+      --shadow: 0 1px 2px rgba(60, 20, 40, .06), 0 4px 14px rgba(60, 20, 40, .05);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font: 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      padding-bottom: 96px;
+    }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 16px; }
+
+    header.top {
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      position: sticky; top: 0; z-index: 20;
+    }
+    .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0 8px; }
+    .brand { font-weight: 700; font-size: 18px; letter-spacing: .2px; }
+    .brand span { color: var(--brand); }
+    .top-link { color: var(--brand); font-size: 13px; text-decoration: none; white-space: nowrap; }
+    nav.tabs { display: flex; gap: 4px; }
+    nav.tabs button {
+      flex: 1; border: 0; background: none; padding: 10px 8px; font-weight: 600; color: var(--muted);
+      border-bottom: 3px solid transparent;
+    }
+    nav.tabs button.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+    .period {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin: 16px 0 12px;
+    }
+    .period h2 { margin: 0; font-size: 22px; text-align: center; flex: 1; }
+    .round {
+      width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+      background: var(--card); font-size: 20px; line-height: 1; box-shadow: var(--shadow);
+    }
+    .today-btn { border: 0; background: none; color: var(--brand); font-size: 13px; font-weight: 600; }
+
+    .chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 10px; scrollbar-width: none; }
+    .chips::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: none; border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+      padding: 8px 14px; font-weight: 600; white-space: nowrap;
+    }
+    .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+    .chip.small { padding: 6px 12px; font-size: 13px; }
+
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+    .cards.methods { grid-template-columns: repeat(3, 1fr); }
+    .stat {
+      background: var(--card); border-radius: var(--radius); padding: 12px; box-shadow: var(--shadow);
+      min-width: 0;
+    }
+    .stat .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .stat .value { font-size: 19px; font-weight: 700; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat .sub { font-size: 12px; color: var(--muted); }
+    .stat.paid .value { color: var(--paid); }
+    .stat.unpaid .value { color: var(--unpaid); }
+
+    .section-title {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin: 20px 0 8px; font-size: 13px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .6px;
+    }
+
+    .panel { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--line); }
+    th:first-child, td:first-child { text-align: left; }
+    th { font-size: 12px; color: var(--muted); font-weight: 600; background: #fdf9fb; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tfoot td { font-weight: 700; background: #fdf9fb; border-top: 1px solid var(--line); border-bottom: 0; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: #fdf6f9; }
+    .green { color: var(--paid); }
+    .orange { color: var(--unpaid); }
+
+    .item {
+      display: grid; grid-template-columns: 28px 1fr auto; gap: 4px 10px; align-items: center;
+      padding: 12px; border-bottom: 1px solid var(--line);
+    }
+    .item:last-child { border-bottom: 0; }
+    .item input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--brand); grid-row: span 2; }
+    .item .who { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item .meta { color: var(--muted); font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item .amount { font-weight: 700; text-align: right; font-size: 16px; }
+    .item .actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+    .item-body { cursor: pointer; min-width: 0; }
+
+    .pill {
+      border: 0; border-radius: 999px; padding: 5px 12px; font-size: 13px; font-weight: 700; min-width: 72px;
+    }
+    .pill.Paid { background: var(--paid-soft); color: var(--paid); }
+    .pill.Unpaid { background: var(--unpaid-soft); color: var(--unpaid); }
+    .method {
+      border: 1px solid var(--line); border-radius: 999px; padding: 4px 8px; font-size: 13px; font-weight: 700;
+      background: var(--card); appearance: none; -webkit-appearance: none; text-align: center; min-width: 58px;
+    }
+    .method.Cash { color: var(--cash); }
+    .method.Card { color: var(--card-m); }
+    .method.EFT { color: var(--eft); }
+
+    .date-head {
+      padding: 8px 12px; background: #fdf9fb; font-size: 12px; font-weight: 700; color: var(--muted);
+      border-bottom: 1px solid var(--line); text-transform: uppercase; letter-spacing: .5px;
+      display: flex; justify-content: space-between;
+    }
+
+    .empty { padding: 32px 16px; text-align: center; color: var(--muted); }
+    .empty .btn { margin-top: 12px; }
+
+    .btn {
+      border: 0; border-radius: 12px; padding: 11px 18px; font-weight: 700; background: var(--brand); color: #fff;
+    }
+    .btn.ghost { background: var(--card); color: var(--ink); border: 1px solid var(--line); }
+    .btn.danger { background: #fff; color: #b91c1c; border: 1px solid #f3c5c5; }
+    .btn.small { padding: 7px 12px; font-size: 13px; border-radius: 10px; }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .link-btn { border: 0; background: none; color: var(--brand); font-weight: 600; padding: 0; font-size: 13px; }
+
+    .fab {
+      position: fixed; right: 20px; bottom: 24px; z-index: 30;
+      border: 0; border-radius: 999px; background: var(--brand); color: #fff; font-weight: 700;
+      padding: 16px 22px; font-size: 16px; box-shadow: 0 8px 24px rgba(176, 74, 120, .35);
+    }
+
+    .bulk {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--ink); color: #fff;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+      display: none;
+    }
+    .bulk.show { display: block; }
+    .bulk .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0; }
+    .bulk .count { font-weight: 700; margin-right: auto; }
+    .bulk .btn { background: #fff; color: var(--ink); }
+    .bulk .btn.paid { background: var(--paid); color: #fff; }
+    .bulk select { border-radius: 10px; padding: 7px 8px; border: 0; }
+
+    .emp-row { display: flex; align-items: center; gap: 12px; padding: 14px 12px; border-bottom: 1px solid var(--line); }
+    .emp-row:last-child { border-bottom: 0; }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%; background: var(--brand-soft); color: var(--brand);
+      display: grid; place-items: center; font-weight: 700; flex: none;
+    }
+    .emp-row .grow { flex: 1; min-width: 0; }
+    .emp-row .name { font-weight: 600; }
+    .emp-row.inactive { opacity: .55; }
+    .tag { font-size: 11px; background: #eee; border-radius: 6px; padding: 1px 6px; margin-left: 6px; font-weight: 600; }
+
+    /* Modal */
+    .backdrop {
+      position: fixed; inset: 0; background: rgba(30, 10, 20, .45); z-index: 50;
+      display: none; align-items: flex-end; justify-content: center;
+    }
+    .backdrop.show { display: flex; }
+    .modal {
+      background: var(--card); width: 100%; max-width: 520px; border-radius: 20px 20px 0 0;
+      padding: 20px 16px calc(16px + env(safe-area-inset-bottom)); max-height: 92vh; overflow-y: auto;
+    }
+    @media (min-width: 640px) {
+      .backdrop { align-items: center; }
+      .modal { border-radius: 20px; padding: 24px; }
+    }
+    .modal h3 { margin: 0 0 16px; font-size: 20px; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; font-size: 16px;
+    }
+    .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .seg { display: flex; gap: 8px; }
+    .seg button {
+      flex: 1; padding: 12px 8px; border-radius: 12px; border: 1px solid var(--line); background: #fff; font-weight: 700;
+    }
+    .seg button.active { background: var(--brand); color: #fff; border-color: var(--brand); }
+    .seg.status button.active[data-v=Paid] { background: var(--paid); border-color: var(--paid); }
+    .seg.status button.active[data-v=Unpaid] { background: var(--unpaid); border-color: var(--unpaid); }
+    .modal-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .modal-actions .btn { flex: 1; padding: 14px; }
+    .modal-actions .btn.danger { flex: none; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(20px);
+      background: var(--ink); color: #fff; padding: 10px 16px; border-radius: 12px; z-index: 60;
+      opacity: 0; transition: all .2s; pointer-events: none; max-width: calc(100% - 32px); text-align: center;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .toast.error { background: #b91c1c; }
+
+    .loading { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 70; overflow: hidden; display: none; }
+    .loading.show { display: block; }
+    .loading::after {
+      content: ""; position: absolute; height: 100%; width: 40%; background: var(--brand);
+      animation: slide 1s infinite ease-in-out;
+    }
+    @keyframes slide { from { left: -40%; } to { left: 100%; } }
+
+    .splash { padding: 80px 16px; text-align: center; color: var(--muted); }
+    .hidden { display: none !important; }
+
+    @media (max-width: 520px) {
+      .stat .value { font-size: 16px; }
+      .stat { padding: 10px; }
+      .period h2 { font-size: 19px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading"></div>
+
+  <header class="top">
+    <div class="wrap">
+      <div class="top-row">
+        <div class="brand">Little Lash <span>Lounge</span></div>
+        <a class="top-link hidden" id="sheetLink" target="_blank" rel="noopener">Open Google Sheet ↗</a>
+      </div>
+      <nav class="tabs">
+        <button data-view="payments" class="active">Payments</button>
+        <button data-view="employees">Employees</button>
+        <button data-view="year">Year</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap" id="app">
+    <div class="splash">Loading your payments…</div>
+  </main>
+
+  <button class="fab hidden" id="fab">+ Add appointment</button>
+
+  <div class="bulk" id="bulk">
+    <div class="wrap">
+      <span class="count" id="bulkCount"></span>
+      <button class="btn small paid" data-bulk-status="Paid">Mark paid</button>
+      <button class="btn small" data-bulk-status="Unpaid">Mark unpaid</button>
+      <select id="bulkMethod" aria-label="Set payment method">
+        <option value="">Set method…</option>
+        <option>Cash</option><option>Card</option><option>EFT</option>
+      </select>
+      <button class="btn small" id="bulkClear">✕</button>
+    </div>
+  </div>
+
+  <div class="backdrop" id="backdrop"><div class="modal" id="modal"></div></div>
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const METHODS = ['Cash', 'Card', 'EFT'];
+    const money = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' });
+    const fmt = (n) => money.format(n || 0);
+
+    const now = new Date();
+    const state = {
+      view: 'payments',
+      employees: [],
+      month: ym(now.getFullYear(), now.getMonth() + 1),
+      year: now.getFullYear(),
+      appts: [],        // appointments for state.month
+      yearAppts: null,  // appointments for state.year (loaded on demand)
+      employee: 'all',
+      status: 'all',
+      selected: new Set(),
+      showInactive: false,
+    };
+
+    /* ---------------- server calls ---------------- */
+    let pending = 0;
+    function call(fn, ...args) {
+      pending++;
+      document.getElementById('loading').classList.add('show');
+      return new Promise((resolve, reject) => {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler((err) => reject(err))[fn](...args);
+      }).finally(() => {
+        if (--pending === 0) document.getElementById('loading').classList.remove('show');
+      });
+    }
+    function fail(err) {
+      const msg = (err && err.message ? err.message : String(err)).replace(/^Exception:\s*/, '');
+      toast(msg, true);
+    }
+
+    /* ---------------- helpers ---------------- */
+    function ym(y, m) { return y + '-' + String(m).padStart(2, '0'); }
+    function shiftMonth(month, delta) {
+      const [y, m] = month.split('-').map(Number);
+      const d = new Date(y, m - 1 + delta, 1);
+      return ym(d.getFullYear(), d.getMonth() + 1);
+    }
+    function monthLabel(month) {
+      const [y, m] = month.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+    }
+    function shortMonth(m) {
+      return new Date(2000, m - 1, 1).toLocaleDateString('en-ZA', { month: 'long' });
+    }
+    function dayLabel(date) {
+      const [y, m, d] = date.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-ZA', { weekday: 'short', day: 'numeric', month: 'short' });
+    }
+    function todayStr() {
+      const d = new Date();
+      return ym(d.getFullYear(), d.getMonth() + 1) + '-' + String(d.getDate()).padStart(2, '0');
+    }
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function initials(name) {
+      return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('');
+    }
+    function employeeById(id) { return state.employees.find((e) => e.id === id); }
+
+    function totals(list) {
+      const t = { count: 0, total: 0, paid: 0, unpaid: 0, Cash: 0, Card: 0, EFT: 0, paidCount: 0, unpaidCount: 0 };
+      list.forEach((a) => {
+        t.count++;
+        t.total += a.amount;
+        if (a.status === 'Paid') { t.paid += a.amount; t.paidCount++; } else { t.unpaid += a.amount; t.unpaidCount++; }
+        if (t[a.method] !== undefined) t[a.method] += a.amount;
+      });
+      return t;
+    }
+    function byEmployee(list) {
+      const map = new Map();
+      list.forEach((a) => {
+        if (!map.has(a.employeeId)) map.set(a.employeeId, []);
+        map.get(a.employeeId).push(a);
+      });
+      return [...map.entries()]
+        .map(([id, items]) => ({ id, name: (employeeById(id) || {}).name || items[0].employeeName, t: totals(items) }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+    function forEmployee(list) {
+      return state.employee === 'all' ? list : list.filter((a) => a.employeeId === state.employee);
+    }
+
+    let toastTimer;
+    function toast(msg, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => (el.className = 'toast'), isError ? 5000 : 2200);
+    }
+
+    /* ---------------- rendering ---------------- */
+    const app = document.getElementById('app');
+
+    function render() {
+      document.querySelectorAll('nav.tabs button').forEach((b) =>
+        b.classList.toggle('active', b.dataset.view === state.view));
+      document.getElementById('fab').classList.toggle('hidden', state.view !== 'payments' || !state.employees.length);
+      if (state.view === 'payments') renderPayments();
+      else if (state.view === 'employees') renderEmployees();
+      else renderYear();
+      renderBulk();
+    }
+
+    function employeeChips() {
+      const visible = state.employees.filter((e) => e.active || state.appts.some((a) => a.employeeId === e.id) ||
+        (state.yearAppts || []).some((a) => a.employeeId === e.id));
+      return `<div class="chips">
+        <button class="chip ${state.employee === 'all' ? 'active' : ''}" data-emp="all">All employees</button>
+        ${visible.map((e) => `<button class="chip ${state.employee === e.id ? 'active' : ''}" data-emp="${esc(e.id)}">${esc(e.name)}</button>`).join('')}
+      </div>`;
+    }
+
+    function statCards(t) {
+      return `
+        <div class="cards">
+          <div class="stat"><div class="label">Total</div><div class="value">${fmt(t.total)}</div><div class="sub">${t.count} appointment${t.count === 1 ? '' : 's'}</div></div>
+          <div class="stat paid"><div class="label">Paid</div><div class="value">${fmt(t.paid)}</div><div class="sub">${t.paidCount} paid</div></div>
+          <div class="stat unpaid"><div class="label">Unpaid</div><div class="value">${fmt(t.unpaid)}</div><div class="sub">${t.unpaidCount} unpaid</div></div>
+        </div>
+        <div class="cards methods">
+          <div class="stat"><div class="label">Cash</div><div class="value" style="color:var(--cash)">${fmt(t.Cash)}</div></div>
+          <div class="stat"><div class="label">Card</div><div class="value" style="color:var(--card-m)">${fmt(t.Card)}</div></div>
+          <div class="stat"><div class="label">EFT</div><div class="value" style="color:var(--eft)">${fmt(t.EFT)}</div></div>
+        </div>`;
+    }
+
+    function employeeTable(rows, clickAttr) {
+      if (!rows.length) return '';
+      const sum = totals([]);
+      rows.forEach((r) => Object.keys(sum).forEach((k) => (sum[k] += r.t[k])));
+      return `<div class="panel table-scroll"><table>
+        <thead><tr><th>Employee</th><th>Appts</th><th>Total</th><th>Paid</th><th>Unpaid</th><th>Cash</th><th>Card</th><th>EFT</th></tr></thead>
+        <tbody>${rows.map((r) => `
+          <tr class="clickable" ${clickAttr}="${esc(r.id)}">
+            <td><b>${esc(r.name)}</b></td><td>${r.t.count}</td><td><b>${fmt(r.t.total)}</b></td>
+            <td class="green">${fmt(r.t.paid)}</td><td class="orange">${fmt(r.t.unpaid)}</td>
+            <td>${fmt(r.t.Cash)}</td><td>${fmt(r.t.Card)}</td><td>${fmt(r.t.EFT)}</td>
+          </tr>`).join('')}</tbody>
+        ${rows.length > 1 ? `<tfoot><tr><td>All</td><td>${sum.count}</td><td>${fmt(sum.total)}</td>
+          <td class="green">${fmt(sum.paid)}</td><td class="orange">${fmt(sum.unpaid)}</td>
+          <td>${fmt(sum.Cash)}</td><td>${fmt(sum.Card)}</td><td>${fmt(sum.EFT)}</td></tr></tfoot>` : ''}
+      </table></div>`;
+    }
+
+    function renderPayments() {
+      if (!state.employees.length) {
+        app.innerHTML = `<div class="panel empty" style="margin-top:24px">
+          <div style="font-size:40px">💅</div>
+          <p><b>Welcome!</b><br>Start by adding the ladies who work with you.</p>
+          <button class="btn" data-action="add-employee">+ Add first employee</button></div>`;
+        return;
+      }
+      const empList = forEmployee(state.appts);
+      const list = state.status === 'all' ? empList : empList.filter((a) => a.status === state.status);
+      const t = totals(empList);
+      const isCurrent = state.month === ym(now.getFullYear(), now.getMonth() + 1);
+
+      // Group by date, newest first.
+      const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName));
+      const groups = [];
+      sorted.forEach((a) => {
+        const g = groups[groups.length - 1];
+        if (g && g.date === a.date) g.items.push(a); else groups.push({ date: a.date, items: [a] });
+      });
+      const allSelected = list.length > 0 && list.every((a) => state.selected.has(a.id));
+
+      app.innerHTML = `
+        <div class="period">
+          <button class="round" data-month="-1" aria-label="Previous month">‹</button>
+          <div style="flex:1;text-align:center">
+            <h2>${monthLabel(state.month)}</h2>
+            ${isCurrent ? '' : '<button class="today-btn" data-action="this-month">Back to this month</button>'}
+          </div>
+          <button class="round" data-month="1" aria-label="Next month">›</button>
+        </div>
+        ${employeeChips()}
+        ${statCards(t)}
+        ${state.employee === 'all' && state.appts.length ? `
+          <div class="section-title">Per employee</div>
+          ${employeeTable(byEmployee(state.appts), 'data-emp')}` : ''}
+        <div class="section-title">
+          <span>Appointments</span>
+          <span class="chips" style="padding:0">
+            ${['all', 'Unpaid', 'Paid'].map((s) => `<button class="chip small ${state.status === s ? 'active' : ''}" data-status-filter="${s}">${s === 'all' ? 'All' : s}</button>`).join('')}
+          </span>
+        </div>
+        <div class="panel">
+          ${list.length ? `
+            <div class="date-head" style="text-transform:none">
+              <label style="display:flex;gap:8px;align-items:center;cursor:pointer">
+                <input type="checkbox" id="selectAll" ${allSelected ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--brand)"> Select all
+              </label>
+              <span>${list.length} shown · ${fmt(totals(list).total)}</span>
+            </div>
+            ${groups.map((g) => `
+              <div class="date-head"><span>${dayLabel(g.date)}</span><span>${fmt(totals(g.items).total)}</span></div>
+              ${g.items.map(itemHtml).join('')}
+            `).join('')}` : `
+            <div class="empty">No ${state.status === 'all' ? '' : state.status.toLowerCase() + ' '}appointments for ${monthLabel(state.month)}${state.employee !== 'all' ? ' for ' + esc((employeeById(state.employee) || {}).name) : ''}.
+              <br><button class="btn" data-action="add-appt">+ Add appointment</button></div>`}
+        </div>`;
+    }
+
+    function itemHtml(a) {
+      const who = state.employee === 'all' ? `${esc(a.client || 'Client')} <span style="color:var(--muted);font-weight:400">· ${esc(a.employeeName)}</span>` : esc(a.client || 'Client');
+      const meta = [a.service, a.notes, a.status === 'Paid' && a.paidOn ? 'paid ' + a.paidOn : ''].filter(Boolean).map(esc).join(' · ');
+      return `<div class="item">
+        <input type="checkbox" data-select="${esc(a.id)}" ${state.selected.has(a.id) ? 'checked' : ''} aria-label="Select">
+        <div class="item-body" data-edit="${esc(a.id)}">
+          <div class="who">${who}</div>
+          <div class="meta">${meta || '&nbsp;'}</div>
+        </div>
+        <div>
+          <div class="amount">${fmt(a.amount)}</div>
+          <div class="actions">
+            <select class="method ${a.method}" data-method="${esc(a.id)}" aria-label="Payment method">
+              ${METHODS.map((m) => `<option ${m === a.method ? 'selected' : ''}>${m}</option>`).join('')}
+            </select>
+            <button class="pill ${a.status}" data-toggle="${esc(a.id)}">${a.status}</button>
+          </div>
+        </div>
+      </div>`;
+    }
+
+    function renderEmployees() {
+      const monthTotals = new Map(byEmployee(state.appts).map((r) => [r.id, r.t]));
+      const list = state.employees.filter((e) => e.active || state.showInactive);
+      const inactiveCount = state.employees.filter((e) => !e.active).length;
+      app.innerHTML = `
+        <div class="section-title" style="margin-top:20px">
+          <span>Employees</span>
+          <button class="btn small" data-action="add-employee">+ Add employee</button>
+        </div>
+        <div class="panel">
+          ${list.length ? list.map((e) => {
+            const t = monthTotals.get(e.id);
+            return `<div class="emp-row ${e.active ? '' : 'inactive'}">
+              <div class="avatar">${esc(initials(e.name))}</div>
+              <div class="grow">
+                <div class="name">${esc(e.name)}${e.active ? '' : '<span class="tag">inactive</span>'}</div>
+                <div class="meta" style="color:var(--muted);font-size:13px">
+                  ${e.phone ? esc(e.phone) + ' · ' : ''}${monthLabel(state.month)}: ${t ? `${fmt(t.total)} (<span class="orange">${fmt(t.unpaid)} unpaid</span>)` : 'no appointments'}
+                </div>
+              </div>
+              <button class="btn small ghost" data-view-emp="${esc(e.id)}">View</button>
+              <button class="btn small ghost" data-edit-emp="${esc(e.id)}">Edit</button>
+            </div>`;
+          }).join('') : '<div class="empty">No employees yet.</div>'}
+        </div>
+        ${inactiveCount ? `<p style="text-align:center"><button class="link-btn" data-action="toggle-inactive">
+          ${state.showInactive ? 'Hide' : 'Show'} ${inactiveCount} inactive employee${inactiveCount === 1 ? '' : 's'}</button></p>` : ''}`;
+    }
+
+    function renderYear() {
+      if (!state.yearAppts) {
+        app.innerHTML = '<div class="splash">Loading year…</div>';
+        loadYear();
+        return;
+      }
+      const list = forEmployee(state.yearAppts);
+      const months = [];
+      for (let m = 1; m <= 12; m++) {
+        const key = ym(state.year, m);
+        months.push({ key, m, t: totals(list.filter((a) => a.date.startsWith(key))) });
+      }
+      const yt = totals(list);
+      app.innerHTML = `
+        <div class="period">
+          <button class="round" data-year="-1" aria-label="Previous year">‹</button>
+          <h2>Jan – Dec ${state.year}</h2>
+          <button class="round" data-year="1" aria-label="Next year">›</button>
+        </div>
+        ${employeeChips()}
+        ${statCards(yt)}
+        <div class="section-title">Month by month <span style="text-transform:none;font-weight:400">tap a month to open it</span></div>
+        <div class="panel table-scroll"><table>
+          <thead><tr><th>Month</th><th>Appts</th><th>Total</th><th>Paid</th><th>Unpaid</th><th>Cash</th><th>Card</th><th>EFT</th></tr></thead>
+          <tbody>${months.map(({ key, m, t }) => `
+            <tr class="clickable" data-open-month="${key}" style="${t.count ? '' : 'color:var(--muted)'}">
+              <td><b>${shortMonth(m)}</b></td><td>${t.count}</td><td><b>${fmt(t.total)}</b></td>
+              <td class="green">${fmt(t.paid)}</td><td class="orange">${fmt(t.unpaid)}</td>
+              <td>${fmt(t.Cash)}</td><td>${fmt(t.Card)}</td><td>${fmt(t.EFT)}</td>
+            </tr>`).join('')}</tbody>
+          <tfoot><tr><td>${state.year}</td><td>${yt.count}</td><td>${fmt(yt.total)}</td>
+            <td class="green">${fmt(yt.paid)}</td><td class="orange">${fmt(yt.unpaid)}</td>
+            <td>${fmt(yt.Cash)}</td><td>${fmt(yt.Card)}</td><td>${fmt(yt.EFT)}</td></tr></tfoot>
+        </table></div>
+        ${state.employee === 'all' && state.yearAppts.length ? `
+          <div class="section-title">Per employee — ${state.year}</div>
+          ${employeeTable(byEmployee(state.yearAppts), 'data-emp')}` : ''}`;
+    }
+
+    function renderBulk() {
+      const n = state.selected.size;
+      const show = n > 0 && state.view === 'payments';
+      document.getElementById('bulk').classList.toggle('show', show);
+      document.getElementById('fab').style.bottom = show ? '90px' : '';
+      document.getElementById('bulkCount').textContent = n + ' selected';
+    }
+
+    /* ---------------- modals ---------------- */
+    const backdrop = document.getElementById('backdrop');
+    const modal = document.getElementById('modal');
+    function openModal(html) { modal.innerHTML = html; backdrop.classList.add('show'); }
+    function closeModal() { backdrop.classList.remove('show'); modal.innerHTML = ''; }
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+    function segHtml(name, options, value, extraClass) {
+      return `<div class="seg ${extraClass || ''}" data-seg="${name}">
+        ${options.map((o) => `<button type="button" data-v="${o}" class="${o === value ? 'active' : ''}">${o}</button>`).join('')}
+      </div><input type="hidden" name="${name}" value="${value}">`;
+    }
+
+    function openAppointment(a) {
+      const editing = !!a;
+      const defaultDate = state.month === todayStr().slice(0, 7) ? todayStr() : state.month + '-01';
+      a = a || {
+        date: defaultDate,
+        employeeId: state.employee !== 'all' ? state.employee : (state.employees.find((e) => e.active) || {}).id,
+        client: '', service: '', amount: '', method: 'Card', status: 'Unpaid', notes: '',
+      };
+      const options = state.employees.filter((e) => e.active || e.id === a.employeeId);
+      openModal(`
+        <h3>${editing ? 'Edit appointment' : 'New appointment'}</h3>
+        <form id="apptForm" autocomplete="off">
+          <div class="field"><label>Employee</label>
+            <select name="employeeId" required>
+              ${options.map((e) => `<option value="${esc(e.id)}" ${e.id === a.employeeId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}
+            </select></div>
+          <div class="row2">
+            <div class="field"><label>Date</label><input type="date" name="date" value="${esc(a.date)}" required></div>
+            <div class="field"><label>Amount (R)</label><input type="number" name="amount" inputmode="decimal" step="0.01" min="0" value="${esc(a.amount)}" placeholder="0.00" required></div>
+          </div>
+          <div class="field"><label>Client</label><input name="client" value="${esc(a.client)}" placeholder="e.g. Marise"></div>
+          <div class="field"><label>Service (optional)</label><input name="service" value="${esc(a.service)}" placeholder="e.g. Classic full set"></div>
+          <div class="field"><label>Paid with</label>${segHtml('method', METHODS, a.method)}</div>
+          <div class="field"><label>Status</label>${segHtml('status', ['Unpaid', 'Paid'], a.status, 'status')}</div>
+          <div class="field"><label>Notes (optional)</label><input name="notes" value="${esc(a.notes)}"></div>
+          <div class="modal-actions">
+            ${editing ? '<button type="button" class="btn danger" data-action="delete-appt">Delete</button>' : ''}
+            <button type="button" class="btn ghost" data-action="close">Cancel</button>
+            <button type="submit" class="btn">${editing ? 'Save' : 'Add'}</button>
+          </div>
+          ${editing ? '' : '<p style="text-align:center;margin:12px 0 0"><label style="font-size:13px;color:var(--muted)"><input type="checkbox" name="another"> Add another after saving</label></p>'}
+        </form>`);
+      const form = document.getElementById('apptForm');
+      if (!editing) form.amount.focus();
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        const another = !!data.another;
+        delete data.another;
+        if (editing) data.id = a.id;
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        try {
+          const saved = await call('saveAppointment', data);
+          upsertAppt(saved);
+          toast(editing ? 'Saved' : 'Appointment added');
+          if (saved.date.slice(0, 7) !== state.month) {
+            state.month = saved.date.slice(0, 7);
+            await loadMonth();
+          }
+          if (another) {
+            openAppointment();
+            const f = document.getElementById('apptForm');
+            f.employeeId.value = saved.employeeId;
+            f.date.value = saved.date;
+            f.another.checked = true;
+          } else {
+            closeModal();
+          }
+          render();
+        } catch (err) { fail(err); btn.disabled = false; }
+      });
+      modal.querySelector('[data-action=delete-appt]')?.addEventListener('click', async () => {
+        if (!confirm('Delete this appointment?')) return;
+        try {
+          await call('deleteAppointment', a.id);
+          state.appts = state.appts.filter((x) => x.id !== a.id);
+          state.selected.delete(a.id);
+          state.yearAppts = null;
+          closeModal(); render(); toast('Deleted');
+        } catch (err) { fail(err); }
+      });
+    }
+
+    function openEmployee(emp) {
+      const editing = !!emp;
+      emp = emp || { name: '', phone: '', active: true };
+      openModal(`
+        <h3>${editing ? 'Edit employee' : 'New employee'}</h3>
+        <form id="empForm" autocomplete="off">
+          <div class="field"><label>Name</label><input name="name" value="${esc(emp.name)}" required placeholder="e.g. Chrisilda"></div>
+          <div class="field"><label>Phone (optional)</label><input name="phone" type="tel" value="${esc(emp.phone)}"></div>
+          ${editing ? `<div class="field"><label>Status</label>${segHtml('active', ['Active', 'Inactive'], emp.active ? 'Active' : 'Inactive')}</div>` : ''}
+          <div class="modal-actions">
+            ${editing ? '<button type="button" class="btn danger" data-action="delete-emp">Delete</button>' : ''}
+            <button type="button" class="btn ghost" data-action="close">Cancel</button>
+            <button type="submit" class="btn">${editing ? 'Save' : 'Add'}</button>
+          </div>
+        </form>`);
+      const form = document.getElementById('empForm');
+      if (!editing) form.name.focus();
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form).entries());
+        const payload = { id: emp.id, name: data.name, phone: data.phone, active: data.active !== 'Inactive' };
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        try {
+          state.employees = await call('saveEmployee', payload);
+          if (editing) {
+            state.appts.forEach((a) => { if (a.employeeId === emp.id) a.employeeName = payload.name.trim(); });
+            state.yearAppts = null;
+          }
+          closeModal(); render(); toast(editing ? 'Saved' : 'Employee added');
+        } catch (err) { fail(err); btn.disabled = false; }
+      });
+      modal.querySelector('[data-action=delete-emp]')?.addEventListener('click', async () => {
+        if (!confirm('Delete ' + emp.name + '?')) return;
+        try {
+          state.employees = await call('deleteEmployee', emp.id);
+          if (state.employee === emp.id) state.employee = 'all';
+          closeModal(); render(); toast('Deleted');
+        } catch (err) { fail(err); }
+      });
+    }
+
+    modal.addEventListener('click', (e) => {
+      const segBtn = e.target.closest('.seg button');
+      if (segBtn) {
+        const seg = segBtn.parentElement;
+        seg.querySelectorAll('button').forEach((b) => b.classList.toggle('active', b === segBtn));
+        seg.nextElementSibling.value = segBtn.dataset.v;
+      }
+      if (e.target.closest('[data-action=close]')) closeModal();
+    });
+
+    /* ---------------- data ---------------- */
+    function upsertAppt(saved) {
+      const i = state.appts.findIndex((x) => x.id === saved.id);
+      if (saved.date.slice(0, 7) === state.month) {
+        if (i >= 0) state.appts[i] = saved; else state.appts.push(saved);
+      } else if (i >= 0) {
+        state.appts.splice(i, 1);
+      }
+      state.yearAppts = null;
+    }
+
+    async function loadMonth() {
+      const month = state.month;
+      const appts = await call('getAppointments', month);
+      if (month === state.month) { state.appts = appts; state.selected.clear(); }
+    }
+
+    async function loadYear() {
+      const year = state.year;
+      try {
+        const appts = await call('getAppointments', String(year));
+        if (year === state.year && state.view === 'year') { state.yearAppts = appts; render(); }
+      } catch (err) { fail(err); }
+    }
+
+    async function changeMonth(month) {
+      state.month = month;
+      state.appts = [];
+      state.selected.clear();
+      render();
+      try { await loadMonth(); render(); } catch (err) { fail(err); }
+    }
+
+    async function updateMany(ids, changes) {
+      // Optimistic update so taps feel instant.
+      const before = state.appts.map((a) => ({ ...a }));
+      state.appts.forEach((a) => {
+        if (!ids.includes(a.id)) return;
+        if (changes.method) a.method = changes.method;
+        if (changes.status) {
+          if (changes.status === 'Paid' && a.status !== 'Paid') a.paidOn = todayStr();
+          if (changes.status === 'Unpaid') a.paidOn = '';
+          a.status = changes.status;
+        }
+      });
+      render();
+      try {
+        const updated = await call('updateAppointments', ids, changes);
+        updated.forEach(upsertAppt);
+        render();
+        return true;
+      } catch (err) {
+        state.appts = before;
+        render();
+        fail(err);
+        return false;
+      }
+    }
+
+    /* ---------------- events ---------------- */
+    document.querySelector('nav.tabs').addEventListener('click', (e) => {
+      const b = e.target.closest('button[data-view]');
+      if (!b) return;
+      state.view = b.dataset.view;
+      if (state.view === 'year') state.year = Number(state.month.slice(0, 4)) || state.year;
+      render();
+    });
+
+    document.getElementById('fab').addEventListener('click', () => openAppointment());
+
+    app.addEventListener('click', (e) => {
+      const t = e.target;
+      let el;
+      if ((el = t.closest('[data-month]'))) return changeMonth(shiftMonth(state.month, Number(el.dataset.month)));
+      if ((el = t.closest('[data-year]'))) { state.year += Number(el.dataset.year); state.yearAppts = null; return render(); }
+      if ((el = t.closest('[data-open-month]'))) { state.view = 'payments'; return changeMonth(el.dataset.openMonth); }
+      if ((el = t.closest('[data-emp]'))) {
+        state.employee = el.dataset.emp; state.selected.clear();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return render();
+      }
+      if ((el = t.closest('[data-status-filter]'))) { state.status = el.dataset.statusFilter; state.selected.clear(); return render(); }
+      if ((el = t.closest('[data-toggle]'))) {
+        const a = state.appts.find((x) => x.id === el.dataset.toggle);
+        if (a) updateMany([a.id], { status: a.status === 'Paid' ? 'Unpaid' : 'Paid' });
+        return;
+      }
+      if ((el = t.closest('[data-edit]'))) {
+        const a = state.appts.find((x) => x.id === el.dataset.edit);
+        if (a) openAppointment({ ...a });
+        return;
+      }
+      if ((el = t.closest('[data-view-emp]'))) {
+        state.employee = el.dataset.viewEmp; state.view = 'payments'; return render();
+      }
+      if ((el = t.closest('[data-edit-emp]'))) return openEmployee(employeeById(el.dataset.editEmp));
+      if ((el = t.closest('[data-action]'))) {
+        const action = el.dataset.action;
+        if (action === 'add-employee') openEmployee();
+        if (action === 'add-appt') openAppointment();
+        if (action === 'this-month') changeMonth(ym(now.getFullYear(), now.getMonth() + 1));
+        if (action === 'toggle-inactive') { state.showInactive = !state.showInactive; render(); }
+      }
+    });
+
+    app.addEventListener('change', (e) => {
+      const t = e.target;
+      if (t.dataset.method) return updateMany([t.dataset.method], { method: t.value });
+      if (t.dataset.select) {
+        if (t.checked) state.selected.add(t.dataset.select); else state.selected.delete(t.dataset.select);
+        return render();
+      }
+      if (t.id === 'selectAll') {
+        const visible = forEmployee(state.appts).filter((a) => state.status === 'all' || a.status === state.status);
+        visible.forEach((a) => (t.checked ? state.selected.add(a.id) : state.selected.delete(a.id)));
+        return render();
+      }
+    });
+
+    document.getElementById('bulk').addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-bulk-status]');
+      if (b) {
+        const ok = await updateMany([...state.selected], { status: b.dataset.bulkStatus });
+        if (ok) { toast(state.selected.size + ' marked ' + b.dataset.bulkStatus.toLowerCase()); state.selected.clear(); render(); }
+      }
+      if (e.target.closest('#bulkClear')) { state.selected.clear(); render(); }
+    });
+    document.getElementById('bulkMethod').addEventListener('change', async (e) => {
+      const method = e.target.value;
+      e.target.value = '';
+      if (!method) return;
+      const ok = await updateMany([...state.selected], { method });
+      if (ok) { toast('Set to ' + method); state.selected.clear(); render(); }
+    });
+
+    /* ---------------- start ---------------- */
+    (async function init() {
+      try {
+        // Sequential on purpose: the first call creates the Google Sheet on first use.
+        const data = await call('getInitialData');
+        await loadMonth();
+        state.employees = data.employees;
+        const link = document.getElementById('sheetLink');
+        link.href = data.spreadsheetUrl;
+        link.classList.remove('hidden');
+        render();
+      } catch (err) {
+        app.innerHTML = '<div class="splash">Could not load your data. Please refresh the page.</div>';
+        fail(err);
+      }
+    })();
+  </script>
+</body>
+</html>
