@@ -1,91 +1,82 @@
 # Little Lash Lounge — Payments
 
-A simple, free app to track each employee's appointment payments month by month.
+A small, fast app (installable PWA) to track each employee's appointment payments month by month.
+You sign in with Google, and the data lives in a normal **Google Sheet** in your Drive.
 
-- **Employees**: add, edit, or mark inactive.
-- **Appointments**: date, employee, client, service, amount (R), paid with **Cash / Card / EFT**, **Paid / Unpaid**.
-- **Month view**: totals for the month (Total, Paid, Unpaid, Cash, Card, EFT), a per-employee breakdown,
-  and the list of appointments. Tap a pill to switch **Paid ⇄ Unpaid**, and use the dropdown to change the method.
-- **One employee or everyone**: tap an employee's name to see only her appointments, or "All employees" for everything.
-- **Bulk actions**: tick several appointments (or "Select all") → *Mark paid*, *Mark unpaid*, or *Set method*.
-- **Year view**: January–December totals per month and per employee. Tap a month to open it.
-- **Stored in Google Sheets**: everything is saved in a Google Sheet called
-  *Little Lash Lounge Payments* in the signed-in Google account's Drive. The app creates it the first time it opens.
-  Use the "Open Google Sheet ↗" link at the top to see it.
+- Months run **26th → 25th** like the old income sheet (set in the sheet's *Settings* tab).
+- See everyone or one employee: totals, Paid / Unpaid, Cash / Card / EFT.
+- Tap to mark **Paid ⇄ Unpaid** or change the method; tick several and mark them in one go.
+- A year view shows month-by-month and per-employee totals.
+- Works on phone and laptop. Use **Add to Home Screen** to get it like an app.
 
-It's a small **Vue 3** app that runs on **Google Apps Script**, so Google hosts it for free. You don't need a server or domain, and there's no monthly cost.
+No server is needed. It's a static website that talks to Google Sheets directly, so free hosting works.
 
 ---
 
-## One-time setup (about 10 minutes, no programming needed)
+## Setup (once, about 15 minutes)
 
-Do this **while signed in to the Google account that should own the data** (e.g. your wife's Gmail).
+### 1. Put the site on Netlify (free)
 
-1. Go to **https://script.google.com** and click **New project**.
-2. Click *Untitled project* at the top and rename it to **Little Lash Lounge Payments**.
-3. **Code.gs**: delete everything in the editor, then paste in the contents of
-   [`apps-script/Code.gs`](apps-script/Code.gs). On GitHub, the **Copy raw file** button copies it all.
-4. **Index**: click **+** next to *Files* → **HTML**, name it exactly `Index` (no `.html`, Google adds it),
-   delete what's there, then paste in the contents of [`apps-script/Index.html`](apps-script/Index.html).
-   This is the whole Vue app built into one file; it looks like one long jumbled line, which is normal.
-5. Click the 💾 **Save** icon.
-6. Click **Deploy → New deployment**. Click the ⚙️ gear next to *Select type* and choose **Web app**:
-   - *Description*: `v1`
-   - *Execute as*: **Me**
-   - *Who has access*: **Only myself**
-   - Click **Deploy**.
-7. Google asks for permission. Click **Authorize access**, choose the account, then
-   **Advanced → Go to Little Lash Lounge Payments (unsafe) → Allow**.
-   (Google shows "unsafe" for any personal script that it hasn't reviewed. This one is your own code, and it only
-   accesses the spreadsheets it creates.)
-8. Copy the **Web app URL** (it ends in `/exec`). That's the app!
+1. Go to **netlify.com** → sign up with GitHub.
+2. **Add new site → Import an existing project → GitHub →** pick `Little-Lash-Accounting`.
+3. Leave the build settings as they are (they come from `netlify.toml`) and click **Deploy**.
+4. **Site configuration → Change site name**, e.g. `little-lash`. Your address is then
+   `https://little-lash.netlify.app`.
 
-### Put it on her phone like an app
+(Cloudflare Pages works the same way: build command `npm run build`, output folder `dist`.)
 
-Open the Web app URL on the phone while signed in to the same Google account, then:
+### 2. Create the Google sign-in ("OAuth client ID")
 
-- **iPhone (Safari)**: Share button → **Add to Home Screen**.
-- **Android (Chrome)**: ⋮ menu → **Add to Home screen**.
+1. Open **console.cloud.google.com** → create a project called `Little Lash`.
+2. **APIs & Services → Library →** search **Google Sheets API** → **Enable**.
+3. **Google Auth Platform → Branding**: app name `Little Lash Payments`, your email → save.
+   **Audience**: choose *External*. Under **Test users**, add your Gmail and your wife's Gmail.
+4. **Clients → Create client → Web application**, then add:
+   - *Authorized JavaScript origins*: `https://little-lash.netlify.app` and `http://localhost:5173`
+   - *Authorized redirect URIs*: `https://little-lash.netlify.app/` and `http://localhost:5173/`
 
-### First use
+   Then click **Create** and copy the **Client ID**.
 
-1. Open the app, then go to **Employees → + Add employee** and add each lady.
-2. Go back to **Payments** and tap **+ Add appointment**. Tick *Add another after saving* to enter a busy day quickly.
+### 3. Tell the site about it
+
+In Netlify: **Site configuration → Environment variables**, add
+
+| Key | Value |
+| --- | --- |
+| `VITE_GOOGLE_CLIENT_ID` | the Client ID from step 2 |
+| `VITE_SPREADSHEET_ID` | `12aaCpHvrYlGrx6zByBj12QuHW25GaeZP2eqcJDpMCMw` (your "Little Lash Lounge Payments" sheet) |
+
+Then **Deploys → Trigger deploy**.
+
+### 4. Share the sheet and install on her phone
+
+1. Open the Google Sheet → **Share** → add your wife's Gmail as **Editor**.
+2. On her phone, open `https://little-lash.netlify.app` → **Sign in with Google**.
+   Google says *"Google hasn't verified this app"*. That's expected for your own private app:
+   tap **Continue**.
+3. **Add to Home Screen** (iPhone: Share button; Android: ⋮ menu).
+
+> Tip: while the Google project is in *Testing*, Google asks her to approve again about once a week. To stop
+> that, open **Google Auth Platform → Audience → Publish app**. No review is needed for a private app like this.
 
 ---
 
-## Updating the app later
+## Running it on your own computer
 
-If the code changes: paste the new `apps-script/Code.gs` / `apps-script/Index.html` into the same project, save, then
-**Deploy → Manage deployments → ✏️ Edit → Version: New version → Deploy**. The URL stays the same.
+```bash
+npm install
+cp .env.example .env.local     # put the Client ID (and sheet ID) in it
+npm run dev                    # http://localhost:5173
+```
 
-## Letting someone else use it too (optional)
+To try it **without Google** (fake sheet with sample data):
 
-With the settings above, only the owner's Google account can open the app. To let someone else use the same data:
+```bash
+npm run dev:fake
+# open http://localhost:5173/?api=http://localhost:8787 and use sheet ID: demo
+```
 
-1. Open the Google Sheet (link at the top of the app) and **Share** it with their Gmail as *Editor*.
-2. In Apps Script, open **Project Settings → Script properties**, and add `SPREADSHEET_ID` = the long ID from the
-   sheet's URL (the part between `/d/` and `/edit`).
-3. **Deploy → Manage deployments → Edit**: set *Execute as* to **User accessing the web app** and
-   *Who has access* to **Anyone with Google account**, then deploy a new version. Only people the sheet is shared
-   with will be able to read or write the data.
-
-## Importing the old "Little Lash Lounge Income" sheet (one time)
-
-`apps-script/Import.gs` reads the old sheet (every year's tab, 2017 onwards) and fills the app.
-Add it as a third script file named `Import`, then pick **importOldSheet** in the function dropdown and click
-**▶ Run**. It refuses to run if the Appointments tab already has data, so nothing is imported twice.
-It skips her total, Yoco, commission, loan and refund rows, and repairs mistyped dates. From 2026 on, a
-blank "1" column means **Unpaid**; everything older is marked **Paid**.
-
-## Months that don't start on the 1st
-
-The sheet's **Settings** tab has *Month starts on day*. With `26`, "July" runs from 26 June to 25 July,
-like the old sheet. `1` means normal calendar months.
-
-## How the data is stored
-
-The spreadsheet has three tabs:
+## The Google Sheet
 
 | Tab | Columns |
 | --- | --- |
@@ -93,45 +84,17 @@ The spreadsheet has three tabs:
 | **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At |
 | **Settings** | Month starts on day |
 
-You can freely filter, sort, chart or download the sheet. Please don't rename the tabs or the header row, and
-don't edit the ID columns, because the app uses them to find rows.
+You can filter, sort, chart or download the sheet freely. Don't rename the tabs or headers, and don't edit the
+ID columns. The app uses them to find rows. After editing the sheet by hand, tap **↻** in the app to reload.
 
----
-
-## For developers
+## Code
 
 ```
-apps-script/Code.gs          server side: Google Sheets storage + API (google.script.run)
-apps-script/appsscript.json  Apps Script manifest
-apps-script/Index.html       BUILT front-end (generated by `npm run build`, committed so it can be copy/pasted)
-src/                         Vue 3 front-end source
-  App.vue                    shell: header, tabs, modals, toast
-  store.js                   reactive state + actions (all server calls go through here)
-  api.js                     google.script.run wrapper (falls back to the local preview API)
-  lib/format.js              money/date helpers and totals
-  views/                     PaymentsView, EmployeesView, YearView
-  components/                StatCards, TotalsTable, AppointmentItem, modals, …
-dev/preview-server.cjs       runs the real Code.gs against an in-memory fake of Google Sheets
-```
-
-Apps Script can only serve files from the project, so Vite (with `vite-plugin-singlefile`) bundles the Vue app,
-JS and CSS into **one** HTML file and writes it to `apps-script/Index.html`.
-
-```bash
-npm install
-npm run dev       # Vite dev server with hot reload + fake backend with sample data → http://localhost:5173
-npm run build     # builds apps-script/Index.html
-npm run preview   # build, then serve the built file with sample data → http://localhost:8080
-```
-
-After changing anything in `src/`, run `npm run build` and commit the regenerated `apps-script/Index.html`.
-
-**Deploying with [clasp](https://github.com/google/clasp)** (optional, instead of copy/paste):
-
-```bash
-npm i -g @google/clasp
-clasp login
-cp .clasp.json.example .clasp.json   # put your scriptId in it (Project Settings → Script ID)
-npm run build && clasp push
-clasp deploy
+src/backend.js          Google Sheet as the database (load, add, edit, delete)
+src/google/auth.js      Google sign-in (OAuth redirect flow — works in an installed PWA)
+src/google/sheets.js    tiny Google Sheets API client
+src/store.js            app state and actions
+src/views, components   Vue 3 screens
+public/sw.js            service worker (offline app shell, installable)
+dev/fake-sheets-api.cjs local stand-in for the Google Sheets API, for testing
 ```
