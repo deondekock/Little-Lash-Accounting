@@ -5,7 +5,7 @@ import SegmentedControl from './SegmentedControl.vue'
 import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
 import { state, saveAppointment, deleteAppointment, closeModal, toast, fail } from '../store.js'
 
-const props = defineProps({ appt: Object })
+const props = defineProps({ appt: Object, prefill: Object })
 const editing = !!props.appt
 
 function blank() {
@@ -22,7 +22,7 @@ function blank() {
   }
 }
 
-const form = reactive(editing ? { ...props.appt } : blank())
+const form = reactive(editing ? { ...props.appt } : { ...blank(), ...(props.prefill || {}) })
 const another = ref(false)
 const saving = ref(false)
 const amountInput = ref(null)

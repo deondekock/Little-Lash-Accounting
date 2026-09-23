@@ -1,5 +1,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import '@fontsource-variable/plus-jakarta-sans'
+import '@fontsource-variable/fraunces'
+import '@fontsource-variable/fraunces/wght-italic.css'
 import './style.css'
 
 createApp(App).mount('#app')

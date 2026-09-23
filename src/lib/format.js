@@ -2,6 +2,9 @@ export const METHODS = ['Cash', 'Card', 'EFT']
 
 const money = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR' })
 export const fmt = (n) => money.format(n || 0)
+const wholeMoney = new Intl.NumberFormat('en-ZA', { style: 'currency', currency: 'ZAR', maximumFractionDigits: 0 })
+/** Whole rands — for headline figures and tiles. */
+export const fmt0 = (n) => wholeMoney.format(Math.round(n || 0))
 
 export const ym = (y, m) => y + '-' + String(m).padStart(2, '0')
 

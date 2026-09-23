@@ -13,7 +13,7 @@ async function run(fn) {
 </script>
 
 <template>
-  <div class="panel welcome-card">
+  <div class="card welcome-card">
     <h2>Which Google Sheet?</h2>
     <p>Paste the link to your <b>Little Lash Lounge Payments</b> sheet. You only need to do this once on each device.</p>
     <form @submit.prevent="run(() => openSheet(link))">

@@ -1,28 +1,20 @@
 <script setup>
 import { computed } from 'vue'
+import Icon from '../components/Icon.vue'
 import PeriodNav from '../components/PeriodNav.vue'
 import EmployeeChips from '../components/EmployeeChips.vue'
 import StatCards from '../components/StatCards.vue'
-import TotalsTable from '../components/TotalsTable.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
-import { byEmployee, currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, totals } from '../lib/format.js'
-import {
-  state, employeeAppts, visibleAppts, employeeById,
-  changeMonth, setEmployee, setStatus, openAppointment, openEmployee,
-} from '../store.js'
+import { currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, totals } from '../lib/format.js'
+import { state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment } from '../store.js'
 
 const monthTotals = computed(() => totals(employeeAppts.value))
-
 const thisMonth = computed(() => currentMonth(state.monthStartDay))
 const range = computed(() => {
   if (state.monthStartDay <= 1) return ''
   const r = monthRange(state.month, state.monthStartDay)
   return `${shortDate(r.from)} – ${shortDate(r.to)}`
 })
-
-const perEmployee = computed(() =>
-  byEmployee(state.appts, state.employees).map((r) => ({ key: r.id, label: r.name, t: r.t })),
-)
 
 /** Visible appointments grouped by day, newest first. */
 const groups = computed(() => {
@@ -48,60 +40,36 @@ const emptyText = computed(() => {
   const who = state.employee !== 'all' ? ' for ' + (employeeById(state.employee)?.name || '') : ''
   return `No ${kind}appointments in ${monthLabel(state.month)}${who}.`
 })
-
-function pickEmployee(id) {
-  setEmployee(id)
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
 </script>
 
 <template>
-  <div v-if="!state.employees.length" class="panel empty welcome">
-    <div class="emoji">💅</div>
-    <p><b>Welcome!</b><br>Start by adding the ladies who work with you.</p>
-    <button class="btn" @click="openEmployee()">+ Add first employee</button>
-  </div>
-
-  <template v-else>
+  <div class="page">
     <PeriodNav
       :label="monthLabel(state.month)"
       @prev="changeMonth(shiftMonth(state.month, -1))"
       @next="changeMonth(shiftMonth(state.month, 1))"
     >
       <div v-if="range" class="range">{{ range }}</div>
-      <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">
-        Back to this month
-      </button>
+      <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">Back to this month</button>
     </PeriodNav>
 
     <EmployeeChips />
     <StatCards :t="monthTotals" />
 
-    <template v-if="state.employee === 'all' && state.appts.length">
-      <div class="section-title">Per employee</div>
-      <TotalsTable :rows="perEmployee" @select="pickEmployee" />
-    </template>
-
-    <div class="section-title">
+    <div class="section-label">
       <span>Appointments</span>
-      <span class="chips inline">
-        <button
-          v-for="s in ['all', 'Unpaid', 'Paid']"
-          :key="s"
-          class="chip small"
-          :class="{ active: state.status === s }"
-          @click="setStatus(s)"
-        >
+      <div class="segmented" role="tablist">
+        <button v-for="s in ['all', 'Unpaid', 'Paid']" :key="s" :class="{ active: state.status === s }" @click="setStatus(s)">
           {{ s === 'all' ? 'All' : s }}
         </button>
-      </span>
+      </div>
     </div>
 
-    <div class="panel">
+    <div class="card appt-card">
       <template v-if="visibleAppts.length">
         <div class="date-head plain">
           <label class="select-all"><input v-model="allSelected" type="checkbox"> Select all</label>
-          <span>{{ visibleAppts.length }} shown · {{ fmt(totals(visibleAppts).total) }}</span>
+          <span>{{ visibleAppts.length }} · {{ fmt(totals(visibleAppts).total) }}</span>
         </div>
         <template v-for="g in groups" :key="g.date">
           <div class="date-head">
@@ -112,10 +80,13 @@ function pickEmployee(id) {
         </template>
       </template>
       <div v-else class="empty">
+        <div class="emoji">🌸</div>
         {{ emptyText }}
         <br>
-        <button class="btn" @click="openAppointment()">+ Add appointment</button>
+        <button class="btn" @click="openAppointment()"><Icon name="plus" :size="18" /> Add appointment</button>
       </div>
     </div>
-  </template>
+  </div>
+
+  <button class="fab" :class="{ raised: state.selected.size }" @click="openAppointment()"><Icon name="plus" :stroke="2.4" /> Add</button>
 </template>

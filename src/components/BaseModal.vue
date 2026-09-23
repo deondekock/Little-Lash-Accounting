@@ -12,7 +12,8 @@ onBeforeUnmount(() => document.removeEventListener('keydown', onKey))
 <template>
   <div class="backdrop" @click.self="emit('close')">
     <div class="modal" role="dialog" :aria-label="title">
-      <h3>{{ title }}</h3>
+      <div class="grabber" />
+      <h3 v-if="title">{{ title }}</h3>
       <slot />
     </div>
   </div>

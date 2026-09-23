@@ -3,11 +3,16 @@
 A small, fast app (installable PWA) to track each employee's appointment payments month by month.
 You sign in with Google, and the data lives in a normal **Google Sheet** in your Drive.
 
-- Months run **26th → 25th** like the old income sheet (set in the sheet's *Settings* tab).
-- See everyone or one employee: totals, Paid / Unpaid, Cash / Card / EFT.
-- Tap to mark **Paid ⇄ Unpaid** or change the method; tick several and mark them in one go.
-- A year view shows month-by-month and per-employee totals.
-- Works on phone and laptop. Use **Add to Home Screen** to get it like an app.
+- **Home**: this month's takings vs. the same point last month (with a running-total graph), appointments,
+  average visit, money still owed, the team leaderboard, how clients paid, busiest days, and regulars who are
+  **due for a refill**.
+- **Payments**: month by month (26th → 25th, set in the sheet's *Settings* tab), everyone or one person.
+  Tap to mark **Paid ⇄ Unpaid** or change **Cash / Card / EFT**; tick several and mark them in one go.
+- **Clients**: search every client, see visits, spend, usual service and full history; filters for regulars,
+  new clients and who's due back.
+- **Team**: each team member's month, unpaid amount and a 12-month trend.
+- **Insights**: the year month by month vs. last year, who earned what, payment methods, and tables.
+- Light and dark mode; works on phone and laptop; **Add to Home Screen** to use it like an app.
 
 No server is needed. It's a static website that talks to Google Sheets directly, so free hosting works.
 

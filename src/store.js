@@ -1,4 +1,4 @@
-import { reactive, computed } from 'vue'
+import { reactive, computed, shallowRef } from 'vue'
 import { call } from './api.js'
 import { currentMonth, todayStr } from './lib/format.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
@@ -22,26 +22,50 @@ export const state = reactive({
   email: '',
   loadedAt: 0,
   pending: 0,
-  view: 'payments', // 'payments' | 'employees' | 'year'
+  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights'
   employees: [],
   spreadsheetUrl: '',
   monthStartDay: 1, // from the sheet's Settings tab; 26 → "July" = 26 Jun – 25 Jul
   month: currentMonth(),
   year: new Date().getFullYear(),
-  appts: [], // appointments for state.month
-  yearAppts: null, // appointments for state.year, loaded on demand
   employee: 'all', // employee filter: 'all' or an employee id
   status: 'all', // 'all' | 'Paid' | 'Unpaid'
   selected: new Set(),
-  modal: null, // { type: 'appointment' | 'employee', data }
+  modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
+  clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
   toast: null, // { msg, error }
 })
 
+/**
+ * Every appointment in the sheet (all years). Kept as a plain array (not deeply
+ * reactive) and replaced on every change — fast even with 16k+ rows.
+ */
+export const all = shallowRef([])
+
 export const employeeById = (id) => state.employees.find((e) => e.id === id)
+
+/** Chart colour slot (1–6) per employee: active staff first, so today's team gets the first colours. */
+export const employeeSlot = computed(() => {
+  const order = [...state.employees].sort((a, b) => (b.active - a.active) || a.name.localeCompare(b.name))
+  return Object.fromEntries(order.map((e, i) => [e.id, i < 6 ? i + 1 : 0]))
+})
+export const employeeColor = (id) => {
+  const slot = employeeSlot.value[id]
+  return slot ? `var(--series-${slot})` : 'var(--series-other)'
+}
+
+/** Appointments in the selected business month. */
+export const monthAppts = computed(() => all.value.filter((a) => a.month === state.month))
+
+/** Appointments in the selected year (by business month). */
+export const yearAppts = computed(() => {
+  const y = String(state.year)
+  return all.value.filter((a) => a.month.startsWith(y))
+})
 
 /** Month appointments for the selected employee (ignores the status filter). */
 export const employeeAppts = computed(() =>
-  state.employee === 'all' ? state.appts : state.appts.filter((a) => a.employeeId === state.employee),
+  state.employee === 'all' ? monthAppts.value : monthAppts.value.filter((a) => a.employeeId === state.employee),
 )
 
 /** Month appointments for the selected employee and status. */
@@ -116,8 +140,7 @@ export async function openSheet(idOrUrl) {
     state.monthStartDay = data.monthStartDay || 1
     state.month = currentMonth(state.monthStartDay)
     state.year = Number(state.month.slice(0, 4))
-    state.yearAppts = null
-    await loadMonth()
+    await loadAll()
     state.loadedAt = Date.now()
     state.phase = 'ready'
     return true
@@ -150,61 +173,37 @@ export async function refresh() {
     const data = await api('getInitialData')
     state.employees = data.employees
     state.monthStartDay = data.monthStartDay || 1
-    state.yearAppts = null
-    await loadMonth()
-    if (state.view === 'year') loadYear()
+    await loadAll()
     state.loadedAt = Date.now()
+    toast('Up to date')
   } catch (err) {
     fail(err)
   }
 }
 
-async function loadMonth() {
-  const month = state.month
-  const appts = await api('getAppointments', month)
-  if (month === state.month) {
-    state.appts = appts
-    state.selected.clear()
-  }
-}
-
-export async function changeMonth(month) {
-  state.month = month
-  state.appts = []
+async function loadAll() {
+  all.value = await api('getAppointments', '')
   state.selected.clear()
-  try {
-    await loadMonth()
-  } catch (err) {
-    fail(err)
-  }
 }
 
-export async function loadYear() {
-  const year = state.year
-  try {
-    const appts = await api('getAppointments', String(year))
-    if (year === state.year) state.yearAppts = appts
-  } catch (err) {
-    fail(err)
-  }
+export function changeMonth(month) {
+  state.month = month
+  state.selected.clear()
 }
 
 export function changeYear(delta) {
   state.year += delta
-  state.yearAppts = null
-  loadYear()
 }
 
-export function setView(view) {
+export function setView(view, opts = {}) {
   state.view = view
-  if (view === 'year') {
-    const year = Number(state.month.slice(0, 4))
-    if (year !== state.year || !state.yearAppts) {
-      state.year = year
-      state.yearAppts = null
-      loadYear()
-    }
-  }
+  if (opts.employee) state.employee = opts.employee
+  if (opts.status) state.status = opts.status
+  if (opts.month) state.month = opts.month
+  if (opts.clientFilter) state.clientFilter = opts.clientFilter
+  if (view === 'insights') state.year = Number(state.month.slice(0, 4))
+  state.selected.clear()
+  window.scrollTo({ top: 0 })
 }
 
 export function setEmployee(id) {
@@ -219,49 +218,47 @@ export function setStatus(status) {
 
 /* ---------------- appointments ---------------- */
 
-function upsertAppt(saved) {
-  const i = state.appts.findIndex((x) => x.id === saved.id)
-  if (saved.month === state.month) {
-    if (i >= 0) state.appts[i] = saved
-    else state.appts.push(saved)
-  } else if (i >= 0) {
-    state.appts.splice(i, 1)
-  }
-  state.yearAppts = null
+function upsertAppts(list) {
+  const byId = new Map(list.map((x) => [x.id, x]))
+  const next = all.value.map((a) => byId.get(a.id) || a)
+  for (const x of list) if (!all.value.some((a) => a.id === x.id)) next.push(x)
+  all.value = next
 }
 
 export async function saveAppointment(data) {
   const saved = await api('saveAppointment', data)
-  upsertAppt(saved)
-  if (saved.month !== state.month) await changeMonth(saved.month)
+  upsertAppts([saved])
+  if (saved.month !== state.month) changeMonth(saved.month)
   return saved
 }
 
 export async function deleteAppointment(id) {
   await api('deleteAppointment', id)
-  state.appts = state.appts.filter((x) => x.id !== id)
+  all.value = all.value.filter((x) => x.id !== id)
   state.selected.delete(id)
-  state.yearAppts = null
 }
 
 /** Changes status and/or method on several appointments. Optimistic, so taps feel instant. */
 export async function updateMany(ids, changes) {
-  const before = state.appts.map((a) => ({ ...a }))
-  for (const a of state.appts) {
-    if (!ids.includes(a.id)) continue
-    if (changes.method) a.method = changes.method
+  const before = all.value
+  const wanted = new Set(ids)
+  const today = todayStr()
+  all.value = all.value.map((a) => {
+    if (!wanted.has(a.id)) return a
+    const next = { ...a }
+    if (changes.method) next.method = changes.method
     if (changes.status) {
-      if (changes.status === 'Paid' && a.status !== 'Paid') a.paidOn = todayStr()
-      if (changes.status === 'Unpaid') a.paidOn = ''
-      a.status = changes.status
+      if (changes.status === 'Paid' && a.status !== 'Paid') next.paidOn = today
+      if (changes.status === 'Unpaid') next.paidOn = ''
+      next.status = changes.status
     }
-  }
+    return next
+  })
   try {
-    const updated = await api('updateAppointments', ids, changes)
-    updated.forEach(upsertAppt)
+    upsertAppts(await api('updateAppointments', ids, changes))
     return true
   } catch (err) {
-    state.appts = before
+    all.value = before
     fail(err)
     return false
   }
@@ -273,10 +270,7 @@ export async function saveEmployee(payload) {
   state.employees = await api('saveEmployee', payload)
   if (payload.id) {
     const name = payload.name.trim()
-    state.appts.forEach((a) => {
-      if (a.employeeId === payload.id) a.employeeName = name
-    })
-    state.yearAppts = null
+    all.value = all.value.map((a) => (a.employeeId === payload.id ? { ...a, employeeName: name } : a))
   }
 }
 
@@ -287,6 +281,10 @@ export async function deleteEmployee(id) {
 
 /* ---------------- modals ---------------- */
 
-export const openAppointment = (appt) => (state.modal = { type: 'appointment', data: appt ? { ...appt } : null })
+/** Opens the appointment form: `appt` to edit, or `prefill` values for a new one. */
+export const openAppointment = (appt, prefill = null) =>
+  (state.modal = { type: 'appointment', data: appt ? { ...appt } : null, prefill })
 export const openEmployee = (emp) => (state.modal = { type: 'employee', data: emp ? { ...emp } : null })
+export const openClient = (client) => (state.modal = { type: 'client', data: client })
+export const openSettings = () => (state.modal = { type: 'settings', data: null })
 export const closeModal = () => (state.modal = null)

@@ -3,10 +3,10 @@ import { signIn } from '../store.js'
 </script>
 
 <template>
-  <div class="panel welcome-card">
-    <div class="emoji">💅</div>
-    <h2>Little Lash Lounge</h2>
-    <p>Sign in with the Google account that has the payments sheet.</p>
+  <div class="card welcome-card">
+    <div class="logo"><svg width="40" height="40" viewBox="0 0 512 512" aria-hidden="true"><path d="M112 300c40-56 92-84 144-84s104 28 144 84" fill="none" stroke="#fff" stroke-width="30" stroke-linecap="round"/><g stroke="#fff" stroke-width="22" stroke-linecap="round"><path d="M150 262l-26-40"/><path d="M196 236l-14-46"/><path d="M256 226v-48"/><path d="M316 236l14-46"/><path d="M362 262l26-40"/></g></svg></div>
+    <h2>Little Lash <em style="color: var(--brand)">Lounge</em></h2>
+    <p>Your salon's takings, team and clients — all in one place.</p>
     <button class="btn google" @click="signIn">
       <svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true">
         <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />

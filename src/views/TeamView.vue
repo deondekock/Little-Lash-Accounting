@@ -1,0 +1,75 @@
+<script setup>
+import { computed, ref } from 'vue'
+import Icon from '../components/Icon.vue'
+import Sparkline from '../components/charts/Sparkline.vue'
+import { all, state, monthAppts, employeeColor, openEmployee, setView } from '../store.js'
+import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
+
+const showInactive = ref(false)
+const months = computed(() => Array.from({ length: 12 }, (_, i) => shiftMonth(state.month, i - 11)))
+
+const members = computed(() =>
+  state.employees
+    .filter((e) => e.active || showInactive.value)
+    .map((e) => {
+      const mine = all.value.filter((a) => a.employeeId === e.id)
+      const byMonth = new Map()
+      for (const a of mine) byMonth.set(a.month, (byMonth.get(a.month) || 0) + a.amount)
+      const t = totals(monthAppts.value.filter((a) => a.employeeId === e.id))
+      const clients = new Set(mine.filter((a) => a.month === state.month).map((a) => a.client.trim().toLowerCase())).size
+      return {
+        ...e,
+        t,
+        clients,
+        trend: months.value.map((m) => byMonth.get(m) || 0),
+        lifetime: mine.length,
+        since: mine.length ? mine.reduce((m, a) => (a.date < m ? a.date : m), mine[0].date).slice(0, 4) : '',
+      }
+    })
+    .sort((a, b) => (b.active - a.active) || b.t.total - a.t.total),
+)
+const inactiveCount = computed(() => state.employees.filter((e) => !e.active).length)
+</script>
+
+<template>
+  <div class="page">
+    <div class="greeting" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
+      <div>
+        <div class="hello">The <em>team</em></div>
+        <div class="sub">{{ monthLabel(state.month) }}</div>
+      </div>
+      <button class="btn small soft" @click="openEmployee()"><Icon name="plus" :size="16" /> Add</button>
+    </div>
+
+    <div class="team-grid">
+      <div v-for="m in members" :key="m.id" class="card member" :class="{ inactive: !m.active }">
+        <div class="head">
+          <div class="avatar" :style="{ background: employeeColor(m.id) }">{{ initials(m.name) }}</div>
+          <div class="grow">
+            <div class="name">{{ m.name }}<span v-if="!m.active" class="tag">inactive</span></div>
+            <div class="role">{{ m.lifetime.toLocaleString('en-ZA') }} appointments<template v-if="m.since"> since {{ m.since }}</template></div>
+          </div>
+          <button class="btn small ghost" @click="openEmployee(m)">Edit</button>
+        </div>
+        <div class="figs">
+          <div><div class="l">This month</div><div class="v">{{ fmt0(m.t.total) }}</div></div>
+          <div><div class="l">Appointments</div><div class="v">{{ m.t.count }}</div></div>
+          <div><div class="l">Unpaid</div><div class="v" :class="{ orange: m.t.unpaid }">{{ fmt0(m.t.unpaid) }}</div></div>
+        </div>
+        <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 10px">
+          <div>
+            <div style="font-size: 11.5px; color: var(--muted); font-weight: 600; margin-bottom: 4px">Last 12 months</div>
+            <Sparkline :values="m.trend" :color="employeeColor(m.id)" :width="170" :height="38" :label="`${m.name}: takings over the last 12 months`" />
+          </div>
+          <button class="link-btn" @click="setView('payments', { employee: m.id, status: 'all' })">Payments →</button>
+        </div>
+      </div>
+    </div>
+
+    <p v-if="inactiveCount" style="text-align: center; margin-top: 16px">
+      <button class="link-btn" @click="showInactive = !showInactive">
+        {{ showInactive ? 'Hide' : 'Show' }} {{ inactiveCount }} past team member{{ inactiveCount === 1 ? '' : 's' }}
+      </button>
+    </p>
+  </div>
+</template>

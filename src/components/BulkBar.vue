@@ -1,6 +1,7 @@
 <script setup>
 import { METHODS } from '../lib/format.js'
 import { state, updateMany, toast } from '../store.js'
+import Icon from './Icon.vue'
 
 async function apply(changes, message) {
   const ids = [...state.selected]
@@ -19,15 +20,15 @@ function setMethod(e) {
 
 <template>
   <div class="bulk">
-    <div class="wrap">
+    <div class="row">
       <span class="count">{{ state.selected.size }} selected</span>
-      <button class="btn small paid" @click="apply({ status: 'Paid' }, (n) => n + ' marked paid')">Mark paid</button>
-      <button class="btn small" @click="apply({ status: 'Unpaid' }, (n) => n + ' marked unpaid')">Mark unpaid</button>
+      <button class="btn small paid" @click="apply({ status: 'Paid' }, (n) => n + ' marked paid')"><Icon name="check" :size="15" :stroke="2.6" />Paid</button>
+      <button class="btn small" @click="apply({ status: 'Unpaid' }, (n) => n + ' marked unpaid')">Unpaid</button>
       <select aria-label="Set payment method" @change="setMethod">
-        <option value="">Set method…</option>
+        <option value="">Method…</option>
         <option v-for="m in METHODS" :key="m">{{ m }}</option>
       </select>
-      <button class="btn small" aria-label="Clear selection" @click="state.selected.clear()">✕</button>
+      <button class="btn small" aria-label="Clear selection" @click="state.selected.clear()"><Icon name="close" :size="15" /></button>
     </div>
   </div>
 </template>
