@@ -6,6 +6,7 @@
  *   Appointments ID | Date | Month | Employee ID | Employee | Client | Service |
  *                Amount | Method | Status | Paid On | Notes | Created At | Updated At
  *   Settings     Setting | Value      ("Month starts on day" → 26 = months run 26th–25th)
+ *   Services     ID | Name | Price | Active | Created At | Updated At   (her service list & prices)
  *   History      ID | Time | Who | Action | Summary | Undone At | Data 1…10
  *                Every change the app makes is logged here with the rows as they were
  *                *before* the change, so any change (or a whole day) can be rolled back.
@@ -17,6 +18,7 @@
  */
 import { sheetsApi, range, enc, parseSheetId } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0 } from './lib/format.js'
+import { splitServices, joinServices, serviceKey } from './lib/services.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const TITLE = 'Little Lash Lounge Payments'
@@ -24,6 +26,8 @@ const EMPLOYEES = 'Employees'
 const APPOINTMENTS = 'Appointments'
 const SETTINGS = 'Settings'
 const HISTORY = 'History'
+const SERVICES = 'Services'
+const SERVICE_HEADERS = ['ID', 'Name', 'Price', 'Active', 'Created At', 'Updated At']
 const MONTH_START_SETTING = 'Month starts on day'
 
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At']
@@ -33,9 +37,11 @@ const APPOINTMENT_HEADERS = [
 ]
 const HISTORY_HEADERS = ['ID', 'Time', 'Who', 'Action', 'Summary', 'Undone At',
   ...Array.from({ length: 10 }, (_, i) => `Data ${i + 1}`)]
-const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS }
-const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P' }
-const TABS = [EMPLOYEES, APPOINTMENTS, SETTINGS, HISTORY]
+const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS, [SERVICES]: SERVICE_HEADERS }
+const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P', [SERVICES]: 'F' }
+const TABS = [EMPLOYEES, APPOINTMENTS, SERVICES, SETTINGS, HISTORY]
+/** History keys → tab (the rows each change touched, by kind). */
+const KIND_TAB = { appts: APPOINTMENTS, emps: EMPLOYEES, svcs: SERVICES }
 const CHUNK = 45000 // a cell holds up to 50,000 characters
 
 // Zero-based column indexes.
@@ -44,6 +50,7 @@ const A = {
   AMOUNT: 7, METHOD: 8, STATUS: 9, PAID_ON: 10, NOTES: 11, CREATED: 12, UPDATED: 13,
 }
 const E = { ID: 0, NAME: 1, PHONE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5 }
+const S = { ID: 0, NAME: 1, PRICE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5 }
 
 const db = {
   id: '',
@@ -51,6 +58,7 @@ const db = {
   gids: {}, // tab title → numeric sheetId (needed to delete rows)
   startDay: 1,
   employees: [], // { id, name, phone, active, row, raw }
+  services: [], // { id, name, price, active, row, raw }
   appts: [], // { ...appointment, row, raw }
 }
 
@@ -111,6 +119,24 @@ function publicAppt(a) {
   return { ...rest, employeeName: db.employees.find((e) => e.id === a.employeeId)?.name || a.employeeName }
 }
 
+function rowToService(r, row) {
+  const active = r[S.ACTIVE]
+  return {
+    id: clean(r[S.ID]),
+    name: clean(r[S.NAME]),
+    price: r[S.PRICE] === '' || r[S.PRICE] == null ? null : Number(r[S.PRICE]) || 0,
+    active: !(active === false || String(active).toUpperCase() === 'FALSE'),
+    row,
+    raw: r,
+  }
+}
+
+function publicServices() {
+  return db.services.map(({ row, raw, ...s }) => s).sort((a, b) => a.name.localeCompare(b.name))
+}
+
+const listFor = (tab) => ({ [APPOINTMENTS]: db.appts, [EMPLOYEES]: db.employees, [SERVICES]: db.services })[tab]
+
 function publicEmployees() {
   return db.employees
     .map(({ row, raw, ...e }) => e)
@@ -145,8 +171,7 @@ async function locateRows(tab, items) {
     x.row = row
   }
   // Other cached rows may have moved too.
-  const list = tab === APPOINTMENTS ? db.appts : db.employees
-  for (const x of list) x.row = index.get(x.id) || x.row
+  for (const x of listFor(tab)) x.row = index.get(x.id) || x.row
 }
 
 async function guarded(fn) {
@@ -249,8 +274,7 @@ export function getHistory() {
 async function applyState(tab, wanted) {
   const ids = Object.keys(wanted)
   if (!ids.length) return
-  const list = tab === APPOINTMENTS ? db.appts : db.employees
-  const existing = list.filter((x) => x.id in wanted)
+  const existing = listFor(tab).filter((x) => x.id in wanted)
   if (existing.length) await locateRows(tab, existing)
   const have = new Set(existing.map((x) => x.id))
   const updates = existing.filter((x) => wanted[x.id]).map((x) => ({ range: range(tab, `A${x.row}:${LAST_COL[tab]}${x.row}`), values: [padRow(tab, wanted[x.id])] }))
@@ -281,26 +305,28 @@ export function rollback(entryId) {
     const list = await readHistory()
     const target = list.find((e) => e.id === entryId)
     if (!target) throw new Error('That change was not found in the History tab.')
-    const toUndo = list.filter((e) => !e.undoneAt && e.time >= target.time).sort((a, b) => (a.time < b.time ? 1 : -1))
+    // Every entry from that moment on — including ones already undone — newest first. Each entry holds
+    // the rows exactly as they were just before it, so the oldest entry touching a row tells us how
+    // that row looked at that moment, whatever happened (or was undone) in between.
+    const span = list.filter((e) => e.time >= target.time).sort((a, b) => (a.time < b.time ? 1 : -1))
+    const toUndo = span.filter((e) => !e.undoneAt)
     if (!toUndo.length) throw new Error('That change has already been undone.')
 
     // Newest → oldest, so the oldest entry's "before" wins for each row.
-    const appts = {}
-    const emps = {}
-    for (const e of toUndo) {
+    const wanted = { appts: {}, emps: {}, svcs: {} }
+    for (const e of span) {
       let d
       try { d = JSON.parse(e.data || '{}') } catch { d = { tooBig: true } }
       if (d.tooBig) throw new Error(`"${e.summary}" was too large to undo automatically. Use File → Version history in the Google Sheet.`)
-      Object.assign(appts, d.appts || {})
-      Object.assign(emps, d.emps || {})
+      for (const kind in wanted) Object.assign(wanted[kind], d[kind] || {})
     }
     // What things look like now, so the rollback itself can be undone.
-    const now = {
-      appts: Object.fromEntries(Object.keys(appts).map((id) => [id, db.appts.find((a) => a.id === id)?.raw ?? null])),
-      emps: Object.fromEntries(Object.keys(emps).map((id) => [id, db.employees.find((e) => e.id === id)?.raw ?? null])),
+    const now = {}
+    for (const kind in wanted) {
+      const list = listFor(KIND_TAB[kind])
+      now[kind] = Object.fromEntries(Object.keys(wanted[kind]).map((id) => [id, list.find((x) => x.id === id)?.raw ?? null]))
     }
-    await applyState(APPOINTMENTS, appts)
-    await applyState(EMPLOYEES, emps)
+    for (const kind of ['appts', 'svcs', 'emps']) await applyState(KIND_TAB[kind], wanted[kind])
     const stamp = new Date().toISOString()
     await sheetsApi(`/${db.id}/values:batchUpdate`, {
       method: 'POST',
@@ -340,12 +366,13 @@ async function ensureTabs(meta) {
 async function load() {
   const res = await sheetsApi(`/${db.id}/values:batchGet`, {
     query: {
-      ranges: [range(EMPLOYEES, 'A2:F'), range(APPOINTMENTS, 'A2:N'), range(SETTINGS, 'A2:B')],
+      ranges: [range(EMPLOYEES, 'A2:F'), range(APPOINTMENTS, 'A2:N'), range(SETTINGS, 'A2:B'), range(SERVICES, 'A2:F')],
       valueRenderOption: 'UNFORMATTED_VALUE',
       dateTimeRenderOption: 'SERIAL_NUMBER',
     },
   })
-  const [emps, appts, settings] = res.valueRanges.map((vr) => vr.values || [])
+  const [emps, appts, settings, services] = res.valueRanges.map((vr) => vr.values || [])
+  db.services = services.map((r, i) => (clean(r[0]) ? rowToService(r, i + 2) : null)).filter(Boolean)
   db.employees = emps.map((r, i) => (clean(r[0]) ? rowToEmployee(r, i + 2) : null)).filter(Boolean)
   db.appts = appts.map((r, i) => (clean(r[0]) ? rowToAppointment(r, i + 2) : null)).filter(Boolean)
   const start = settings.find((r) => clean(r[0]).toLowerCase() === MONTH_START_SETTING.toLowerCase())
@@ -392,7 +419,7 @@ export const reload = () => serial(load)
 /* ---------------- API used by the store ---------------- */
 
 export function getInitialData() {
-  return { employees: publicEmployees(), spreadsheetUrl: db.url, monthStartDay: db.startDay }
+  return { employees: publicEmployees(), services: publicServices(), spreadsheetUrl: db.url, monthStartDay: db.startDay }
 }
 
 /** period: 'YYYY-MM' (one business month) or 'YYYY' (a year). */
@@ -540,8 +567,8 @@ export function saveEmployee(input) {
       await writeRow(EMPLOYEES, emp.row, values)
       const renamed = emp.name !== name
       Object.assign(emp, { name, phone, active: input.active !== false, raw: values })
-      if (renamed) await renameInAppointments(emp.id, name)
-      await logChange('team', `Updated team member ${name}`, { emps: { [emp.id]: before } })
+      const apptsBefore = renamed ? await renameInAppointments(emp.id, name) : {}
+      await logChange('team', `Updated team member ${name}`, { emps: { [emp.id]: before }, appts: apptsBefore })
     } else {
       const values = [uuid(), name, phone, true, now, now]
       const row = await appendRow(EMPLOYEES, values)
@@ -552,8 +579,9 @@ export function saveEmployee(input) {
   }))
 }
 
-/** Keeps the readable "Employee" column in the sheet in step with a rename. */
+/** Keeps the readable "Employee" column in the sheet in step with a rename. Returns { id: rowBefore } of changed rows. */
 async function renameInAppointments(employeeId, name) {
+  const before = Object.fromEntries(db.appts.filter((a) => a.employeeId === employeeId && a.raw?.[A.EMPLOYEE] !== name).map((a) => [a.id, [...a.raw]]))
   const res = await sheetsApi(`/${db.id}/values/${enc(range(APPOINTMENTS, 'D2:E'))}`)
   const rows = res.values || []
   let changed = false
@@ -564,7 +592,7 @@ async function renameInAppointments(employeeId, name) {
     }
     return [r[1] ?? '']
   })
-  if (!changed) return
+  if (!changed) return {}
   await sheetsApi(`/${db.id}/values/${enc(range(APPOINTMENTS, `E2:E${rows.length + 1}`))}`, {
     method: 'PUT',
     query: { valueInputOption: 'RAW' },
@@ -576,6 +604,7 @@ async function renameInAppointments(employeeId, name) {
       if (a.raw) a.raw[A.EMPLOYEE] = name
     }
   })
+  return before
 }
 
 export function deleteEmployee(id) {
@@ -593,4 +622,101 @@ export function deleteEmployee(id) {
     }
     return publicEmployees()
   }))
+}
+
+/* ---------------- services ---------------- */
+
+/** Adds or edits a service in the Services tab. Renaming also renames it on past appointments. */
+export function saveService(input) {
+  return serial(() => guarded(async () => {
+    const name = clean(input?.name).replace(/\s*\+\s*/g, ' & ')
+    if (!name) throw new Error('Please enter the service name.')
+    const price = input.price === '' || input.price == null ? '' : Math.round(parseFloat(String(input.price).replace(',', '.')) * 100) / 100
+    if (price !== '' && !(price >= 0)) throw new Error('Please enter a valid price.')
+    const active = input.active !== false
+    const now = new Date().toISOString()
+    const clash = db.services.find((x) => serviceKey(x.name) === serviceKey(name) && x.id !== input.id)
+    if (clash) throw new Error(`There is already a service called "${clash.name}". Use Merge to combine them.`)
+    const existing = input.id ? db.services.find((x) => x.id === input.id) : null
+    const before = { svcs: {}, appts: {} }
+    if (existing) {
+      await locateRows(SERVICES, [existing])
+      before.svcs[existing.id] = [...existing.raw]
+      const values = [existing.id, name, price, active, existing.raw[S.CREATED] ?? now, now]
+      await writeRow(SERVICES, existing.row, values)
+      const oldName = existing.name
+      Object.assign(existing, rowToService(values, existing.row))
+      if (serviceKey(oldName) !== serviceKey(name) || oldName !== name) Object.assign(before.appts, await replaceInAppointments([oldName], name, now))
+      await logChange('services', oldName !== name ? `Renamed service "${oldName}" to "${name}"` : `Updated service ${name}`, before)
+    } else {
+      const values = [input.newId || uuid(), name, price, active, now, now]
+      const row = await appendRow(SERVICES, values)
+      db.services.push(rowToService(values, row))
+      before.svcs[values[0]] = null
+      // Adopting a name that past appointments already use (e.g. from the Services page): tidy their spelling.
+      if (input.fromNames?.length) Object.assign(before.appts, await replaceInAppointments(input.fromNames, name, now))
+      await logChange('services', `Added service ${name}${price !== '' ? ' · ' + fmt0(price) : ''}`, before)
+    }
+    return { services: publicServices(), appts: Object.keys(before.appts).map((id) => publicAppt(db.appts.find((a) => a.id === id))).filter(Boolean) }
+  }))
+}
+
+/**
+ * Merges several service names into one (e.g. "halfset lashes" + "Half set lashes").
+ * Past appointments are updated, and the Services tab keeps a single entry.
+ */
+export function mergeServices(fromNames, toName, summary) {
+  return serial(() => guarded(async () => {
+    toName = clean(toName).replace(/\s*\+\s*/g, ' & ')
+    if (!toName) throw new Error('Please enter a name.')
+    const now = new Date().toISOString()
+    const keys = new Set([...fromNames, toName].map(serviceKey))
+    const before = { svcs: {}, appts: {} }
+    // Services tab: keep one entry (the first that matches), remove the others.
+    const rows = db.services.filter((x) => keys.has(serviceKey(x.name)))
+    const keep = rows[0]
+    const drop = rows.slice(1)
+    if (rows.length) await locateRows(SERVICES, rows)
+    if (keep) {
+      before.svcs[keep.id] = [...keep.raw]
+      const price = keep.price ?? drop.find((d) => d.price != null)?.price ?? ''
+      const values = [keep.id, toName, price, keep.active || drop.some((d) => d.active), keep.raw[S.CREATED] ?? now, now]
+      await writeRow(SERVICES, keep.row, values)
+      Object.assign(keep, rowToService(values, keep.row))
+    }
+    if (drop.length) {
+      drop.forEach((d) => (before.svcs[d.id] = [...d.raw]))
+      await sheetsApi(`/${db.id}:batchUpdate`, {
+        method: 'POST',
+        body: { requests: drop.map((d) => d.row).sort((a, b) => b - a).map((r) => ({ deleteDimension: { range: { sheetId: db.gids[SERVICES], dimension: 'ROWS', startIndex: r - 1, endIndex: r } } })) },
+      })
+      const gone = new Set(drop)
+      db.services = db.services.filter((x) => !gone.has(x))
+      for (const d of [...drop].sort((a, b) => b.row - a.row)) shiftRowsAfter(db.services, d.row)
+    }
+    Object.assign(before.appts, await replaceInAppointments([...fromNames, toName], toName, now))
+    await logChange('services', summary || `Merged services into "${toName}"`, before)
+    return { services: publicServices(), appts: Object.keys(before.appts).map((id) => publicAppt(db.appts.find((a) => a.id === id))).filter(Boolean) }
+  }))
+}
+
+/** Replaces service names inside appointments' Service cells. Returns { id: rowBefore } of the changed ones. */
+async function replaceInAppointments(fromNames, toName, now) {
+  const keys = new Set(fromNames.map(serviceKey))
+  const renamed = (a) => joinServices(splitServices(a.service).map((t) => (keys.has(serviceKey(t)) ? toName : t)))
+  const items = db.appts.filter((a) => renamed(a) !== a.service)
+  if (!items.length) return {}
+  await locateRows(APPOINTMENTS, items)
+  const before = Object.fromEntries(items.map((a) => [a.id, [...a.raw]]))
+  const data = []
+  for (const a of items) {
+    a.service = renamed(a)
+    data.push({ range: range(APPOINTMENTS, `G${a.row}`), values: [[a.service]] })
+    data.push({ range: range(APPOINTMENTS, `N${a.row}`), values: [[now]] })
+    syncRaw(a, now)
+  }
+  for (let i = 0; i < data.length; i += 4000) {
+    await sheetsApi(`/${db.id}/values:batchUpdate`, { method: 'POST', body: { valueInputOption: 'RAW', data: data.slice(i, i + 4000) } })
+  }
+  return before
 }

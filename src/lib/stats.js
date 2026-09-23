@@ -1,5 +1,6 @@
 /** Aggregations behind the dashboard, clients and insights screens. */
 import { monthRange, shiftMonth, todayStr } from './format.js'
+import { splitServices, serviceKey } from './services.js'
 
 const DAY = 864e5
 const toTime = (date) => Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10))
@@ -175,4 +176,68 @@ export function findDuplicates(clients) {
     .filter((g) => g.length > 1)
     .map((g) => g.sort((a, b) => b.visits - a.visits))
     .sort((a, b) => b.reduce((s, c) => s + c.visits, 0) - a.reduce((s, c) => s + c.visits, 0))
+}
+
+/* ---------------- services ---------------- */
+
+const median = (xs) => {
+  if (!xs.length) return null
+  const s = [...xs].sort((a, b) => a - b)
+  return s[Math.floor(s.length / 2)]
+}
+
+/**
+ * Every service: her list (Services tab) plus names used on past appointments.
+ * Several services on one appointment share its amount equally for "revenue".
+ */
+export function buildServices(all, list) {
+  const map = new Map()
+  const entry = (k) => {
+    if (!map.has(k)) map.set(k, { key: k, spellings: new Map(), count: 0, revenue: 0, last: '', solo: [], tab: null })
+    return map.get(k)
+  }
+  for (const a of all) {
+    const tokens = splitServices(a.service)
+    if (!tokens.length) continue
+    for (const t of tokens) {
+      const e = entry(serviceKey(t))
+      e.count++
+      e.revenue += a.amount / tokens.length
+      if (a.date > e.last) e.last = a.date
+      if (tokens.length === 1) e.solo.push(a.amount)
+      e.spellings.set(t, (e.spellings.get(t) || 0) + 1)
+    }
+  }
+  for (const s of list) entry(serviceKey(s.name)).tab = s
+  return [...map.values()].map((e) => ({
+    key: e.key,
+    id: e.tab?.id || null,
+    name: e.tab?.name || mostCommon(e.spellings),
+    inList: !!e.tab,
+    active: e.tab ? e.tab.active : true,
+    price: e.tab?.price ?? null,
+    typical: median(e.solo.slice(-30)),
+    count: e.count,
+    revenue: e.revenue,
+    last: e.last,
+    spellings: [...e.spellings.keys()],
+  }))
+}
+
+/** The price to suggest for a service: her list price, else what it usually cost. */
+export const servicePrice = (s) => (s?.price ?? s?.typical ?? null)
+
+/** Service names that only differ by spacing, accents, capitals or a plural "s". */
+export function findServiceDuplicates(services) {
+  const groups = new Map()
+  for (const s of services) {
+    const k = looseKey(s.name).replace(/s$/, '')
+    if (!k) continue
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k).push(s)
+  }
+  return [...groups.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => g.sort((a, b) => (b.inList - a.inList) || b.count - a.count))
+    .sort((a, b) => b.reduce((s, x) => s + x.count, 0) - a.reduce((s, x) => s + x.count, 0))
 }

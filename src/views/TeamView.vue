@@ -68,6 +68,12 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
       </div>
     </div>
 
+    <button class="card list-row" style="margin-top: 14px; padding: 16px" @click="setView('services')">
+      <div class="history-icon"><Icon name="sparkle" :size="16" /></div>
+      <div class="grow"><div class="title">Services &amp; prices</div><div class="meta">Add, rename or merge services and set prices</div></div>
+      <Icon name="right" />
+    </button>
+
     <p v-if="inactiveCount" style="text-align: center; margin-top: 16px">
       <button class="link-btn" @click="showInactive = !showInactive">
         {{ showInactive ? 'Hide' : 'Show' }} {{ inactiveCount }} past team member{{ inactiveCount === 1 ? '' : 's' }}

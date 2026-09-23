@@ -43,9 +43,10 @@ const groups = computed(() => {
   }
   return out
 })
-const todays = computed(() => entries.value.filter((e) => localDate(e.time) === todayStr() && !e.undoneAt))
-// The oldest of today's changes that hasn't been undone — rolling back to it undoes the whole day.
-const oldestToday = computed(() => todays.value[todays.value.length - 1])
+const todayAll = computed(() => entries.value.filter((e) => localDate(e.time) === todayStr()))
+const todays = computed(() => todayAll.value.filter((e) => !e.undoneAt))
+// Rolling back to the day's first change puts everything back as it was this morning.
+const oldestToday = computed(() => (todays.value.length ? todayAll.value[todayAll.value.length - 1] : null))
 
 /** How many changes an undo from this entry would roll back. */
 const countFrom = (e) => entries.value.filter((x) => !x.undoneAt && x.time >= e.time).length

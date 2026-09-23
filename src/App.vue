@@ -5,6 +5,9 @@ import PaymentsView from './views/PaymentsView.vue'
 import ClientsView from './views/ClientsView.vue'
 import TeamView from './views/TeamView.vue'
 import InsightsView from './views/InsightsView.vue'
+import ServicesView from './views/ServicesView.vue'
+import ServiceModal from './components/ServiceModal.vue'
+import ServiceMergeModal from './components/ServiceMergeModal.vue'
 import BulkBar from './components/BulkBar.vue'
 import AppointmentModal from './components/AppointmentModal.vue'
 import EmployeeModal from './components/EmployeeModal.vue'
@@ -18,7 +21,7 @@ import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
 import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory } from './store.js'
 
-const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView }
+const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView }
 const tabs = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'payments', label: 'Payments', icon: 'receipt' },
@@ -74,7 +77,7 @@ const retry = () => location.reload()
     <BulkBar v-if="state.view === 'payments' && state.selected.size" />
     <nav class="bottom-nav" aria-label="Main">
       <div class="wrap">
-        <button v-for="t in tabs" :key="t.id" :class="{ active: state.view === t.id }" :aria-current="state.view === t.id ? 'page' : null" @click="setView(t.id)">
+        <button v-for="t in tabs" :key="t.id" :class="{ active: state.view === t.id || (t.id === 'team' && state.view === 'services') }" :aria-current="state.view === t.id ? 'page' : null" @click="setView(t.id)">
           <Icon :name="t.icon" :size="22" :stroke="state.view === t.id ? 2.2 : 1.8" />
           {{ t.label }}
         </button>
@@ -89,6 +92,8 @@ const retry = () => location.reload()
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
   <HistoryModal v-if="state.modal?.type === 'history'" />
+  <ServiceModal v-if="state.modal?.type === 'service'" :service="state.modal.data" />
+  <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 
   <div v-if="state.toast" class="toast" :class="{ error: state.toast.error, actionable: state.toast.action }" role="status">
     {{ state.toast.msg }}

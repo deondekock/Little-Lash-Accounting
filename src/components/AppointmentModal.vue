@@ -3,6 +3,11 @@ import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
+import ServicePicker from './ServicePicker.vue'
+import { watch } from 'vue'
+import { serviceCatalog } from '../store.js'
+import { servicePrice } from '../lib/stats.js'
+import { splitServices, serviceKey } from '../lib/services.js'
 import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
 import { state, saveAppointment, deleteAppointment, closeModal, toastUndo, fail } from '../store.js'
 
@@ -28,6 +33,16 @@ const another = ref(false)
 const saving = ref(false)
 const amountInput = ref(null)
 const suggestion = ref('')
+const servicePicker = ref(null)
+// The amount follows the chosen services until she types her own amount.
+const autoAmount = ref(!editing && !form.amount)
+watch(() => form.service, (svc) => {
+  if (!autoAmount.value) return
+  const byKey = new Map(serviceCatalog.value.map((s) => [s.key, s]))
+  const prices = splitServices(svc).map((t) => servicePrice(byKey.get(serviceKey(t))))
+  if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
+  else if (!prices.length) form.amount = ''
+})
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
@@ -38,11 +53,15 @@ function onPick(c) {
   const last = c.history[0]
   if (!last) return
   if (!form.service && last.service) form.service = last.service
-  if (!form.amount && last.amount) form.amount = last.amount
+  if ((!form.amount || autoAmount.value) && last.amount) {
+    form.amount = last.amount
+    autoAmount.value = false
+  }
   suggestion.value = `Last visit ${last.date.slice(8)}/${last.date.slice(5, 7)}/${last.date.slice(0, 4)} · ${last.service || 'appointment'} · R ${last.amount} · ${last.method}`
 }
 
 async function submit() {
+  servicePicker.value?.commit()
   saving.value = true
   try {
     const saved = await saveAppointment({ ...form })
@@ -51,6 +70,7 @@ async function submit() {
       // Keep employee + date, clear the rest for fast entry of a busy day.
       Object.assign(form, blank(), { employeeId: saved.employeeId, date: saved.date })
       suggestion.value = ''
+      autoAmount.value = true
       await nextTick()
       document.getElementById('f-client')?.focus()
     } else {
@@ -89,6 +109,10 @@ async function remove() {
         <ClientInput id="f-client" v-model="form.client" @pick="onPick" />
         <div v-if="suggestion" class="field-hint">{{ suggestion }}</div>
       </div>
+      <div class="field">
+        <label for="f-service">Services</label>
+        <ServicePicker id="f-service" ref="servicePicker" v-model="form.service" />
+      </div>
       <div class="row2">
         <div class="field">
           <label for="f-date">Date</label>
@@ -98,13 +122,9 @@ async function remove() {
           <label for="f-amount">Amount (R)</label>
           <input
             id="f-amount" ref="amountInput" v-model="form.amount" type="number" inputmode="decimal"
-            step="0.01" min="0" placeholder="0.00" required
+            step="0.01" min="0" placeholder="0.00" required @input="autoAmount = false"
           >
         </div>
-      </div>
-      <div class="field">
-        <label for="f-service">Service (optional)</label>
-        <input id="f-service" v-model="form.service" placeholder="e.g. Classic full set">
       </div>
       <div class="field">
         <label>Paid with</label>

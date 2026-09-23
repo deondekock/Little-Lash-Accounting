@@ -1,7 +1,7 @@
 import { reactive, computed, shallowRef } from 'vue'
 import { call } from './api.js'
 import { currentMonth, todayStr } from './lib/format.js'
-import { buildClients } from './lib/stats.js'
+import { buildClients, buildServices } from './lib/stats.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -24,8 +24,9 @@ export const state = reactive({
   email: '',
   loadedAt: 0,
   pending: 0,
-  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights'
+  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services'
   employees: [],
+  services: [], // her service list (Services tab)
   spreadsheetUrl: '',
   monthStartDay: 1, // from the sheet's Settings tab; 26 → "July" = 26 Jun – 25 Jul
   month: currentMonth(),
@@ -59,6 +60,9 @@ export const employeeColor = (id) => {
 
 /** One entry per client (visits, spend, history…) — shared by Home, Clients and the forms. */
 export const clients = computed(() => buildClients(all.value))
+
+/** Every service (her list + names used on past appointments) with usage stats. */
+export const serviceCatalog = computed(() => buildServices(all.value, state.services))
 
 /** Appointments in the selected business month. */
 export const monthAppts = computed(() => all.value.filter((a) => a.month === state.month))
@@ -149,6 +153,7 @@ export async function openSheet(idOrUrl) {
     savedSheetId(id)
     const data = await api('getInitialData')
     state.employees = data.employees
+    state.services = data.services || []
     state.spreadsheetUrl = data.spreadsheetUrl
     state.monthStartDay = data.monthStartDay || 1
     state.month = currentMonth(state.monthStartDay)
@@ -185,6 +190,7 @@ export async function refresh() {
     await api('reload')
     const data = await api('getInitialData')
     state.employees = data.employees
+    state.services = data.services || []
     state.monthStartDay = data.monthStartDay || 1
     await loadAll()
     state.loadedAt = Date.now()
@@ -286,6 +292,23 @@ export async function renameClients(ids, name, summary) {
   upsertAppts(await api('renameClients', ids, name, summary))
 }
 
+/* ---------------- services ---------------- */
+
+export async function saveService(input) {
+  const res = await api('saveService', input)
+  state.services = res.services
+  if (res.appts.length) upsertAppts(res.appts)
+}
+
+export async function mergeServices(fromNames, toName, summary) {
+  const res = await api('mergeServices', fromNames, toName, summary)
+  state.services = res.services
+  if (res.appts.length) upsertAppts(res.appts)
+}
+
+export const openService = (service) => (state.modal = { type: 'service', data: service ? { ...service } : null })
+export const openServiceMerge = (service, opts = {}) => (state.modal = { type: 'serviceMerge', data: { service, with: opts.with || [] } })
+
 /* ---------------- history & undo ---------------- */
 
 export async function loadHistory() {
@@ -304,6 +327,7 @@ export async function rollbackTo(entryId) {
     const n = await api('rollback', entryId)
     const data = await api('getInitialData')
     state.employees = data.employees
+    state.services = data.services || []
     await loadAll()
     if (state.modal?.type === 'history') await loadHistory()
     toastUndo(n === 1 ? 'Undone' : `Undid ${n} changes`)

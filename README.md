@@ -13,6 +13,9 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
 - **Team**: each team member's month, unpaid amount and a 12-month trend.
 - **Insights**: the year month by month vs. last year, who earned what, payment methods, and tables.
 - **Client suggestions** while adding an appointment (fills in her usual service and price).
+- **Services**: pick several services per appointment (chips, most-used first; price filled in from her list).
+  The **Services & prices** page (Team → Services & prices) lets her add services with prices, rename, hide,
+  and merge duplicate names (e.g. "halfset lashes" / "Half set lashes") across all past appointments.
 - **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
 - **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
   so any change — or everything done today — can be rolled back (and the rollback undone too).
@@ -74,6 +77,7 @@ npm run dev:fake
 | --- | --- |
 | **Employees** | ID, Name, Phone, Active, Created At, Updated At |
 | **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At |
+| **Services** | ID, Name, Price, Active, Created At, Updated At |
 | **Settings** | Month starts on day |
 | **History** | ID, Time, Who, Action, Summary, Undone At, Data 1–10 (the rows before each change, as JSON) |
 

@@ -557,3 +557,15 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .history-icon.delete { background: var(--unpaid-soft); color: var(--unpaid); }
 .history-icon.update { background: var(--paid-soft); color: var(--paid); }
 .history-icon.rollback { background: var(--line); color: var(--ink-2); }
+
+/* service multi-select */
+.multi {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 48px; padding: 7px 8px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--card-2); cursor: text;
+}
+.multi:focus-within { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
+.multi input { flex: 1; min-width: 120px; border: 0 !important; outline: 0 !important; background: none !important; padding: 5px 4px !important; font-size: 16px; }
+.svc-chip { display: inline-flex; align-items: center; gap: 4px; background: var(--ink); color: var(--card); border-radius: 999px; padding: 5px 6px 5px 11px; font-size: 13.5px; font-weight: 600; }
+.svc-chip button { border: 0; background: rgba(255,255,255,.18); color: inherit; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }
+.quick-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.quick-picks .chip { box-shadow: none; }

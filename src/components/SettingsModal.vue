@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, setView } from '../store.js'
 
 function run(fn) {
   closeModal()
@@ -26,6 +26,10 @@ function run(fn) {
       <button class="list-row" @click="openHistory()">
         <Icon name="history" />
         <div class="grow"><div class="title">History &amp; undo</div><div class="meta">See every change and roll back mistakes</div></div>
+      </button>
+      <button class="list-row" @click="run(() => setView('services'))">
+        <Icon name="sparkle" />
+        <div class="grow"><div class="title">Services &amp; prices</div><div class="meta">Add, rename, merge and price your services</div></div>
       </button>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
