@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { byEmployee, fmt, initials, monthLabel } from '../lib/format.js'
-import { state, openEmployee, setEmployee, setView } from '../store.js'
+import { state, openEmployee, setEmployee, setView, signOut, useDifferentSheet } from '../store.js'
 
 const showInactive = ref(false)
 
@@ -49,4 +49,15 @@ function view(id) {
       {{ showInactive ? 'Hide' : 'Show' }} {{ inactiveCount }} inactive employee{{ inactiveCount === 1 ? '' : 's' }}
     </button>
   </p>
+
+  <div class="section-title">Account</div>
+  <div class="panel account">
+    <div class="meta">Signed in as <b>{{ state.email || 'Google account' }}</b></div>
+    <div class="meta">Business months start on day {{ state.monthStartDay }} (change it in the sheet's Settings tab)</div>
+    <div class="account-actions">
+      <a class="btn small ghost" :href="state.spreadsheetUrl" target="_blank" rel="noopener">Open Google Sheet</a>
+      <button class="btn small ghost" @click="useDifferentSheet">Use a different sheet</button>
+      <button class="btn small ghost" @click="signOut">Sign out</button>
+    </div>
+  </div>
 </template>

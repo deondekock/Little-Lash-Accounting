@@ -1,10 +1,26 @@
 import { reactive, computed } from 'vue'
 import { call } from './api.js'
 import { currentMonth, todayStr } from './lib/format.js'
+import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
+import * as auth from './google/auth.js'
+import { AuthError } from './google/sheets.js'
+
+const SHEET_KEY = 'llp.sheetId'
+function savedSheetId(value) {
+  try {
+    if (value === undefined) return localStorage.getItem(SHEET_KEY)
+    if (value === null) localStorage.removeItem(SHEET_KEY)
+    else localStorage.setItem(SHEET_KEY, value)
+  } catch {
+    return null
+  }
+}
 
 export const state = reactive({
-  ready: false,
-  loadError: false,
+  // 'loading' | 'config' (no Google client ID) | 'signedOut' | 'pickSheet' | 'ready' | 'error'
+  phase: 'loading',
+  email: '',
+  loadedAt: 0,
   pending: 0,
   view: 'payments', // 'payments' | 'employees' | 'year'
   employees: [],
@@ -43,7 +59,8 @@ export function toast(msg, error = false) {
 }
 
 export function fail(err) {
-  toast(String(err?.message || err).replace(/^Exception:\s*/, ''), true)
+  if (err instanceof AuthError) state.phase = 'signedOut'
+  toast(String(err?.message || err), true)
 }
 
 async function api(fn, ...args) {
@@ -58,18 +75,86 @@ async function api(fn, ...args) {
 /* ---------------- loading ---------------- */
 
 export async function init() {
+  const redirect = auth.handleRedirect()
+  if (!CLIENT_ID && !FAKE_API) {
+    state.phase = 'config'
+    return
+  }
+  if (!auth.getToken()) {
+    // Token expired: quietly get a new one if she has signed in before (no screen shown).
+    if (!redirect?.error && auth.canTrySilent()) return auth.signIn({ silent: true })
+    state.phase = 'signedOut'
+    return
+  }
+  state.email = auth.knownEmail()
+  if (!state.email) auth.fetchEmail().then((e) => (state.email = e)).catch(() => {})
+  const id = savedSheetId() || DEFAULT_SHEET_ID
+  if (!id) {
+    state.phase = 'pickSheet'
+    return
+  }
+  await openSheet(id)
+}
+
+export const signIn = () => auth.signIn()
+
+export function signOut() {
+  auth.signOut()
+  state.phase = 'signedOut'
+  state.email = ''
+}
+
+/** Opens (and remembers) a sheet by link or ID. */
+export async function openSheet(idOrUrl) {
+  state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
   try {
-    // Sequential on purpose: the first call creates the Google Sheet on first use.
+    const id = await api('openSheet', idOrUrl)
+    savedSheetId(id)
     const data = await api('getInitialData')
     state.employees = data.employees
     state.spreadsheetUrl = data.spreadsheetUrl
     state.monthStartDay = data.monthStartDay || 1
     state.month = currentMonth(state.monthStartDay)
     state.year = Number(state.month.slice(0, 4))
+    state.yearAppts = null
     await loadMonth()
-    state.ready = true
+    state.loadedAt = Date.now()
+    state.phase = 'ready'
+    return true
   } catch (err) {
-    state.loadError = true
+    if (!(err instanceof AuthError)) state.phase = savedSheetId() ? 'error' : 'pickSheet'
+    fail(err)
+    return false
+  }
+}
+
+export async function createSheet() {
+  try {
+    const id = await api('createSheet')
+    return openSheet(id)
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
+export function useDifferentSheet() {
+  savedSheetId(null)
+  state.phase = 'pickSheet'
+}
+
+/** Re-reads the sheet (e.g. after changes made on another phone). */
+export async function refresh() {
+  try {
+    await api('reload')
+    const data = await api('getInitialData')
+    state.employees = data.employees
+    state.monthStartDay = data.monthStartDay || 1
+    state.yearAppts = null
+    await loadMonth()
+    if (state.view === 'year') loadYear()
+    state.loadedAt = Date.now()
+  } catch (err) {
     fail(err)
   }
 }
