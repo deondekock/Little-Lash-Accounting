@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import AreaCompare from '../components/charts/AreaCompare.vue'
 import Columns from '../components/charts/Columns.vue'
-import { all, state, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
+import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
 import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
 import { totals, byEmployee } from '../lib/format.js'
@@ -48,7 +48,6 @@ const team = computed(() => {
 
 const weekdays = computed(() => byWeekday(monthAppts.value).map((d) => ({ label: d.label, value: d.count, title: `${d.label} · ${fmt(d.total)}` })))
 
-const clients = computed(() => buildClients(all.value))
 const due = computed(() =>
   clients.value
     .filter((c) => c.due)

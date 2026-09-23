@@ -1,9 +1,11 @@
 import { reactive, computed, shallowRef } from 'vue'
 import { call } from './api.js'
 import { currentMonth, todayStr } from './lib/format.js'
+import { buildClients } from './lib/stats.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
+import * as backend from './backend.js'
 
 const SHEET_KEY = 'llp.sheetId'
 function savedSheetId(value) {
@@ -33,7 +35,8 @@ export const state = reactive({
   selected: new Set(),
   modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
-  toast: null, // { msg, error }
+  toast: null, // { msg, error, action }
+  history: null, // History entries (loaded when the History sheet opens)
 })
 
 /**
@@ -53,6 +56,9 @@ export const employeeColor = (id) => {
   const slot = employeeSlot.value[id]
   return slot ? `var(--series-${slot})` : 'var(--series-other)'
 }
+
+/** One entry per client (visits, spend, history…) — shared by Home, Clients and the forms. */
+export const clients = computed(() => buildClients(all.value))
 
 /** Appointments in the selected business month. */
 export const monthAppts = computed(() => all.value.filter((a) => a.month === state.month))
@@ -76,10 +82,16 @@ export const visibleAppts = computed(() =>
 /* ---------------- feedback ---------------- */
 
 let toastTimer
-export function toast(msg, error = false) {
-  state.toast = { msg, error }
+export function toast(msg, error = false, action = null) {
+  state.toast = { msg, error, action }
   clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => (state.toast = null), error ? 5000 : 2200)
+  toastTimer = setTimeout(() => (state.toast = null), error ? 5000 : action ? 6000 : 2200)
+}
+
+/** A confirmation with an "Undo" button that rolls back the change just made. */
+export function toastUndo(msg) {
+  const id = backend.lastEntryId()
+  toast(msg, false, id ? { label: 'Undo', run: () => rollbackTo(id) } : null)
 }
 
 export function fail(err) {
@@ -111,7 +123,8 @@ export async function init() {
     return
   }
   state.email = auth.knownEmail()
-  if (!state.email) auth.fetchEmail().then((e) => (state.email = e)).catch(() => {})
+  backend.setUser(state.email)
+  if (!state.email) auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
   const id = savedSheetId() || DEFAULT_SHEET_ID
   if (!id) {
     state.phase = 'pickSheet'
@@ -268,6 +281,39 @@ export async function updateMany(ids, changes) {
   }
 }
 
+/** Rename one client, or merge several spellings/clients into one name. */
+export async function renameClients(ids, name, summary) {
+  upsertAppts(await api('renameClients', ids, name, summary))
+}
+
+/* ---------------- history & undo ---------------- */
+
+export async function loadHistory() {
+  state.history = null
+  try {
+    state.history = await api('getHistory')
+  } catch (err) {
+    state.history = []
+    fail(err)
+  }
+}
+
+/** Undo this change and everything after it. */
+export async function rollbackTo(entryId) {
+  try {
+    const n = await api('rollback', entryId)
+    const data = await api('getInitialData')
+    state.employees = data.employees
+    await loadAll()
+    if (state.modal?.type === 'history') await loadHistory()
+    toastUndo(n === 1 ? 'Undone' : `Undid ${n} changes`)
+    return true
+  } catch (err) {
+    fail(err)
+    return false
+  }
+}
+
 /* ---------------- employees ---------------- */
 
 export async function saveEmployee(payload) {
@@ -291,6 +337,11 @@ export const openAppointment = (appt, prefill = null) =>
 export const openEmployee = (emp) => (state.modal = { type: 'employee', data: emp ? { ...emp } : null })
 export const openClient = (client) => (state.modal = { type: 'client', data: client })
 export const openSettings = () => (state.modal = { type: 'settings', data: null })
+export const openHistory = () => {
+  state.modal = { type: 'history', data: null }
+  loadHistory()
+}
+export const openMerge = (client, opts = {}) => (state.modal = { type: 'merge', data: { client, with: opts.with || [], mode: opts.mode || 'merge' } })
 /** Month/year picker sheet. mode 'month' sets state.month; 'year' sets state.year (Insights). */
 export const openPicker = (mode = 'month') => (state.modal = { type: 'picker', data: { mode } })
 export const closeModal = () => (state.modal = null)

@@ -1,12 +1,12 @@
 <script setup>
 import { METHODS } from '../lib/format.js'
-import { state, updateMany, toast } from '../store.js'
+import { state, updateMany, toastUndo } from '../store.js'
 import Icon from './Icon.vue'
 
 async function apply(changes, message) {
   const ids = [...state.selected]
   if (await updateMany(ids, changes)) {
-    toast(message(ids.length))
+    toastUndo(message(ids.length))
     state.selected.clear()
   }
 }

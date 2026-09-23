@@ -2,8 +2,9 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import ClientInput from './ClientInput.vue'
 import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
-import { state, saveAppointment, deleteAppointment, closeModal, toast, fail } from '../store.js'
+import { state, saveAppointment, deleteAppointment, closeModal, toastUndo, fail } from '../store.js'
 
 const props = defineProps({ appt: Object, prefill: Object })
 const editing = !!props.appt
@@ -26,21 +27,32 @@ const form = reactive(editing ? { ...props.appt } : { ...blank(), ...(props.pref
 const another = ref(false)
 const saving = ref(false)
 const amountInput = ref(null)
+const suggestion = ref('')
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
-onMounted(() => !editing && amountInput.value?.focus())
+onMounted(() => !editing && !form.client && document.getElementById('f-client')?.focus())
+
+/** Picking a known client fills in her usual service and price (only fields still empty). */
+function onPick(c) {
+  const last = c.history[0]
+  if (!last) return
+  if (!form.service && last.service) form.service = last.service
+  if (!form.amount && last.amount) form.amount = last.amount
+  suggestion.value = `Last visit ${last.date.slice(8)}/${last.date.slice(5, 7)}/${last.date.slice(0, 4)} · ${last.service || 'appointment'} · R ${last.amount} · ${last.method}`
+}
 
 async function submit() {
   saving.value = true
   try {
     const saved = await saveAppointment({ ...form })
-    toast(editing ? 'Saved' : 'Appointment added')
+    toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
       // Keep employee + date, clear the rest for fast entry of a busy day.
       Object.assign(form, blank(), { employeeId: saved.employeeId, date: saved.date })
+      suggestion.value = ''
       await nextTick()
-      amountInput.value?.focus()
+      document.getElementById('f-client')?.focus()
     } else {
       closeModal()
     }
@@ -56,7 +68,7 @@ async function remove() {
   try {
     await deleteAppointment(props.appt.id)
     closeModal()
-    toast('Deleted')
+    toastUndo('Deleted')
   } catch (err) {
     fail(err)
   }
@@ -72,6 +84,11 @@ async function remove() {
           <option v-for="e in employeeOptions" :key="e.id" :value="e.id">{{ e.name }}</option>
         </select>
       </div>
+      <div class="field">
+        <label for="f-client">Client</label>
+        <ClientInput id="f-client" v-model="form.client" @pick="onPick" />
+        <div v-if="suggestion" class="field-hint">{{ suggestion }}</div>
+      </div>
       <div class="row2">
         <div class="field">
           <label for="f-date">Date</label>
@@ -84,10 +101,6 @@ async function remove() {
             step="0.01" min="0" placeholder="0.00" required
           >
         </div>
-      </div>
-      <div class="field">
-        <label for="f-client">Client</label>
-        <input id="f-client" v-model="form.client" placeholder="e.g. Marise">
       </div>
       <div class="field">
         <label for="f-service">Service (optional)</label>

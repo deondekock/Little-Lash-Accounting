@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory } from '../store.js'
 
 function run(fn) {
   closeModal()
@@ -23,6 +23,10 @@ function run(fn) {
         <Icon name="external" />
         <div class="grow"><div class="title">Open the Google Sheet</div><div class="meta">All data lives here</div></div>
       </a>
+      <button class="list-row" @click="openHistory()">
+        <Icon name="history" />
+        <div class="grow"><div class="title">History &amp; undo</div><div class="meta">See every change and roll back mistakes</div></div>
+      </button>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
         <div class="grow"><div class="title">Refresh</div><div class="meta">Load changes made on another phone</div></div>

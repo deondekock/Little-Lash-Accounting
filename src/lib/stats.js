@@ -72,6 +72,9 @@ export function byWeekday(list) {
 /** Same person typed slightly differently ("Irené " / "irené") → one key. */
 export const clientKey = (name) => name.trim().toLowerCase().replace(/\s+/g, ' ')
 
+/** Looser match for search and duplicate hints: no accents, spaces or punctuation ("Anne-Marie" = "annemarie"). */
+export const looseKey = (name) => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+
 function mostCommon(counter) {
   let best = ''
   let n = -1
@@ -157,4 +160,19 @@ export function niceTicks(max, count = 4) {
   for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(v)
   if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step)
   return ticks
+}
+
+/** Clients whose names only differ by accents, spaces, capitals or punctuation — probably the same person. */
+export function findDuplicates(clients) {
+  const groups = new Map()
+  for (const c of clients) {
+    const k = looseKey(c.name)
+    if (!k) continue
+    if (!groups.has(k)) groups.set(k, [])
+    groups.get(k).push(c)
+  }
+  return [...groups.values()]
+    .filter((g) => g.length > 1)
+    .map((g) => g.sort((a, b) => b.visits - a.visits))
+    .sort((a, b) => b.reduce((s, c) => s + c.visits, 0) - a.reduce((s, c) => s + c.visits, 0))
 }

@@ -6,6 +6,9 @@
  *   Appointments ID | Date | Month | Employee ID | Employee | Client | Service |
  *                Amount | Method | Status | Paid On | Notes | Created At | Updated At
  *   Settings     Setting | Value      ("Month starts on day" → 26 = months run 26th–25th)
+ *   History      ID | Time | Who | Action | Summary | Undone At | Data 1…10
+ *                Every change the app makes is logged here with the rows as they were
+ *                *before* the change, so any change (or a whole day) can be rolled back.
  *
  * The whole sheet is loaded once (one request) and kept in memory, so switching
  * months/employees is instant. Writes go straight to the sheet. Before changing
@@ -13,13 +16,14 @@
  * been edited elsewhere) and re-locate it if not.
  */
 import { sheetsApi, range, enc, parseSheetId } from './google/sheets.js'
-import { businessMonth, todayStr } from './lib/format.js'
+import { businessMonth, todayStr, fmt0 } from './lib/format.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const TITLE = 'Little Lash Lounge Payments'
 const EMPLOYEES = 'Employees'
 const APPOINTMENTS = 'Appointments'
 const SETTINGS = 'Settings'
+const HISTORY = 'History'
 const MONTH_START_SETTING = 'Month starts on day'
 
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At']
@@ -27,8 +31,12 @@ const APPOINTMENT_HEADERS = [
   'ID', 'Date', 'Month', 'Employee ID', 'Employee', 'Client', 'Service',
   'Amount', 'Method', 'Status', 'Paid On', 'Notes', 'Created At', 'Updated At',
 ]
-const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'] }
-const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B' }
+const HISTORY_HEADERS = ['ID', 'Time', 'Who', 'Action', 'Summary', 'Undone At',
+  ...Array.from({ length: 10 }, (_, i) => `Data ${i + 1}`)]
+const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS }
+const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P' }
+const TABS = [EMPLOYEES, APPOINTMENTS, SETTINGS, HISTORY]
+const CHUNK = 45000 // a cell holds up to 50,000 characters
 
 // Zero-based column indexes.
 const A = {
@@ -178,6 +186,133 @@ async function writeRow(tab, row, values) {
   })
 }
 
+/** Full-width row (so writing it back also clears cells that became empty). */
+const padRow = (tab, row) => {
+  const width = HEADERS[tab].length
+  const out = [...(row || [])].slice(0, width)
+  while (out.length < width) out.push('')
+  return out
+}
+
+/** Rebuild an appointment's raw row from its fields after a change. */
+function syncRaw(a, updated) {
+  a.raw = appointmentToRow(a, a.raw?.[A.CREATED] ?? updated, updated)
+}
+
+/* ---------------- history (undo) ---------------- */
+
+let user = ''
+let lastEntry = null
+export const setUser = (email) => (user = email || '')
+/** ID of the most recent history entry written by this device (for "Undo" toasts). */
+export const lastEntryId = () => lastEntry
+
+/**
+ * Records a change: `before` = { appts: { id: rowOrNull }, emps: { id: rowOrNull } }
+ * — the rows as they were before (null = didn't exist yet).
+ */
+async function logChange(action, summary, before) {
+  lastEntry = null
+  try {
+    const json = JSON.stringify(before)
+    const chunks = []
+    for (let i = 0; i < json.length; i += CHUNK) chunks.push(json.slice(i, i + CHUNK))
+    const tooBig = chunks.length > 10
+    const id = uuid()
+    await appendRow(HISTORY, padRow(HISTORY, [
+      id, new Date().toISOString(), user, action, summary + (tooBig ? ' (too large to undo)' : ''), '',
+      ...(tooBig ? ['{"tooBig":true}'] : chunks),
+    ]))
+    lastEntry = id
+  } catch (err) {
+    // The change itself succeeded; never fail it because the log couldn't be written.
+    console.warn('Could not write history', err)
+  }
+}
+
+async function readHistory() {
+  const res = await sheetsApi(`/${db.id}/values/${enc(range(HISTORY, 'A2:P'))}`)
+  return (res.values || [])
+    .map((r, i) => ({
+      id: clean(r[0]), time: clean(r[1]), who: clean(r[2]), action: clean(r[3]), summary: clean(r[4]),
+      undoneAt: clean(r[5]), row: i + 2, data: r.slice(6).join(''),
+    }))
+    .filter((e) => e.id)
+}
+
+/** History entries, newest first (without the stored rows). */
+export function getHistory() {
+  return serial(async () => (await readHistory()).reverse().map(({ data, row, ...e }) => e))
+}
+
+/** Writes rows back to the state in `wanted` ({ id: rowOrNull }) for one tab. */
+async function applyState(tab, wanted) {
+  const ids = Object.keys(wanted)
+  if (!ids.length) return
+  const list = tab === APPOINTMENTS ? db.appts : db.employees
+  const existing = list.filter((x) => x.id in wanted)
+  if (existing.length) await locateRows(tab, existing)
+  const have = new Set(existing.map((x) => x.id))
+  const updates = existing.filter((x) => wanted[x.id]).map((x) => ({ range: range(tab, `A${x.row}:${LAST_COL[tab]}${x.row}`), values: [padRow(tab, wanted[x.id])] }))
+  const appends = ids.filter((id) => !have.has(id) && wanted[id]).map((id) => padRow(tab, wanted[id]))
+  const deletes = existing.filter((x) => !wanted[x.id]).map((x) => x.row).sort((a, b) => b - a)
+  if (updates.length) await sheetsApi(`/${db.id}/values:batchUpdate`, { method: 'POST', body: { valueInputOption: 'RAW', data: updates } })
+  if (appends.length) {
+    await sheetsApi(`/${db.id}/values/${enc(range(tab, `A:${LAST_COL[tab]}`))}:append`, {
+      method: 'POST', query: { valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS' }, body: { values: appends },
+    })
+  }
+  if (deletes.length) {
+    await sheetsApi(`/${db.id}:batchUpdate`, {
+      method: 'POST',
+      body: { requests: deletes.map((r) => ({ deleteDimension: { range: { sheetId: db.gids[tab], dimension: 'ROWS', startIndex: r - 1, endIndex: r } } })) },
+    })
+  }
+}
+
+/**
+ * Rolls back the given entry and every later change that hasn't been undone yet,
+ * restoring each touched row to how it was just before that entry. The rollback is
+ * itself logged, so it can be undone too.
+ */
+export function rollback(entryId) {
+  return serial(async () => {
+    await load()
+    const list = await readHistory()
+    const target = list.find((e) => e.id === entryId)
+    if (!target) throw new Error('That change was not found in the History tab.')
+    const toUndo = list.filter((e) => !e.undoneAt && e.time >= target.time).sort((a, b) => (a.time < b.time ? 1 : -1))
+    if (!toUndo.length) throw new Error('That change has already been undone.')
+
+    // Newest → oldest, so the oldest entry's "before" wins for each row.
+    const appts = {}
+    const emps = {}
+    for (const e of toUndo) {
+      let d
+      try { d = JSON.parse(e.data || '{}') } catch { d = { tooBig: true } }
+      if (d.tooBig) throw new Error(`"${e.summary}" was too large to undo automatically. Use File → Version history in the Google Sheet.`)
+      Object.assign(appts, d.appts || {})
+      Object.assign(emps, d.emps || {})
+    }
+    // What things look like now, so the rollback itself can be undone.
+    const now = {
+      appts: Object.fromEntries(Object.keys(appts).map((id) => [id, db.appts.find((a) => a.id === id)?.raw ?? null])),
+      emps: Object.fromEntries(Object.keys(emps).map((id) => [id, db.employees.find((e) => e.id === id)?.raw ?? null])),
+    }
+    await applyState(APPOINTMENTS, appts)
+    await applyState(EMPLOYEES, emps)
+    const stamp = new Date().toISOString()
+    await sheetsApi(`/${db.id}/values:batchUpdate`, {
+      method: 'POST',
+      body: { valueInputOption: 'RAW', data: toUndo.map((e) => ({ range: range(HISTORY, `F${e.row}`), values: [[stamp]] })) },
+    })
+    const n = toUndo.length
+    await logChange('rollback', n === 1 ? `Undid: ${toUndo[0].summary}` : `Undid ${n} changes (back to before "${target.summary}")`, now)
+    await load()
+    return n
+  })
+}
+
 /* ---------------- opening / creating the sheet ---------------- */
 
 async function readMeta(id) {
@@ -187,7 +322,7 @@ async function readMeta(id) {
 /** Adds any missing tabs (with headers) so a blank or older sheet works too. */
 async function ensureTabs(meta) {
   const titles = meta.sheets.map((s) => s.properties.title)
-  const missing = [EMPLOYEES, APPOINTMENTS, SETTINGS].filter((t) => !titles.includes(t))
+  const missing = TABS.filter((t) => !titles.includes(t))
   if (!missing.length) return meta
   await sheetsApi(`/${meta.spreadsheetId}:batchUpdate`, {
     method: 'POST',
@@ -236,7 +371,7 @@ export async function createSheet() {
     method: 'POST',
     body: {
       properties: { title: TITLE },
-      sheets: [EMPLOYEES, APPOINTMENTS, SETTINGS].map((title) => ({ properties: { title, gridProperties: { frozenRowCount: 1 } } })),
+      sheets: TABS.map((title) => ({ properties: { title, gridProperties: { frozenRowCount: 1 } } })),
     },
   })
   await sheetsApi(`/${meta.spreadsheetId}/values:batchUpdate`, {
@@ -244,7 +379,7 @@ export async function createSheet() {
     body: {
       valueInputOption: 'RAW',
       data: [
-        ...[EMPLOYEES, APPOINTMENTS, SETTINGS].map((t) => ({ range: range(t, 'A1'), values: [HEADERS[t]] })),
+        ...TABS.map((t) => ({ range: range(t, 'A1'), values: [HEADERS[t]] })),
         { range: range(SETTINGS, 'A2'), values: [[MONTH_START_SETTING, 1]] },
       ],
     },
@@ -300,18 +435,22 @@ export function saveAppointment(input) {
       month: existing && existing.date === v.date ? existing.month : businessMonth(v.date, db.startDay),
       paidOn: v.status === 'Paid' ? (existing?.status === 'Paid' && existing.paidOn) || todayStr() : '',
     }
+    const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
     if (existing) {
       await locateRows(APPOINTMENTS, [existing])
+      const before = [...existing.raw]
       const created = existing.raw[A.CREATED] ?? now
       const values = appointmentToRow(appt, created, now)
       await writeRow(APPOINTMENTS, existing.row, values)
       Object.assign(existing, appt, { raw: values })
+      await logChange('edit', `Edited ${label}`, { appts: { [appt.id]: before } })
       return publicAppt(existing)
     }
     const values = appointmentToRow(appt, now, now)
     const row = await appendRow(APPOINTMENTS, values)
     const saved = { ...appt, row, raw: values }
     db.appts.push(saved)
+    await logChange('add', `Added ${label}`, { appts: { [appt.id]: null } })
     return publicAppt(saved)
   }))
 }
@@ -324,6 +463,7 @@ export function updateAppointments(ids, changes = {}) {
     const items = db.appts.filter((a) => wanted.has(a.id))
     if (!items.length) return []
     await locateRows(APPOINTMENTS, items)
+    const before = Object.fromEntries(items.map((a) => [a.id, [...a.raw]]))
     const now = new Date().toISOString()
     const today = todayStr()
     const data = []
@@ -339,6 +479,35 @@ export function updateAppointments(ids, changes = {}) {
       data.push({ range: range(APPOINTMENTS, `N${a.row}`), values: [[now]] })
     }
     await sheetsApi(`/${db.id}/values:batchUpdate`, { method: 'POST', body: { valueInputOption: 'RAW', data } })
+    items.forEach((a) => syncRaw(a, now))
+    const what = [changes.status && `marked ${changes.status.toLowerCase()}`, changes.method && `set to ${changes.method}`].filter(Boolean).join(' and ')
+    const who = items.length === 1 ? `${items[0].client || 'Appointment'} (${fmt0(items[0].amount)})` : `${items.length} appointments`
+    await logChange('update', `${who} ${what}`, { appts: before })
+    return items.map(publicAppt)
+  }))
+}
+
+/** Sets the client name on these appointments (rename a client, or merge two into one). */
+export function renameClients(ids, name, summary) {
+  return serial(() => guarded(async () => {
+    name = clean(name)
+    if (!name) throw new Error('Please enter a name.')
+    const wanted = new Set(ids)
+    const items = db.appts.filter((a) => wanted.has(a.id))
+    if (!items.length) return []
+    await locateRows(APPOINTMENTS, items)
+    const before = Object.fromEntries(items.map((a) => [a.id, [...a.raw]]))
+    const now = new Date().toISOString()
+    const data = items.flatMap((a) => [
+      { range: range(APPOINTMENTS, `F${a.row}`), values: [[name]] },
+      { range: range(APPOINTMENTS, `N${a.row}`), values: [[now]] },
+    ])
+    await sheetsApi(`/${db.id}/values:batchUpdate`, { method: 'POST', body: { valueInputOption: 'RAW', data } })
+    items.forEach((a) => {
+      a.client = name
+      syncRaw(a, now)
+    })
+    await logChange('clients', summary || `Renamed client to ${name}`, { appts: before })
     return items.map(publicAppt)
   }))
 }
@@ -351,6 +520,7 @@ export function deleteAppointment(id) {
     await deleteRow(APPOINTMENTS, a.row)
     db.appts = db.appts.filter((x) => x !== a)
     shiftRowsAfter(db.appts, a.row)
+    await logChange('delete', `Deleted ${a.client || 'client'} · ${fmt0(a.amount)} · ${a.date.slice(8)}/${a.date.slice(5, 7)}`, { appts: { [a.id]: [...a.raw] } })
     return true
   }))
 }
@@ -365,15 +535,18 @@ export function saveEmployee(input) {
       const emp = db.employees.find((e) => e.id === input.id)
       if (!emp) throw new StaleError('Employee not found.')
       await locateRows(EMPLOYEES, [emp])
+      const before = [...emp.raw]
       const values = [emp.id, name, phone, input.active !== false, emp.raw[E.CREATED] ?? now, now]
       await writeRow(EMPLOYEES, emp.row, values)
       const renamed = emp.name !== name
       Object.assign(emp, { name, phone, active: input.active !== false, raw: values })
       if (renamed) await renameInAppointments(emp.id, name)
+      await logChange('team', `Updated team member ${name}`, { emps: { [emp.id]: before } })
     } else {
       const values = [uuid(), name, phone, true, now, now]
       const row = await appendRow(EMPLOYEES, values)
       db.employees.push(rowToEmployee(values, row))
+      await logChange('team', `Added team member ${name}`, { emps: { [values[0]]: null } })
     }
     return publicEmployees()
   }))
@@ -398,7 +571,10 @@ async function renameInAppointments(employeeId, name) {
     body: { values: col },
   })
   db.appts.forEach((a) => {
-    if (a.employeeId === employeeId) a.employeeName = name
+    if (a.employeeId === employeeId) {
+      a.employeeName = name
+      if (a.raw) a.raw[A.EMPLOYEE] = name
+    }
   })
 }
 
@@ -413,6 +589,7 @@ export function deleteEmployee(id) {
       await deleteRow(EMPLOYEES, emp.row)
       db.employees = db.employees.filter((e) => e !== emp)
       shiftRowsAfter(db.employees, emp.row)
+      await logChange('team', `Removed team member ${emp.name}`, { emps: { [emp.id]: [...emp.raw] } })
     }
     return publicEmployees()
   }))

@@ -2,7 +2,7 @@
 import { onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { saveEmployee, deleteEmployee, closeModal, toast, fail } from '../store.js'
+import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
 
 const props = defineProps({ employee: Object })
 const editing = !!props.employee
@@ -27,7 +27,7 @@ async function submit() {
       active: form.status === 'Active',
     })
     closeModal()
-    toast(editing ? 'Saved' : 'Employee added')
+    toastUndo(editing ? 'Saved' : 'Employee added')
   } catch (err) {
     fail(err)
   } finally {
@@ -40,7 +40,7 @@ async function remove() {
   try {
     await deleteEmployee(props.employee.id)
     closeModal()
-    toast('Deleted')
+    toastUndo('Deleted')
   } catch (err) {
     fail(err)
   }

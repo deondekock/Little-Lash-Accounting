@@ -12,6 +12,10 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
   new clients and who's due back.
 - **Team**: each team member's month, unpaid amount and a 12-month trend.
 - **Insights**: the year month by month vs. last year, who earned what, payment methods, and tables.
+- **Client suggestions** while adding an appointment (fills in her usual service and price).
+- **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
+- **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
+  so any change — or everything done today — can be rolled back (and the rollback undone too).
 - Light and dark mode; works on phone and laptop; **Add to Home Screen** to use it like an app.
 
 No server is needed. It's a static website that talks to Google Sheets directly, so free hosting works.
@@ -71,6 +75,7 @@ npm run dev:fake
 | **Employees** | ID, Name, Phone, Active, Created At, Updated At |
 | **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At |
 | **Settings** | Month starts on day |
+| **History** | ID, Time, Who, Action, Summary, Undone At, Data 1–10 (the rows before each change, as JSON) |
 
 You can filter, sort, chart or download the sheet freely. Don't rename the tabs or headers, and don't edit the
 ID columns. The app uses them to find rows. After editing the sheet by hand, tap **↻** in the app to reload.

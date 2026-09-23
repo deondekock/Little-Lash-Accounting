@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import Icon from './Icon.vue'
 import { METHODS, fmt } from '../lib/format.js'
-import { state, updateMany, openAppointment, employeeColor } from '../store.js'
+import { state, updateMany, openAppointment, employeeColor, toastUndo } from '../store.js'
 
 const props = defineProps({ appt: { type: Object, required: true } })
 
@@ -17,8 +17,14 @@ const selected = computed({
   set: (v) => (v ? state.selected.add(props.appt.id) : state.selected.delete(props.appt.id)),
 })
 
-const toggleStatus = () => updateMany([props.appt.id], { status: props.appt.status === 'Paid' ? 'Unpaid' : 'Paid' })
-const setMethod = (e) => updateMany([props.appt.id], { method: e.target.value })
+async function toggleStatus() {
+  const status = props.appt.status === 'Paid' ? 'Unpaid' : 'Paid'
+  if (await updateMany([props.appt.id], { status })) toastUndo(`${props.appt.client || 'Appointment'} marked ${status.toLowerCase()}`)
+}
+async function setMethod(e) {
+  const method = e.target.value
+  if (await updateMany([props.appt.id], { method })) toastUndo(`Set to ${method}`)
+}
 </script>
 
 <template>

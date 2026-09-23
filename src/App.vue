@@ -11,10 +11,12 @@ import EmployeeModal from './components/EmployeeModal.vue'
 import ClientModal from './components/ClientModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import MonthPicker from './components/MonthPicker.vue'
+import MergeModal from './components/MergeModal.vue'
+import HistoryModal from './components/HistoryModal.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
-import { state, init, setView, refresh, useDifferentSheet, openSettings } from './store.js'
+import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory } from './store.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView }
 const tabs = [
@@ -44,6 +46,7 @@ const retry = () => location.reload()
     <div class="wrap top-row">
       <div class="wordmark">Little Lash <em>Lounge</em></div>
       <div v-if="state.phase === 'ready'" class="top-actions">
+        <button class="icon-btn" aria-label="History and undo" title="History & undo" @click="openHistory"><Icon name="history" /></button>
         <button class="icon-btn" aria-label="Refresh" title="Refresh" @click="refresh"><Icon name="refresh" /></button>
         <button class="avatar-btn" aria-label="Settings" @click="openSettings">{{ (state.email || '•')[0].toUpperCase() }}</button>
       </div>
@@ -84,6 +87,11 @@ const retry = () => location.reload()
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
+  <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
+  <HistoryModal v-if="state.modal?.type === 'history'" />
 
-  <div v-if="state.toast" class="toast" :class="{ error: state.toast.error }">{{ state.toast.msg }}</div>
+  <div v-if="state.toast" class="toast" :class="{ error: state.toast.error, actionable: state.toast.action }" role="status">
+    {{ state.toast.msg }}
+    <button v-if="state.toast.action" class="toast-action" @click="state.toast.action.run(); state.toast = null">{{ state.toast.action.label }}</button>
+  </div>
 </template>
