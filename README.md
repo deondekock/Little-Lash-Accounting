@@ -70,14 +70,28 @@ With the settings above, only the owner's Google account can open the app. To le
    *Who has access* to **Anyone with Google account**, then deploy a new version. Only people the sheet is shared
    with will be able to read or write the data.
 
+## Importing the old "Little Lash Lounge Income" sheet (one time)
+
+`apps-script/Import.gs` reads the old sheet (every year's tab, 2017 onwards) and fills the app.
+Add it as a third script file named `Import`, then pick **importOldSheet** in the function dropdown and click
+**▶ Run**. It refuses to run if the Appointments tab already has data, so nothing is imported twice.
+It skips her total, Yoco, commission, loan and refund rows, and repairs mistyped dates. From 2026 on, a
+blank "1" column means **Unpaid**; everything older is marked **Paid**.
+
+## Months that don't start on the 1st
+
+The sheet's **Settings** tab has *Month starts on day*. With `26`, "July" runs from 26 June to 25 July,
+like the old sheet. `1` means normal calendar months.
+
 ## How the data is stored
 
-The spreadsheet has two tabs:
+The spreadsheet has three tabs:
 
 | Tab | Columns |
 | --- | --- |
 | **Employees** | ID, Name, Phone, Active, Created At, Updated At |
 | **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At |
+| **Settings** | Month starts on day |
 
 You can freely filter, sort, chart or download the sheet. Please don't rename the tabs or the header row, and
 don't edit the ID columns, because the app uses them to find rows.

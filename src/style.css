@@ -241,3 +241,4 @@ tr.muted { color: var(--muted); }
 .center { text-align: center; }
 .emp-row .meta { color: var(--muted); font-size: 13px; }
 .fab.raised { bottom: 90px; }
+.period .range { font-size: 13px; color: var(--muted); }

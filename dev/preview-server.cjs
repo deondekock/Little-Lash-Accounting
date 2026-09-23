@@ -8,6 +8,9 @@
  *   node dev/preview-server.cjs              → http://localhost:8080 (run `npm run build` first)
  *   node dev/preview-server.cjs --demo       → same, pre-filled with sample data
  *   node dev/preview-server.cjs --api-only   → API only on :8787, for `npm run dev` (Vite proxies to it)
+ *   node dev/preview-server.cjs --import old-tabs.json
+ *       → runs importOldSheet() against an exported copy of the old sheet
+ *         (JSON: [{ title, values }], date cells as { "$serial": n }). Never commit that file.
  */
 const fs = require('fs');
 const http = require('http');
@@ -69,6 +72,7 @@ class FakeSheet {
     return new FakeRange(this, row, col, rows, cols);
   }
   deleteRow(n) { this.data.splice(n - 1, 1); }
+  getDataRange() { return this.getRange(1, 1, Math.max(this.getLastRow(), 1), Math.max(1, ...this.data.map((r) => r.length))); }
   setFrozenRows() {}
 }
 
@@ -81,6 +85,7 @@ class FakeSpreadsheet {
   getId() { return this.id; }
   getUrl() { return 'https://docs.google.com/spreadsheets/d/' + this.id; }
   getSheets() { return this.sheets.slice(); }
+  getSpreadsheetTimeZone() { return 'Africa/Johannesburg'; }
   getSheetByName(n) { return this.sheets.find((s) => s.name === n) || null; }
   insertSheet(n) { const s = new FakeSheet(n); this.sheets.push(s); return s; }
   deleteSheet(s) { this.sheets = this.sheets.filter((x) => x !== s); }
@@ -108,7 +113,9 @@ const gas = {
   Utilities: {
     getUuid: () => crypto.randomUUID(),
     formatDate: (d, tz, f) => f
-      .replace('yyyy', d.getFullYear()).replace('MM', pad(d.getMonth() + 1)).replace('dd', pad(d.getDate())),
+      .replace('yyyy', d.getFullYear())
+      .replace(/M+/, (x) => (x.length > 1 ? pad(d.getMonth() + 1) : d.getMonth() + 1))
+      .replace(/d+/, (x) => (x.length > 1 ? pad(d.getDate()) : d.getDate())),
   },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   HtmlService: {},
@@ -116,7 +123,9 @@ const gas = {
 };
 
 const context = vm.createContext(gas);
-vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8'), context, { filename: 'Code.gs' });
+for (const f of ['Code.gs', 'Import.gs']) {
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps-script', f), 'utf8'), context, { filename: f });
+}
 
 function callServer(fn, args) {
   // Each request gets a fresh cached-spreadsheet, like a real Apps Script execution.
@@ -124,6 +133,26 @@ function callServer(fn, args) {
   if (fn.endsWith('_') || typeof context[fn] !== 'function') throw new Error('Unknown function ' + fn);
   // Round-trip through JSON, like google.script.run does.
   return JSON.parse(JSON.stringify(context[fn](...JSON.parse(JSON.stringify(args))) ?? null));
+}
+
+/* ---------------- import of the old sheet ---------------- */
+
+const importArg = process.argv.indexOf('--import');
+if (importArg > 0) {
+  const tabs = JSON.parse(fs.readFileSync(process.argv[importArg + 1], 'utf8'));
+  const old = new FakeSpreadsheet('Little Lash Lounge Income');
+  old.id = vm.runInContext('OLD_SHEET_ID', context);
+  old.sheets = tabs.map((t) => {
+    const sh = new FakeSheet(t.title);
+    // Google Sheets returns date cells as Date objects (serial days since 1899-12-30).
+    sh.data = t.values.map((r) => r.map((v) => (v && typeof v === 'object' && '$serial' in v
+      ? new Date(1899, 11, 30 + Math.floor(v.$serial)) : v)));
+    return sh;
+  });
+  spreadsheets.set(old.id, old);
+  console.time('importOldSheet');
+  console.log(callServer('importOldSheet', []));
+  console.timeEnd('importOldSheet');
 }
 
 /* ---------------- demo data ---------------- */

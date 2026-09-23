@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { METHODS, todayStr } from '../lib/format.js'
+import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
 import { state, saveAppointment, deleteAppointment, closeModal, toast, fail } from '../store.js'
 
 const props = defineProps({ appt: Object })
@@ -11,7 +11,7 @@ const editing = !!props.appt
 function blank() {
   const today = todayStr()
   return {
-    date: state.month === today.slice(0, 7) ? today : state.month + '-01',
+    date: businessMonth(today, state.monthStartDay) === state.month ? today : monthRange(state.month, state.monthStartDay).from,
     employeeId: state.employee !== 'all' ? state.employee : state.employees.find((e) => e.active)?.id,
     client: '',
     service: '',

@@ -5,9 +5,30 @@ export const fmt = (n) => money.format(n || 0)
 
 export const ym = (y, m) => y + '-' + String(m).padStart(2, '0')
 
-export function currentMonth() {
-  const d = new Date()
-  return ym(d.getFullYear(), d.getMonth() + 1)
+/**
+ * Business month ('YYYY-MM') of a 'YYYY-MM-DD' date. With startDay 26,
+ * "July" runs from 26 June to 25 July.
+ */
+export function businessMonth(date, startDay = 1) {
+  const [y, m, d] = date.split('-').map(Number)
+  return startDay > 1 && d >= startDay ? shiftMonth(ym(y, m), 1) : ym(y, m)
+}
+
+export const currentMonth = (startDay = 1) => businessMonth(todayStr(), startDay)
+
+/** First and last date ('YYYY-MM-DD') of a business month. */
+export function monthRange(month, startDay = 1) {
+  const pad = (n) => String(n).padStart(2, '0')
+  const [y, m] = month.split('-').map(Number)
+  if (startDay <= 1) {
+    return { from: `${month}-01`, to: `${month}-${pad(new Date(y, m, 0).getDate())}` }
+  }
+  return { from: `${shiftMonth(month, -1)}-${pad(startDay)}`, to: `${month}-${pad(startDay - 1)}` }
+}
+
+export function shortDate(date) {
+  const [y, m, d] = date.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' })
 }
 
 export function todayStr() {

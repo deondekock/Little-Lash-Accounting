@@ -9,6 +9,7 @@ export const state = reactive({
   view: 'payments', // 'payments' | 'employees' | 'year'
   employees: [],
   spreadsheetUrl: '',
+  monthStartDay: 1, // from the sheet's Settings tab; 26 → "July" = 26 Jun – 25 Jul
   month: currentMonth(),
   year: new Date().getFullYear(),
   appts: [], // appointments for state.month
@@ -62,6 +63,9 @@ export async function init() {
     const data = await api('getInitialData')
     state.employees = data.employees
     state.spreadsheetUrl = data.spreadsheetUrl
+    state.monthStartDay = data.monthStartDay || 1
+    state.month = currentMonth(state.monthStartDay)
+    state.year = Number(state.month.slice(0, 4))
     await loadMonth()
     state.ready = true
   } catch (err) {
@@ -132,7 +136,7 @@ export function setStatus(status) {
 
 function upsertAppt(saved) {
   const i = state.appts.findIndex((x) => x.id === saved.id)
-  if (saved.date.slice(0, 7) === state.month) {
+  if (saved.month === state.month) {
     if (i >= 0) state.appts[i] = saved
     else state.appts.push(saved)
   } else if (i >= 0) {
@@ -144,7 +148,7 @@ function upsertAppt(saved) {
 export async function saveAppointment(data) {
   const saved = await api('saveAppointment', data)
   upsertAppt(saved)
-  if (saved.date.slice(0, 7) !== state.month) await changeMonth(saved.date.slice(0, 7))
+  if (saved.month !== state.month) await changeMonth(saved.month)
   return saved
 }
 

@@ -5,13 +5,20 @@ import EmployeeChips from '../components/EmployeeChips.vue'
 import StatCards from '../components/StatCards.vue'
 import TotalsTable from '../components/TotalsTable.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
-import { byEmployee, currentMonth, dayLabel, fmt, monthLabel, shiftMonth, totals } from '../lib/format.js'
+import { byEmployee, currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, totals } from '../lib/format.js'
 import {
   state, employeeAppts, visibleAppts, employeeById,
   changeMonth, setEmployee, setStatus, openAppointment, openEmployee,
 } from '../store.js'
 
 const monthTotals = computed(() => totals(employeeAppts.value))
+
+const thisMonth = computed(() => currentMonth(state.monthStartDay))
+const range = computed(() => {
+  if (state.monthStartDay <= 1) return ''
+  const r = monthRange(state.month, state.monthStartDay)
+  return `${shortDate(r.from)} – ${shortDate(r.to)}`
+})
 
 const perEmployee = computed(() =>
   byEmployee(state.appts, state.employees).map((r) => ({ key: r.id, label: r.name, t: r.t })),
@@ -61,7 +68,8 @@ function pickEmployee(id) {
       @prev="changeMonth(shiftMonth(state.month, -1))"
       @next="changeMonth(shiftMonth(state.month, 1))"
     >
-      <button v-if="state.month !== currentMonth()" class="today-btn" @click="changeMonth(currentMonth())">
+      <div v-if="range" class="range">{{ range }}</div>
+      <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">
         Back to this month
       </button>
     </PeriodNav>

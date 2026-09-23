@@ -12,6 +12,8 @@ const STATUSES = ['Paid', 'Unpaid'];
 
 const EMPLOYEES = 'Employees';
 const APPOINTMENTS = 'Appointments';
+const SETTINGS = 'Settings';
+const MONTH_START_SETTING = 'Month starts on day';
 
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At'];
 const APPOINTMENT_HEADERS = [
@@ -54,6 +56,7 @@ function getInitialData() {
   return {
     employees: listEmployees_(),
     spreadsheetUrl: ss.getUrl(),
+    monthStartDay: getMonthStartDay_(),
     user: Session.getActiveUser().getEmail(),
     methods: METHODS,
   };
@@ -99,11 +102,14 @@ function deleteEmployee(id) {
   });
 }
 
-/** period is 'YYYY-MM' (one month) or 'YYYY' (whole year). */
+/**
+ * period is 'YYYY-MM' (one month) or 'YYYY' (whole year). Months are the
+ * business months stored in the Month column (see "Month starts on day").
+ */
 function getAppointments(period) {
   period = String(period || '');
   if (!/^\d{4}(-\d{2})?$/.test(period)) throw new Error('Invalid period: ' + period);
-  return readAppointments_().filter(function (a) { return a.date.indexOf(period) === 0; });
+  return readAppointments_().filter(function (a) { return a.month.indexOf(period) === 0; });
 }
 
 function saveAppointment(input) {
@@ -125,9 +131,14 @@ function saveAppointment(input) {
       ? (existing && existing[A.STATUS] === 'Paid' && toText_(existing[A.PAID_ON])) || today_()
       : '';
 
+    // Keep an existing appointment's month unless its date changed.
+    const month = existing && toText_(existing[A.DATE]) === a.date && monthText_(existing[A.MONTH])
+      ? monthText_(existing[A.MONTH])
+      : monthFor_(a.date, getMonthStartDay_());
+
     const row = [
       existing ? existing[A.ID] : Utilities.getUuid(),
-      a.date, a.date.slice(0, 7), a.employeeId, a.employeeName, a.client, a.service,
+      a.date, month, a.employeeId, a.employeeName, a.client, a.service,
       a.amount, a.method, a.status, paidOn, a.notes,
       existing ? toText_(existing[A.CREATED]) : now, now,
     ];
@@ -223,6 +234,7 @@ function getSpreadsheet_() {
   props.setProperty('SPREADSHEET_ID', spreadsheet_.getId());
   getSheet_(EMPLOYEES);
   getSheet_(APPOINTMENTS);
+  getSheet_(SETTINGS);
   return spreadsheet_;
 }
 
@@ -231,17 +243,21 @@ function getSheet_(name) {
   let sheet = ss.getSheetByName(name);
   if (sheet) return sheet;
 
-  const headers = name === EMPLOYEES ? EMPLOYEE_HEADERS : APPOINTMENT_HEADERS;
+  const headers = { Employees: EMPLOYEE_HEADERS, Appointments: APPOINTMENT_HEADERS, Settings: ['Setting', 'Value'] }[name];
   sheet = ss.insertSheet(name);
   sheet.getRange(1, 1, 1, headers.length)
     .setValues([headers])
     .setFontWeight('bold')
     .setBackground('#f6e3ea');
   sheet.setFrozenRows(1);
+  if (name === SETTINGS) {
+    // 1 = calendar months. E.g. 26 makes "July" run from 26 June to 25 July.
+    sheet.getRange(2, 1, 1, 2).setValues([[MONTH_START_SETTING, 1]]);
+  }
 
   // Remove the empty default sheet that SpreadsheetApp.create() adds.
   ss.getSheets().forEach(function (s) {
-    if (s.getName() !== EMPLOYEES && s.getName() !== APPOINTMENTS && s.getLastRow() === 0 &&
+    if ([EMPLOYEES, APPOINTMENTS, SETTINGS].indexOf(s.getName()) < 0 && s.getLastRow() === 0 &&
         ss.getSheets().length > 1) {
       ss.deleteSheet(s);
     }
@@ -293,6 +309,7 @@ function rowToAppointment_(r) {
   return {
     id: String(r[A.ID]),
     date: toText_(r[A.DATE]),
+    month: monthText_(r[A.MONTH]) || toText_(r[A.DATE]).slice(0, 7),
     employeeId: String(r[A.EMPLOYEE_ID]),
     employeeName: String(r[A.EMPLOYEE]),
     client: String(r[A.CLIENT]),
@@ -348,6 +365,36 @@ function validateAppointment_(input, employees) {
 /* ------------------------------------------------------------------ */
 /* Small utilities                                                     */
 /* ------------------------------------------------------------------ */
+
+/** Day of the month on which a new business month starts (1 = calendar months). */
+function getMonthStartDay_() {
+  const sheet = getSpreadsheet_().getSheetByName(SETTINGS);
+  if (!sheet || sheet.getLastRow() < 2) return 1;
+  const rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 2).getValues();
+  for (let i = 0; i < rows.length; i++) {
+    if (clean_(rows[i][0]).toLowerCase() === MONTH_START_SETTING.toLowerCase()) {
+      const day = parseInt(rows[i][1], 10);
+      return day >= 1 && day <= 28 ? day : 1;
+    }
+  }
+  return 1;
+}
+
+/** Business month ('YYYY-MM') for a 'YYYY-MM-DD' date. */
+function monthFor_(date, startDay) {
+  const y = Number(date.slice(0, 4));
+  const m = Number(date.slice(5, 7));
+  if (startDay > 1 && Number(date.slice(8, 10)) >= startDay) {
+    return m === 12 ? (y + 1) + '-01' : y + '-' + ('0' + (m + 1)).slice(-2);
+  }
+  return date.slice(0, 7);
+}
+
+/** Month cell as 'YYYY-MM' (it may come back as a Date if Sheets auto-converted it). */
+function monthText_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM');
+  return clean_(v).slice(0, 7);
+}
 
 function withLock_(fn) {
   const lock = LockService.getScriptLock();

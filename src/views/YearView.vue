@@ -15,7 +15,7 @@ const list = computed(() => {
 const months = computed(() =>
   Array.from({ length: 12 }, (_, i) => {
     const key = ym(state.year, i + 1)
-    const t = totals(list.value.filter((a) => a.date.startsWith(key)))
+    const t = totals(list.value.filter((a) => a.month === key))
     return { key, label: monthName(i + 1), t, muted: !t.count }
   }),
 )
