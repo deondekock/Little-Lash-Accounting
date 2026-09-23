@@ -195,6 +195,10 @@ export function changeYear(delta) {
   state.year += delta
 }
 
+export function setYear(year) {
+  state.year = year
+}
+
 export function setView(view, opts = {}) {
   state.view = view
   if (opts.employee) state.employee = opts.employee
@@ -287,4 +291,6 @@ export const openAppointment = (appt, prefill = null) =>
 export const openEmployee = (emp) => (state.modal = { type: 'employee', data: emp ? { ...emp } : null })
 export const openClient = (client) => (state.modal = { type: 'client', data: client })
 export const openSettings = () => (state.modal = { type: 'settings', data: null })
+/** Month/year picker sheet. mode 'month' sets state.month; 'year' sets state.year (Insights). */
+export const openPicker = (mode = 'month') => (state.modal = { type: 'picker', data: { mode } })
 export const closeModal = () => (state.modal = null)

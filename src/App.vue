@@ -10,6 +10,7 @@ import AppointmentModal from './components/AppointmentModal.vue'
 import EmployeeModal from './components/EmployeeModal.vue'
 import ClientModal from './components/ClientModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import MonthPicker from './components/MonthPicker.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
@@ -82,6 +83,7 @@ const retry = () => location.reload()
   <EmployeeModal v-if="state.modal?.type === 'employee'" :employee="state.modal.data" />
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
+  <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
 
   <div v-if="state.toast" class="toast" :class="{ error: state.toast.error }">{{ state.toast.msg }}</div>
 </template>

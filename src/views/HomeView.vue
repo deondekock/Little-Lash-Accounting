@@ -3,12 +3,13 @@ import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import AreaCompare from '../components/charts/AreaCompare.vue'
 import Columns from '../components/charts/Columns.vue'
-import { all, state, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment } from '../store.js'
-import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, METHODS } from '../lib/format.js'
+import { all, state, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
+import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
 import { totals, byEmployee } from '../lib/format.js'
 
 const monthName = computed(() => monthLabel(state.month).split(' ')[0])
+const thisMonth = computed(() => currentMonth(state.monthStartDay))
 const firstName = computed(() => {
   const local = (state.email || '').split('@')[0].split(/[._\d]/)[0]
   return local ? local[0].toUpperCase() + local.slice(1) : ''
@@ -62,6 +63,12 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
     <div class="greeting">
       <div class="hello">{{ greeting }}<template v-if="firstName">, <em>{{ firstName }}</em></template> ✨</div>
       <div class="sub">{{ today }}</div>
+      <div style="display: flex; align-items: center; gap: 12px; margin-top: 12px">
+        <button class="month-pill" aria-label="Choose month" @click="openPicker('month')">
+          <Icon name="calendar" :size="16" />{{ monthLabel(state.month) }}<Icon name="down" :size="16" :stroke="2.2" />
+        </button>
+        <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">Back to this month</button>
+      </div>
     </div>
 
     <div v-if="!state.employees.length" class="card empty">
@@ -73,14 +80,14 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
     <template v-else>
       <!-- Hero: this month's takings -->
       <section class="card hero">
-        <div class="eyebrow">{{ monthName }} takings · {{ range }}</div>
+        <div class="eyebrow">{{ state.month.slice(0, 4) === thisMonth.slice(0, 4) ? monthName : monthLabel(state.month) }} takings · {{ range }}</div>
         <div class="figure">{{ fmt0(mtd.curTotal) }}</div>
         <div class="meta">
           <span v-if="change" class="delta" :class="change.dir">
             <Icon :name="change.dir === 'down' ? 'trendDown' : 'trendUp'" :size="14" :stroke="2.4" />
             {{ change.pct > 0 ? '+' : '' }}{{ change.pct }}%
           </span>
-          <span v-if="change">vs {{ prevName }} at this point ({{ fmt0(mtd.prevSame) }})</span>
+          <span v-if="change">vs {{ prevName }}{{ mtd.inProgress ? ' at this point' : '' }} ({{ fmt0(mtd.prevSame) }})</span>
         </div>
         <div style="margin-top: 14px">
           <AreaCompare :current="mtd.current" :previous="mtd.previous" :current-label="monthName" :previous-label="prevName" />
@@ -95,7 +102,7 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
         <button class="kpi" @click="setView('payments', { status: 'all', employee: 'all' })">
           <div class="label"><Icon name="calendar" :size="14" /> Appointments</div>
           <div class="value">{{ t.count }}</div>
-          <div class="sub">this month</div>
+          <div class="sub">in {{ monthName }}</div>
         </button>
         <div class="kpi">
           <div class="label"><Icon name="heart" :size="14" /> Avg visit</div>
@@ -113,7 +120,7 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
         <!-- Team leaderboard -->
         <section class="card">
           <div class="card-title">
-            <h3>Team this month</h3>
+            <h3>Team in {{ monthName }}</h3>
             <button class="link-btn" @click="setView('team')">See team</button>
           </div>
           <div v-if="team.length" class="hbars">
@@ -125,7 +132,7 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
               <div class="track"><div class="fill" :style="{ width: r.pct + '%', background: r.color }" /></div>
             </div>
           </div>
-          <div v-else class="empty">No appointments yet this month.</div>
+          <div v-else class="empty">No appointments in {{ monthName }}.</div>
         </section>
 
         <!-- Payment methods -->

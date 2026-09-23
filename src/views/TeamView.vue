@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
-import { all, state, monthAppts, employeeColor, openEmployee, setView } from '../store.js'
+import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
 
 const showInactive = ref(false)
@@ -36,7 +36,9 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
     <div class="greeting" style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
       <div>
         <div class="hello">The <em>team</em></div>
-        <div class="sub">{{ monthLabel(state.month) }}</div>
+        <button class="month-pill" style="margin-top: 8px" aria-label="Choose month" @click="openPicker('month')">
+          <Icon name="calendar" :size="16" />{{ monthLabel(state.month) }}<Icon name="down" :size="16" :stroke="2.2" />
+        </button>
       </div>
       <button class="btn small soft" @click="openEmployee()"><Icon name="plus" :size="16" /> Add</button>
     </div>
@@ -52,7 +54,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
           <button class="btn small ghost" @click="openEmployee(m)">Edit</button>
         </div>
         <div class="figs">
-          <div><div class="l">This month</div><div class="v">{{ fmt0(m.t.total) }}</div></div>
+          <div><div class="l">{{ monthLabel(state.month).split(' ')[0] }}</div><div class="v">{{ fmt0(m.t.total) }}</div></div>
           <div><div class="l">Appointments</div><div class="v">{{ m.t.count }}</div></div>
           <div><div class="l">Unpaid</div><div class="v" :class="{ orange: m.t.unpaid }">{{ fmt0(m.t.unpaid) }}</div></div>
         </div>

@@ -69,7 +69,7 @@ function pickEmployee(id) {
 
 <template>
   <div class="page">
-    <PeriodNav :label="String(state.year)" @prev="changeYear(-1)" @next="changeYear(1)">
+    <PeriodNav :label="String(state.year)" mode="year" @prev="changeYear(-1)" @next="changeYear(1)">
       <div class="range">Jan – Dec (business months)</div>
     </PeriodNav>
     <EmployeeChips />

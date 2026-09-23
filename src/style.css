@@ -486,3 +486,32 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; }
 .badge.due { background: var(--brand-soft); color: var(--brand); }
 .badge.new { background: var(--paid-soft); color: var(--paid); }
+
+/* month / year picker */
+.period-pick { border: 0; background: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 12px; color: var(--ink); }
+.period-pick:hover { background: var(--brand-soft); }
+.period-pick svg { color: var(--brand); }
+.month-pill {
+  display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card);
+  border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: 13.5px; box-shadow: var(--shadow); color: var(--ink);
+}
+.month-pill svg { color: var(--brand); }
+.picker-year { display: flex; align-items: center; justify-content: center; gap: 14px; margin-bottom: 14px; }
+.picker-year select {
+  font-family: var(--font-serif); font-size: 24px; font-weight: 600; border: 0; background: none; color: var(--ink);
+  padding: 4px 8px; border-radius: 10px; text-align: center;
+}
+.picker-year .round:disabled { opacity: .35; cursor: default; }
+.picker-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.picker-grid.years { grid-template-columns: repeat(3, 1fr); max-height: 50vh; overflow-y: auto; }
+.picker-cell {
+  border: 1px solid var(--line); background: var(--card-2); border-radius: 14px; padding: 12px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--ink);
+}
+.picker-cell .pm-name { font-weight: 700; font-size: 15px; }
+.picker-cell .pm-total { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.picker-cell.empty .pm-name { color: var(--muted); }
+.picker-cell.current { border-color: var(--brand); }
+.picker-cell.selected { background: var(--brand); border-color: var(--brand); color: var(--brand-ink); }
+.picker-cell.selected .pm-total, .picker-cell.selected .pm-name { color: var(--brand-ink); }
+.picker-note { text-align: center; color: var(--muted); font-size: 12.5px; margin: 12px 0 0; }

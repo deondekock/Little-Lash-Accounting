@@ -22,6 +22,7 @@ const PATHS = {
   trendUp: 'M4 16l6-6 4 4 6-7M15 7h5v5',
   trendDown: 'M4 8l6 6 4-4 6 7M15 17h5v-5',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4',
+  down: 'M6 9l6 6 6-6',
   gift: 'M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-2-4-6-3-5 0M12 7c2-4 6-3 5 0',
 }
 defineProps({ name: { type: String, required: true }, size: { type: [Number, String], default: 20 }, stroke: { type: Number, default: 1.9 } })
