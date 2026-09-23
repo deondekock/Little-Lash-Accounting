@@ -5,7 +5,9 @@
  * - Google (sign-in and Sheets data) is never cached.
  */
 const CACHE = 'llp-v1'
-const SHELL = ['/', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png']
+// Paths are relative to where the app is served from (e.g. /Little-Lash-Accounting/ on GitHub Pages).
+const BASE = new URL('./', self.location).pathname
+const SHELL = [BASE, BASE + 'manifest.webmanifest', BASE + 'icons/icon.svg', BASE + 'icons/icon-192.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()))
@@ -29,10 +31,10 @@ self.addEventListener('fetch', (event) => {
       fetch(req)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put('/', copy))
+          caches.open(CACHE).then((c) => c.put(BASE, copy))
           return res
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match(BASE)),
     )
     return
   }

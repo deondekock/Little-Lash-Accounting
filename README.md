@@ -13,51 +13,34 @@ No server is needed. It's a static website that talks to Google Sheets directly,
 
 ---
 
-## Setup (once, about 15 minutes)
+## Where it lives
 
-### 1. Put the site on Netlify (free)
+**https://deondekock.github.io/Little-Lash-Accounting/**. It's published automatically by GitHub Pages
+(`.github/workflows/deploy.yml`) every time a change is pushed.
 
-1. Go to **netlify.com** → sign up with GitHub.
-2. **Add new site → Import an existing project → GitHub →** pick `Little-Lash-Accounting`.
-3. Leave the build settings as they are (they come from `netlify.toml`) and click **Deploy**.
-4. **Site configuration → Change site name**, e.g. `little-lash`. Your address is then
-   `https://little-lash.netlify.app`.
+One-time setup (already done or to do once):
 
-(Cloudflare Pages works the same way: build command `npm run build`, output folder `dist`.)
+1. **GitHub Pages:** repo **Settings → Pages → Source: GitHub Actions** (the repo must be public on a free
+   GitHub plan). Her data is not in the repo; it stays in the Google Sheet.
+2. **Google sign-in:** a Google Cloud project with the **Google Sheets API** enabled and an OAuth
+   **Web application** client whose
+   - *Authorized JavaScript origins* include `https://deondekock.github.io` (and `http://localhost:5173`)
+   - *Authorized redirect URIs* include `https://deondekock.github.io/Little-Lash-Accounting/` (and `http://localhost:5173/`)
 
-### 2. Create the Google sign-in ("OAuth client ID")
+   The client ID is in `src/config.js`. It's public by design, so it's fine in the code.
+3. **The sheet:** share it (Editor) only with the Google accounts that should use the app. Keep general access
+   **Restricted**.
 
-1. Open **console.cloud.google.com** → create a project called `Little Lash`.
-2. **APIs & Services → Library →** search **Google Sheets API** → **Enable**.
-3. **Google Auth Platform → Branding**: app name `Little Lash Payments`, your email → save.
-   **Audience**: choose *External*. Under **Test users**, add your Gmail and your wife's Gmail.
-4. **Clients → Create client → Web application**, then add:
-   - *Authorized JavaScript origins*: `https://little-lash.netlify.app` and `http://localhost:5173`
-   - *Authorized redirect URIs*: `https://little-lash.netlify.app/` and `http://localhost:5173/`
+### Using it on a phone
 
-   Then click **Create** and copy the **Client ID**.
+Open the address → **Sign in with Google** → paste the sheet's link once → **Add to Home Screen**
+(iPhone: Share button; Android: ⋮ menu). Google may say *"Google hasn't verified this app"*: tap **Continue**.
+To stop Google asking again every week, publish the app in **Google Auth Platform → Audience → Publish app**.
 
-### 3. Tell the site about it
+### Hosting elsewhere (optional)
 
-In Netlify: **Site configuration → Environment variables**, add
-
-| Key | Value |
-| --- | --- |
-| `VITE_GOOGLE_CLIENT_ID` | the Client ID from step 2 |
-| `VITE_SPREADSHEET_ID` | `12aaCpHvrYlGrx6zByBj12QuHW25GaeZP2eqcJDpMCMw` (your "Little Lash Lounge Payments" sheet) |
-
-Then **Deploys → Trigger deploy**.
-
-### 4. Share the sheet and install on her phone
-
-1. Open the Google Sheet → **Share** → add your wife's Gmail as **Editor**.
-2. On her phone, open `https://little-lash.netlify.app` → **Sign in with Google**.
-   Google says *"Google hasn't verified this app"*. That's expected for your own private app:
-   tap **Continue**.
-3. **Add to Home Screen** (iPhone: Share button; Android: ⋮ menu).
-
-> Tip: while the Google project is in *Testing*, Google asks her to approve again about once a week. To stop
-> that, open **Google Auth Platform → Audience → Publish app**. No review is needed for a private app like this.
+Any static host works (Netlify, Cloudflare Pages): build with `npm run build`, publish `dist`. Add the new address to
+the Google client's origins and redirect URIs. Set `VITE_SPREADSHEET_ID` there to skip pasting the sheet link.
 
 ---
 

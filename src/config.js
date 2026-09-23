@@ -1,5 +1,7 @@
 /** Build-time settings (see .env.example). */
-export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+// The OAuth client ID is public by design (it only works from the allowed web addresses).
+export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  '860201503699-s0u54svm3lpvd5i0nfq3plmpm4o86477.apps.googleusercontent.com'
 export const DEFAULT_SHEET_ID = import.meta.env.VITE_SPREADSHEET_ID || ''
 
 // For local testing only: ?api=http://localhost:8787 talks to dev/fake-sheets-api.cjs
