@@ -1,0 +1,20 @@
+{
+  "name": "little-lash-accounting",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web \"node dev/preview-server.cjs --demo --api-only\" \"vite\"",
+    "build": "vite build",
+    "preview": "vite build && node dev/preview-server.cjs --demo"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.9",
+    "concurrently": "^10.0.5",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3"
+  },
+  "dependencies": {
+    "vue": "^3.5.43"
+  }
+}

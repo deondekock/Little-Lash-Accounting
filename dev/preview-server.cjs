@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 /**
- * Local preview: runs src/Code.gs against an in-memory fake of the Apps Script
- * services (SpreadsheetApp etc.) and serves src/Index.html with a
- * google.script.run shim. Lets you try the app without deploying.
+ * Local preview: runs apps-script/Code.gs against an in-memory fake of the
+ * Apps Script services (SpreadsheetApp etc.) and serves the built
+ * apps-script/Index.html. The Vue app talks to it via POST /api/<function>
+ * (see src/api.js). Lets you try the app without deploying.
  *
- *   node dev/preview-server.js        → http://localhost:8080
- *   node dev/preview-server.js --demo → same, pre-filled with sample data
+ *   node dev/preview-server.cjs              → http://localhost:8080 (run `npm run build` first)
+ *   node dev/preview-server.cjs --demo       → same, pre-filled with sample data
+ *   node dev/preview-server.cjs --api-only   → API only on :8787, for `npm run dev` (Vite proxies to it)
  */
 const fs = require('fs');
 const http = require('http');
@@ -14,7 +16,8 @@ const vm = require('vm');
 const crypto = require('crypto');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = Number(process.env.PORT) || 8080;
+const API_ONLY = process.argv.includes('--api-only');
+const PORT = Number(process.env.PORT) || (API_ONLY ? 8787 : 8080);
 
 /* ---------------- fake Apps Script services ---------------- */
 
@@ -113,7 +116,7 @@ const gas = {
 };
 
 const context = vm.createContext(gas);
-vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/Code.gs'), 'utf8'), context, { filename: 'Code.gs' });
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'apps-script/Code.gs'), 'utf8'), context, { filename: 'Code.gs' });
 
 function callServer(fn, args) {
   // Each request gets a fresh cached-spreadsheet, like a real Apps Script execution.
@@ -154,18 +157,6 @@ if (process.argv.includes('--demo')) {
 
 /* ---------------- http server ---------------- */
 
-const SHIM = `<script>
-  window.google = { script: { get run() {
-    let ok = () => {}, err = (e) => console.error(e);
-    const runner = new Proxy({}, { get(_, fn) {
-      if (fn === 'withSuccessHandler') return (f) => ((ok = f), runner);
-      if (fn === 'withFailureHandler') return (f) => ((err = f), runner);
-      return (...args) => fetch('/api/' + fn, { method: 'POST', body: JSON.stringify(args) })
-        .then((r) => r.json()).then((r) => (r.error ? err(new Error(r.error)) : ok(r.result)), err);
-    } });
-    return runner;
-  } } };
-</script>`;
 
 http.createServer((req, res) => {
   if (req.method === 'POST' && req.url.startsWith('/api/')) {
@@ -181,7 +172,10 @@ http.createServer((req, res) => {
     });
     return;
   }
-  const html = fs.readFileSync(path.join(ROOT, 'src/Index.html'), 'utf8').replace('<head>', '<head>' + SHIM);
+  if (API_ONLY) {
+    res.writeHead(404);
+    return res.end('API only — open the Vite dev server instead.');
+  }
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-  res.end(html);
-}).listen(PORT, () => console.log(`Preview running at http://localhost:${PORT}`));
+  res.end(fs.readFileSync(path.join(ROOT, 'apps-script/Index.html'), 'utf8'));
+}).listen(PORT, () => console.log(API_ONLY ? `Fake Apps Script API on :${PORT}` : `Preview running at http://localhost:${PORT}`));
