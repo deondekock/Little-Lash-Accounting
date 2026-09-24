@@ -38,6 +38,10 @@
   --series-6: #3b78d0;
   --series-other: #b9aab1;
   --series-ghost: #d9ccd2; /* "last month / last year" context line */
+  /* Ordinal ramp (new → returning → regular), one hue light→dark — validated */
+  --flow-1: #e48db2;
+  --flow-2: #c2457a;
+  --flow-3: #7e2350;
 
   --nav-h: 68px;
 }
@@ -75,6 +79,9 @@
     --series-6: #4b84d9;
     --series-other: #6f6269;
     --series-ghost: #54464e;
+    --flow-1: #f09cbf;
+    --flow-2: #cc5a8a;
+    --flow-3: #8f3563;
   }
 }
 
@@ -584,3 +591,23 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .link-card { display: flex; align-items: center; gap: 12px; background: var(--brand-soft); border-color: transparent; }
 .link-card .grow { flex: 1; min-width: 0; }
 .link-card .meta { color: var(--ink-2); font-size: 13px; margin-top: 2px; }
+
+/* client flow */
+.flow-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+@media (min-width: 560px) { .flow-summary { grid-template-columns: repeat(4, 1fr); } }
+.flow-summary > div { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; }
+.flow-summary b { font-size: 20px; letter-spacing: -.02em; }
+.flow-summary span { font-size: 12px; color: var(--ink-2); }
+.flow-rows { display: grid; gap: 12px; }
+.flow-row { border: 0; background: none; padding: 0; text-align: left; width: 100%; color: inherit; }
+.flow-row .top-line { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.flow-row .who { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.flow-nums { font-size: 13px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.flow-nums span { color: var(--muted); margin: 0 2px; }
+.flow-bar { display: flex; gap: 2px; height: 12px; min-width: 12px; transition: width .4s ease; }
+.flow-bar div:first-child { border-radius: 0; }
+.flow-bar div:last-child { border-radius: 0 4px 4px 0; }
+.flow-chips { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.flow-chip { border: 1px solid var(--line); background: var(--card-2); border-radius: 12px; padding: 7px 4px; display: flex; flex-direction: column; align-items: center; color: var(--ink); }
+.flow-chip b { font-size: 16px; }
+.flow-chip span { font-size: 10.5px; color: var(--muted); font-weight: 600; white-space: nowrap; }

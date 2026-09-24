@@ -10,7 +10,10 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
   Tap to mark **Paid ⇄ Unpaid** or change **Cash / Card / EFT**; tick several and mark them in one go.
 - **Clients**: search every client, see visits, spend, usual service and full history; filters for regulars,
   new clients and who's due back.
-- **Team**: each team member's month, unpaid amount and a 12-month trend.
+- **Team**: each team member's month, unpaid amount and a 12-month trend, plus her clients: new, 2nd/3rd visit,
+  regulars, switched to her, moved away. Tap any number to see the names.
+- **Client flow** (Home): new → returning → regular clients per team member, switches, and how many of last
+  month's new clients came back.
 - **Insights**: the year month by month vs. last year, who earned what, payment methods, and tables.
 - **Client suggestions** while adding an appointment (fills in her usual service and price).
 - **Services**: pick several services per appointment (chips, most-used first; the price is filled in for the chosen team member — each service can have a price per person).

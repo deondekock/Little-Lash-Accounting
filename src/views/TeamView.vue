@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
-import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker } from '../store.js'
+import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
 
 const showInactive = ref(false)
@@ -28,6 +28,13 @@ const members = computed(() =>
     })
     .sort((a, b) => (b.active - a.active) || b.t.total - a.t.total),
 )
+const FLOW = [
+  { id: 'new', label: 'new' },
+  { id: 'returning', label: '2nd/3rd' },
+  { id: 'regular', label: 'regulars' },
+  { id: 'switchedIn', label: 'switched in' },
+  { id: 'switchedOut', label: 'moved away' },
+]
 const inactiveCount = computed(() => state.employees.filter((e) => !e.active).length)
 </script>
 
@@ -57,6 +64,11 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
           <div><div class="l">{{ monthLabel(state.month).split(' ')[0] }}</div><div class="v">{{ fmt0(m.t.total) }}</div></div>
           <div><div class="l">Appointments</div><div class="v">{{ m.t.count }}</div></div>
           <div><div class="l">Unpaid</div><div class="v" :class="{ orange: m.t.unpaid }">{{ fmt0(m.t.unpaid) }}</div></div>
+        </div>
+        <div class="flow-chips">
+          <button v-for="c in FLOW" :key="c.id" class="flow-chip" @click="openFlow(m.id, c.id)">
+            <b>{{ (monthFlow[m.id]?.[c.id] || []).length }}</b><span>{{ c.label }}</span>
+          </button>
         </div>
         <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 10px">
           <div>

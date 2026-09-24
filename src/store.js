@@ -1,7 +1,7 @@
 import { reactive, computed, shallowRef } from 'vue'
 import { call } from './api.js'
 import { currentMonth, todayStr } from './lib/format.js'
-import { buildClients, buildServices } from './lib/stats.js'
+import { buildClients, buildServices, clientFlow } from './lib/stats.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -63,6 +63,10 @@ export const clients = computed(() => buildClients(all.value))
 
 /** Every service (her list + names used on past appointments) with usage stats. */
 export const serviceCatalog = computed(() => buildServices(all.value, state.services))
+
+/** New / returning / regular clients and switches per team member for the selected month. */
+export const monthFlow = computed(() => clientFlow(all.value, state.month))
+export const openFlow = (employeeId, category) => (state.modal = { type: 'flow', data: { employeeId, category } })
 
 /** Appointments in the selected business month. */
 export const monthAppts = computed(() => all.value.filter((a) => a.month === state.month))

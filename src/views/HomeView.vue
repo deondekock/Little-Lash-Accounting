@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import AreaCompare from '../components/charts/AreaCompare.vue'
 import Columns from '../components/charts/Columns.vue'
+import ClientFlowCard from '../components/ClientFlowCard.vue'
 import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
 import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
@@ -152,6 +153,8 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
           <Columns :items="weekdays" value-label="appointments" :height="150" />
         </section>
       </div>
+
+      <div style="margin-top: 14px"><ClientFlowCard /></div>
 
       <!-- Clients due for a refill -->
       <section class="card" style="margin-top: 14px">

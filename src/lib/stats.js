@@ -261,3 +261,58 @@ export function findServiceDuplicates(services) {
     .map((g) => g.sort((a, b) => (b.inList - a.inList) || b.count - a.count))
     .sort((a, b) => b.reduce((s, x) => s + x.count, 0) - a.reduce((s, x) => s + x.count, 0))
 }
+
+/* ---------------- client flow ---------------- */
+
+/**
+ * Who each team member saw in a business month, by where the client is in her journey:
+ *   new       – her very first visit to the salon
+ *   returning – her 2nd or 3rd visit (becoming a regular)
+ *   regular   – 4th visit or more
+ * plus switches: the client's previous visit was with someone else ("in") or
+ * she saw someone else this month after last seeing this person ("out"),
+ * and rebooking: of last month's new clients, how many have come back so far.
+ * A "visit" is one client on one day (several services the same day count once).
+ */
+export function clientFlow(all, month) {
+  const prevMonth = shiftMonth(month, -1)
+  const byClient = new Map()
+  for (const a of all) {
+    if (!a.client) continue
+    const k = clientKey(a.client)
+    if (!byClient.has(k)) byClient.set(k, [])
+    byClient.get(k).push(a)
+  }
+  const flow = {}
+  const bucket = (id) => (flow[id] ||= { new: [], returning: [], regular: [], switchedIn: [], switchedOut: [], lastMonthNew: [], cameBack: [], cameBackToOther: [] })
+
+  for (const list of byClient.values()) {
+    // one visit per day, oldest first
+    const days = new Map()
+    for (const a of list.sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0))) if (!days.has(a.date)) days.set(a.date, a)
+    const visits = [...days.values()]
+    const name = mostCommon(list.reduce((m, a) => m.set(a.client.trim(), (m.get(a.client.trim()) || 0) + 1), new Map()))
+    const seen = new Set() // count each client once per category per team member
+    visits.forEach((v, i) => {
+      const add = (id, cat, extra = {}) => {
+        const key = `${id}|${cat}`
+        if (seen.has(key)) return
+        seen.add(key)
+        bucket(id)[cat].push({ name, date: v.date, visit: i + 1, ...extra })
+      }
+      if (v.month === prevMonth && i === 0) {
+        const back = visits.slice(1).find((x) => x.month >= month || x.month === prevMonth)
+        add(v.employeeId, 'lastMonthNew')
+        if (back) add(v.employeeId, back.employeeId === v.employeeId ? 'cameBack' : 'cameBackToOther', { with: back.employeeId })
+      }
+      if (v.month !== month) return
+      add(v.employeeId, i === 0 ? 'new' : i < 3 ? 'returning' : 'regular')
+      const prev = visits[i - 1]
+      if (prev && prev.employeeId !== v.employeeId) {
+        add(v.employeeId, 'switchedIn', { from: prev.employeeId })
+        add(prev.employeeId, 'switchedOut', { to: v.employeeId })
+      }
+    })
+  }
+  return flow
+}

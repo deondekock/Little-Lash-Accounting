@@ -15,6 +15,7 @@ import ClientModal from './components/ClientModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import MonthPicker from './components/MonthPicker.vue'
 import MergeModal from './components/MergeModal.vue'
+import FlowModal from './components/FlowModal.vue'
 import HistoryModal from './components/HistoryModal.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
@@ -92,6 +93,7 @@ const retry = () => location.reload()
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
   <HistoryModal v-if="state.modal?.type === 'history'" />
+  <FlowModal v-if="state.modal?.type === 'flow'" :employee-id="state.modal.data.employeeId" :category="state.modal.data.category" />
   <ServiceModal v-if="state.modal?.type === 'service'" :service="state.modal.data" />
   <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 
