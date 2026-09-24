@@ -1,6 +1,6 @@
 <script setup>
 /** Add a service to her list, or edit one (name, price, show/hide). Past names can be adopted into the list. */
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { state, closeModal, saveService, openServiceMerge, toastUndo, fail, employeeColor } from '../store.js'
@@ -18,10 +18,24 @@ const form = reactive({
 })
 // Everyone active, plus anyone who already has a price set for this service.
 const team = computed(() => state.employees.filter((e) => e.active || form.prices[e.id] != null))
+const isSet = (v) => v !== '' && v != null
+const same = (a, b) => isSet(a) && isSet(b) && Number(a) === Number(b)
+
+// Show everyone's price filled in: her own price, or the price for anyone.
+for (const e of team.value) if (!isSet(form.prices[e.id]) && isSet(form.price)) form.prices[e.id] = form.price
+
+// Changing the price for anyone updates everyone who was on that price (or had none);
+// people with their own different price keep it.
+watch(() => form.price, (now, before) => {
+  for (const e of team.value) {
+    const v = form.prices[e.id]
+    if (!isSet(v) || same(v, before)) form.prices[e.id] = isSet(now) ? now : ''
+  }
+})
+const differs = (e) => isSet(form.prices[e.id]) && !same(form.prices[e.id], form.price)
 const hint = (e) => {
   const usual = s?.typicalBy?.[e.id]
-  const base = form.price !== '' && form.price != null ? `Same as above (${fmt0(form.price)})` : 'No price'
-  return usual != null ? `${base} · usually ${fmt0(usual)}` : base
+  return usual != null ? `usually ${fmt0(usual)}` : 'No price'
 }
 const saving = ref(false)
 const title = computed(() => (inList ? 'Edit service' : adopting ? 'Add to your list' : 'New service'))
@@ -34,7 +48,8 @@ async function save() {
       id: inList ? s.id : undefined,
       name: form.name,
       price: form.price,
-      prices: form.prices,
+      // Only keep prices that differ from the price for anyone, so they follow it later.
+      prices: Object.fromEntries(Object.entries(form.prices).filter(([, v]) => isSet(v) && !same(v, form.price))),
       active: form.status === 'Shown',
       fromNames: adopting ? s.spellings : undefined,
     })
@@ -64,11 +79,12 @@ async function save() {
         <input id="svc-price" v-model="form.price" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Optional">
       </div>
       <div v-if="team.length" class="field">
-        <label>Price per team member <span style="font-weight: 500; color: var(--muted)">— only if she charges differently</span></label>
+        <label>Price per team member <span style="font-weight: 500; color: var(--muted)">— change only whoever charges differently</span></label>
         <div class="team-prices">
           <div v-for="e in team" :key="e.id" class="team-price">
             <span class="who"><i class="swatch-dot" :style="{ background: employeeColor(e.id) }" />{{ e.name }}</span>
-            <input v-model="form.prices[e.id]" type="number" inputmode="decimal" step="0.01" min="0" :placeholder="hint(e)" :aria-label="`Price for ${e.name}`">
+            <input v-model="form.prices[e.id]" type="number" inputmode="decimal" step="0.01" min="0" :placeholder="hint(e)" :aria-label="`Price for ${e.name}`" :class="{ differs: differs(e) }">
+            <span v-if="differs(e)" class="own-price">own price</span>
           </div>
         </div>
       </div>
