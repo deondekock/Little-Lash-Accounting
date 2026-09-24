@@ -22,10 +22,12 @@ const selected = computed(() => splitServices(model.value))
 const selectedKeys = computed(() => new Set(selected.value.map(serviceKey)))
 
 // Her list (active) first, then past services by how often they were done.
+// The chosen team member's own services first (most done), then her list, then everything else.
+const mine = (s) => s.countBy?.[props.employeeId] || (s.prices?.[props.employeeId] != null ? 1 : 0)
 const ranked = computed(() =>
   serviceCatalog.value
     .filter((s) => s.active && !selectedKeys.value.has(s.key))
-    .sort((a, b) => (b.inList - a.inList) || b.count - a.count),
+    .sort((a, b) => (mine(b) - mine(a)) || (b.inList - a.inList) || b.count - a.count),
 )
 const popular = computed(() => ranked.value.slice(0, 8))
 const matches = computed(() => {
@@ -61,7 +63,7 @@ function onKey(e) {
     if (list[active.value]) add(list[active.value].name)
     else if (query.value.trim()) add(query.value.trim())
   } else if (e.key === 'Backspace' && !query.value && selected.value.length) remove(selected.value[selected.value.length - 1])
-  else if (e.key === 'Escape') { open.value = false; e.stopPropagation() }
+  else if (e.key === 'Escape' && open.value && (matches.value.length || canAddNew.value)) { open.value = false; e.stopPropagation() }
 }
 const priceOf = (s) => servicePrice(s, props.employeeId)
 </script>

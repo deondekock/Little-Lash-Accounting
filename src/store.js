@@ -306,6 +306,16 @@ export async function mergeServices(fromNames, toName, summary) {
   if (res.appts.length) upsertAppts(res.appts)
 }
 
+/** Puts every past service on her list, linked to whoever did it at her usual price. */
+export async function importPastServices() {
+  const items = serviceCatalog.value
+    .filter((s) => !s.inList)
+    .map((s) => ({ name: s.name, prices: { ...s.typicalBy } }))
+  const res = await api('importServices', items)
+  state.services = res.services
+  return res.added
+}
+
 export const openService = (service) => (state.modal = { type: 'service', data: service ? { ...service } : null })
 export const openServiceMerge = (service, opts = {}) => (state.modal = { type: 'serviceMerge', data: { service, with: opts.with || [] } })
 

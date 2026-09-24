@@ -578,3 +578,9 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 
 .team-price input.differs { border-color: var(--brand); background: var(--brand-soft); font-weight: 700; }
 .own-price { font-size: 11px; font-weight: 700; color: var(--brand); white-space: nowrap; }
+
+.team-price .who > span { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.team-price .who small { font-weight: 500; color: var(--muted); font-size: 11px; }
+.link-card { display: flex; align-items: center; gap: 12px; background: var(--brand-soft); border-color: transparent; }
+.link-card .grow { flex: 1; min-width: 0; }
+.link-card .meta { color: var(--ink-2); font-size: 13px; margin-top: 2px; }

@@ -16,13 +16,18 @@ const form = reactive({
   status: s && !s.active ? 'Hidden' : 'Shown',
   prices: { ...(s?.prices || {}) },
 })
-// Everyone active, plus anyone who already has a price set for this service.
-const team = computed(() => state.employees.filter((e) => e.active || form.prices[e.id] != null))
+// Everyone active, plus anyone who has a price for this service or has done it before.
+const team = computed(() => state.employees.filter((e) => e.active || form.prices[e.id] != null || s?.countBy?.[e.id]))
 const isSet = (v) => v !== '' && v != null
 const same = (a, b) => isSet(a) && isSet(b) && Number(a) === Number(b)
 
-// Show everyone's price filled in: her own price, or the price for anyone.
-for (const e of team.value) if (!isSet(form.prices[e.id]) && isSet(form.price)) form.prices[e.id] = form.price
+// Show everyone's price filled in: her own price, else the price for anyone, else what she usually
+// charged for it (so past services come linked to whoever did them).
+for (const e of team.value) {
+  if (isSet(form.prices[e.id])) continue
+  if (isSet(form.price)) form.prices[e.id] = form.price
+  else if (s?.typicalBy?.[e.id] != null) form.prices[e.id] = s.typicalBy[e.id]
+}
 
 // Changing the price for anyone updates everyone who was on that price (or had none);
 // people with their own different price keep it.
@@ -82,7 +87,7 @@ async function save() {
         <label>Price per team member <span style="font-weight: 500; color: var(--muted)">— change only whoever charges differently</span></label>
         <div class="team-prices">
           <div v-for="e in team" :key="e.id" class="team-price">
-            <span class="who"><i class="swatch-dot" :style="{ background: employeeColor(e.id) }" />{{ e.name }}</span>
+            <span class="who"><i class="swatch-dot" :style="{ background: employeeColor(e.id) }" /><span>{{ e.name }}<small v-if="s?.countBy?.[e.id]">{{ s.countBy[e.id] }}× done</small></span></span>
             <input v-model="form.prices[e.id]" type="number" inputmode="decimal" step="0.01" min="0" :placeholder="hint(e)" :aria-label="`Price for ${e.name}`" :class="{ differs: differs(e) }">
             <span v-if="differs(e)" class="own-price">own price</span>
           </div>

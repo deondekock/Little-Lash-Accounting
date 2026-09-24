@@ -193,7 +193,7 @@ const median = (xs) => {
 export function buildServices(all, list) {
   const map = new Map()
   const entry = (k) => {
-    if (!map.has(k)) map.set(k, { key: k, spellings: new Map(), count: 0, revenue: 0, last: '', solo: [], soloBy: {}, tab: null })
+    if (!map.has(k)) map.set(k, { key: k, spellings: new Map(), count: 0, revenue: 0, last: '', solo: [], soloBy: {}, countBy: {}, lastBy: {}, tab: null })
     return map.get(k)
   }
   for (const a of all) {
@@ -202,6 +202,8 @@ export function buildServices(all, list) {
     for (const t of tokens) {
       const e = entry(serviceKey(t))
       e.count++
+      e.countBy[a.employeeId] = (e.countBy[a.employeeId] || 0) + 1
+      if (a.date > (e.lastBy[a.employeeId] || '')) e.lastBy[a.employeeId] = a.date
       e.revenue += a.amount / tokens.length
       if (a.date > e.last) e.last = a.date
       if (tokens.length === 1) {
@@ -222,6 +224,8 @@ export function buildServices(all, list) {
     prices: e.tab?.prices || {},
     typical: median(e.solo.slice(-30)),
     typicalBy: Object.fromEntries(Object.entries(e.soloBy).map(([id, xs]) => [id, median(xs.slice(-20))])),
+    countBy: e.countBy, // how often each team member did it
+    lastBy: e.lastBy,
     count: e.count,
     revenue: e.revenue,
     last: e.last,

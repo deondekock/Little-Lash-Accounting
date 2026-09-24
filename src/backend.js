@@ -751,3 +751,30 @@ async function replaceInAppointments(fromNames, toName, now) {
   }
   return before
 }
+
+/**
+ * Adds many services to the Services tab at once (e.g. every service used on past
+ * appointments), each with prices per team member. Names already on the list are skipped.
+ */
+export function importServices(items) {
+  return serial(() => guarded(async () => {
+    const now = new Date().toISOString()
+    const have = new Set(db.services.map((x) => serviceKey(x.name)))
+    const rows = []
+    for (const it of items) {
+      const name = clean(it.name).replace(/\s*\+\s*/g, ' & ')
+      const key = serviceKey(name)
+      if (!name || have.has(key)) continue
+      have.add(key)
+      rows.push([uuid(), name, cleanPrice(it.price), true, now, now, pricesCell(it.prices)])
+    }
+    if (!rows.length) return { services: publicServices(), added: 0 }
+    const res = await sheetsApi(`/${db.id}/values/${enc(range(SERVICES, 'A:G'))}:append`, {
+      method: 'POST', query: { valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS' }, body: { values: rows },
+    })
+    const first = rowOf(res.updates.updatedRange)
+    rows.forEach((r, i) => db.services.push(rowToService(r, first + i)))
+    await logChange('services', `Added ${rows.length} past services to the list, linked to the team`, { svcs: Object.fromEntries(rows.map((r) => [r[0], null])) })
+    return { services: publicServices(), added: rows.length }
+  }))
+}
