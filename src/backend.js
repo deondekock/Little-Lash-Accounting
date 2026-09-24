@@ -6,7 +6,8 @@
  *   Appointments ID | Date | Month | Employee ID | Employee | Client | Service |
  *                Amount | Method | Status | Paid On | Notes | Created At | Updated At
  *   Settings     Setting | Value      ("Month starts on day" → 26 = months run 26th–25th)
- *   Services     ID | Name | Price | Active | Created At | Updated At   (her service list & prices)
+ *   Services     ID | Name | Price | Active | Created At | Updated At | Team Prices
+ *                (Price = for anyone; Team Prices = JSON { employeeId: price } when someone charges differently)
  *   History      ID | Time | Who | Action | Summary | Undone At | Data 1…10
  *                Every change the app makes is logged here with the rows as they were
  *                *before* the change, so any change (or a whole day) can be rolled back.
@@ -27,7 +28,7 @@ const APPOINTMENTS = 'Appointments'
 const SETTINGS = 'Settings'
 const HISTORY = 'History'
 const SERVICES = 'Services'
-const SERVICE_HEADERS = ['ID', 'Name', 'Price', 'Active', 'Created At', 'Updated At']
+const SERVICE_HEADERS = ['ID', 'Name', 'Price', 'Active', 'Created At', 'Updated At', 'Team Prices']
 const MONTH_START_SETTING = 'Month starts on day'
 
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At']
@@ -38,7 +39,7 @@ const APPOINTMENT_HEADERS = [
 const HISTORY_HEADERS = ['ID', 'Time', 'Who', 'Action', 'Summary', 'Undone At',
   ...Array.from({ length: 10 }, (_, i) => `Data ${i + 1}`)]
 const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS, [SERVICES]: SERVICE_HEADERS }
-const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P', [SERVICES]: 'F' }
+const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P', [SERVICES]: 'G' }
 const TABS = [EMPLOYEES, APPOINTMENTS, SERVICES, SETTINGS, HISTORY]
 /** History keys → tab (the rows each change touched, by kind). */
 const KIND_TAB = { appts: APPOINTMENTS, emps: EMPLOYEES, svcs: SERVICES }
@@ -50,7 +51,7 @@ const A = {
   AMOUNT: 7, METHOD: 8, STATUS: 9, PAID_ON: 10, NOTES: 11, CREATED: 12, UPDATED: 13,
 }
 const E = { ID: 0, NAME: 1, PHONE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5 }
-const S = { ID: 0, NAME: 1, PRICE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5 }
+const S = { ID: 0, NAME: 1, PRICE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5, PRICES: 6 }
 
 const db = {
   id: '',
@@ -119,12 +120,35 @@ function publicAppt(a) {
   return { ...rest, employeeName: db.employees.find((e) => e.id === a.employeeId)?.name || a.employeeName }
 }
 
+/** Team Prices cell → { employeeId: price } (ignores anything unreadable). */
+function parsePrices(cell) {
+  try {
+    const obj = JSON.parse(cell || '{}')
+    return Object.fromEntries(Object.entries(obj).filter(([, v]) => Number.isFinite(Number(v)) && v !== '').map(([k, v]) => [k, Number(v)]))
+  } catch {
+    return {}
+  }
+}
+
+const cleanPrice = (v) => (v === '' || v == null ? '' : Math.round(parseFloat(String(v).replace(',', '.')) * 100) / 100)
+
+/** { employeeId: price } → Team Prices cell ('' when none). */
+function pricesCell(prices) {
+  const out = {}
+  for (const [k, v] of Object.entries(prices || {})) {
+    const n = cleanPrice(v)
+    if (n !== '' && n >= 0) out[k] = n
+  }
+  return Object.keys(out).length ? JSON.stringify(out) : ''
+}
+
 function rowToService(r, row) {
   const active = r[S.ACTIVE]
   return {
     id: clean(r[S.ID]),
     name: clean(r[S.NAME]),
     price: r[S.PRICE] === '' || r[S.PRICE] == null ? null : Number(r[S.PRICE]) || 0,
+    prices: parsePrices(r[S.PRICES]),
     active: !(active === false || String(active).toUpperCase() === 'FALSE'),
     row,
     raw: r,
@@ -366,12 +390,16 @@ async function ensureTabs(meta) {
 async function load() {
   const res = await sheetsApi(`/${db.id}/values:batchGet`, {
     query: {
-      ranges: [range(EMPLOYEES, 'A2:F'), range(APPOINTMENTS, 'A2:N'), range(SETTINGS, 'A2:B'), range(SERVICES, 'A2:F')],
+      ranges: [range(EMPLOYEES, 'A2:F'), range(APPOINTMENTS, 'A2:N'), range(SETTINGS, 'A2:B'), range(SERVICES, 'A2:G'), range(SERVICES, 'G1')],
       valueRenderOption: 'UNFORMATTED_VALUE',
       dateTimeRenderOption: 'SERIAL_NUMBER',
     },
   })
-  const [emps, appts, settings, services] = res.valueRanges.map((vr) => vr.values || [])
+  const [emps, appts, settings, services, svcHeader] = res.valueRanges.map((vr) => vr.values || [])
+  // Sheets made before per-person prices: add the column header.
+  if (!svcHeader[0]?.[0]) {
+    await sheetsApi(`/${db.id}/values/${enc(range(SERVICES, 'G1'))}`, { method: 'PUT', query: { valueInputOption: 'RAW' }, body: { values: [['Team Prices']] } })
+  }
   db.services = services.map((r, i) => (clean(r[0]) ? rowToService(r, i + 2) : null)).filter(Boolean)
   db.employees = emps.map((r, i) => (clean(r[0]) ? rowToEmployee(r, i + 2) : null)).filter(Boolean)
   db.appts = appts.map((r, i) => (clean(r[0]) ? rowToAppointment(r, i + 2) : null)).filter(Boolean)
@@ -631,8 +659,10 @@ export function saveService(input) {
   return serial(() => guarded(async () => {
     const name = clean(input?.name).replace(/\s*\+\s*/g, ' & ')
     if (!name) throw new Error('Please enter the service name.')
-    const price = input.price === '' || input.price == null ? '' : Math.round(parseFloat(String(input.price).replace(',', '.')) * 100) / 100
+    const price = cleanPrice(input.price)
     if (price !== '' && !(price >= 0)) throw new Error('Please enter a valid price.')
+    if (Object.values(input.prices || {}).some((v) => v !== '' && v != null && !(cleanPrice(v) >= 0))) throw new Error('Please enter valid prices.')
+    const team = pricesCell(input.prices)
     const active = input.active !== false
     const now = new Date().toISOString()
     const clash = db.services.find((x) => serviceKey(x.name) === serviceKey(name) && x.id !== input.id)
@@ -642,14 +672,14 @@ export function saveService(input) {
     if (existing) {
       await locateRows(SERVICES, [existing])
       before.svcs[existing.id] = [...existing.raw]
-      const values = [existing.id, name, price, active, existing.raw[S.CREATED] ?? now, now]
+      const values = [existing.id, name, price, active, existing.raw[S.CREATED] ?? now, now, team]
       await writeRow(SERVICES, existing.row, values)
       const oldName = existing.name
       Object.assign(existing, rowToService(values, existing.row))
       if (serviceKey(oldName) !== serviceKey(name) || oldName !== name) Object.assign(before.appts, await replaceInAppointments([oldName], name, now))
       await logChange('services', oldName !== name ? `Renamed service "${oldName}" to "${name}"` : `Updated service ${name}`, before)
     } else {
-      const values = [input.newId || uuid(), name, price, active, now, now]
+      const values = [input.newId || uuid(), name, price, active, now, now, team]
       const row = await appendRow(SERVICES, values)
       db.services.push(rowToService(values, row))
       before.svcs[values[0]] = null
@@ -680,7 +710,8 @@ export function mergeServices(fromNames, toName, summary) {
     if (keep) {
       before.svcs[keep.id] = [...keep.raw]
       const price = keep.price ?? drop.find((d) => d.price != null)?.price ?? ''
-      const values = [keep.id, toName, price, keep.active || drop.some((d) => d.active), keep.raw[S.CREATED] ?? now, now]
+      const team = pricesCell(Object.assign({}, ...[...drop].reverse().map((d) => d.prices), keep.prices))
+      const values = [keep.id, toName, price, keep.active || drop.some((d) => d.active), keep.raw[S.CREATED] ?? now, now, team]
       await writeRow(SERVICES, keep.row, values)
       Object.assign(keep, rowToService(values, keep.row))
     }

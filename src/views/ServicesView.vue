@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import { state, serviceCatalog, openService, openServiceMerge, setView } from '../store.js'
 import { fmt0, shortDate } from '../lib/format.js'
-import { looseKey, findServiceDuplicates, servicePrice } from '../lib/stats.js'
+import { looseKey, findServiceDuplicates, priceRange } from '../lib/stats.js'
 
 const query = ref('')
 const filter = ref('list')
@@ -32,6 +32,13 @@ const list = computed(() => {
   else if (filter.value === 'hidden') out = out.filter((s) => s.inList && !s.active)
   return [...out].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 })
+/** "R 450" or "R 350 – 450" when team members charge differently; else what it usually cost. */
+function priceLabel(s) {
+  const r = priceRange(s)
+  if (r) return { value: r.min === r.max ? fmt0(r.min) : `${fmt0(r.min)} – ${r.max}`, note: r.min === r.max ? 'price' : 'by team member' }
+  if (s.typical != null) return { value: fmt0(s.typical), note: 'usually' }
+  return { value: '—', note: '' }
+}
 const monthsAgo = (d) => (d ? shortDate(d) + ' ' + d.slice(0, 4) : 'never')
 </script>
 
@@ -91,8 +98,8 @@ const monthsAgo = (d) => (d ? shortDate(d) + ' ' + d.slice(0, 4) : 'never')
             <div class="meta">{{ s.count }} time{{ s.count === 1 ? '' : 's' }} · last {{ monthsAgo(s.last) }}<template v-if="s.revenue"> · {{ fmt0(s.revenue) }} in total</template></div>
           </div>
           <div class="right">
-            <div class="big">{{ servicePrice(s) != null ? fmt0(servicePrice(s)) : '—' }}</div>
-            <div class="meta">{{ s.price != null ? 'price' : s.typical != null ? 'usually' : '' }}</div>
+            <div class="big">{{ priceLabel(s).value }}</div>
+            <div class="meta">{{ priceLabel(s).note }}</div>
           </div>
         </button>
       </div>

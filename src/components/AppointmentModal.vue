@@ -36,10 +36,10 @@ const suggestion = ref('')
 const servicePicker = ref(null)
 // The amount follows the chosen services until she types her own amount.
 const autoAmount = ref(!editing && !form.amount)
-watch(() => form.service, (svc) => {
+watch(() => [form.service, form.employeeId], ([svc, emp]) => {
   if (!autoAmount.value) return
   const byKey = new Map(serviceCatalog.value.map((s) => [s.key, s]))
-  const prices = splitServices(svc).map((t) => servicePrice(byKey.get(serviceKey(t))))
+  const prices = splitServices(svc).map((t) => servicePrice(byKey.get(serviceKey(t)), emp))
   if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
   else if (!prices.length) form.amount = ''
 })
@@ -111,7 +111,7 @@ async function remove() {
       </div>
       <div class="field">
         <label for="f-service">Services</label>
-        <ServicePicker id="f-service" ref="servicePicker" v-model="form.service" />
+        <ServicePicker id="f-service" ref="servicePicker" v-model="form.service" :employee-id="form.employeeId" />
       </div>
       <div class="row2">
         <div class="field">

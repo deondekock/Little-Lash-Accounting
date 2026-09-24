@@ -193,7 +193,7 @@ const median = (xs) => {
 export function buildServices(all, list) {
   const map = new Map()
   const entry = (k) => {
-    if (!map.has(k)) map.set(k, { key: k, spellings: new Map(), count: 0, revenue: 0, last: '', solo: [], tab: null })
+    if (!map.has(k)) map.set(k, { key: k, spellings: new Map(), count: 0, revenue: 0, last: '', solo: [], soloBy: {}, tab: null })
     return map.get(k)
   }
   for (const a of all) {
@@ -204,7 +204,10 @@ export function buildServices(all, list) {
       e.count++
       e.revenue += a.amount / tokens.length
       if (a.date > e.last) e.last = a.date
-      if (tokens.length === 1) e.solo.push(a.amount)
+      if (tokens.length === 1) {
+        e.solo.push(a.amount)
+        ;(e.soloBy[a.employeeId] ||= []).push(a.amount)
+      }
       e.spellings.set(t, (e.spellings.get(t) || 0) + 1)
     }
   }
@@ -216,7 +219,9 @@ export function buildServices(all, list) {
     inList: !!e.tab,
     active: e.tab ? e.tab.active : true,
     price: e.tab?.price ?? null,
+    prices: e.tab?.prices || {},
     typical: median(e.solo.slice(-30)),
+    typicalBy: Object.fromEntries(Object.entries(e.soloBy).map(([id, xs]) => [id, median(xs.slice(-20))])),
     count: e.count,
     revenue: e.revenue,
     last: e.last,
@@ -224,8 +229,19 @@ export function buildServices(all, list) {
   }))
 }
 
-/** The price to suggest for a service: her list price, else what it usually cost. */
-export const servicePrice = (s) => (s?.price ?? s?.typical ?? null)
+/**
+ * The price to suggest for a service done by a team member: her own price, else the
+ * "anyone" price, else what she usually charged, else what it usually cost.
+ */
+export const servicePrice = (s, employeeId) =>
+  s ? (s.prices?.[employeeId] ?? s.price ?? s.typicalBy?.[employeeId] ?? s.typical ?? null) : null
+
+/** Lowest and highest price across the team (for "R 350 – 450" labels). */
+export function priceRange(s) {
+  const set = [s.price, ...Object.values(s.prices || {})].filter((v) => v != null)
+  if (!set.length) return null
+  return { min: Math.min(...set), max: Math.max(...set) }
+}
 
 /** Service names that only differ by spacing, accents, capitals or a plural "s". */
 export function findServiceDuplicates(services) {

@@ -11,7 +11,7 @@ import { looseKey, servicePrice } from '../lib/stats.js'
 import { splitServices, joinServices, serviceKey } from '../lib/services.js'
 
 const model = defineModel({ type: String, default: '' })
-defineProps({ id: String })
+const props = defineProps({ id: String, employeeId: String })
 
 const query = ref('')
 const open = ref(false)
@@ -63,7 +63,7 @@ function onKey(e) {
   } else if (e.key === 'Backspace' && !query.value && selected.value.length) remove(selected.value[selected.value.length - 1])
   else if (e.key === 'Escape') { open.value = false; e.stopPropagation() }
 }
-const priceOf = (s) => servicePrice(s)
+const priceOf = (s) => servicePrice(s, props.employeeId)
 </script>
 
 <template>

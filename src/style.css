@@ -569,3 +569,9 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .svc-chip button { border: 0; background: rgba(255,255,255,.18); color: inherit; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; padding: 0; }
 .quick-picks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .quick-picks .chip { box-shadow: none; }
+
+/* per-team-member prices */
+.team-prices { display: grid; gap: 8px; }
+.team-price { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 10px; }
+.team-price .who { display: flex; align-items: center; gap: 8px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.team-price input::placeholder { font-size: 13px; }
