@@ -9,6 +9,7 @@ import ServicesView from './views/ServicesView.vue'
 import PayrollView from './views/PayrollView.vue'
 import CalendarView from './views/CalendarView.vue'
 import BookingModal from './components/BookingModal.vue'
+import ClientAccountsModal from './components/ClientAccountsModal.vue'
 import MyLeaveView from './views/staff/MyLeaveView.vue'
 import MyPayslipsView from './views/staff/MyPayslipsView.vue'
 import MyMeView from './views/staff/MyMeView.vue'
@@ -139,6 +140,7 @@ const retry = () => location.reload()
   <NotificationsModal v-if="state.modal?.type === 'notifications'" />
   <ViewAsModal v-if="state.modal?.type === 'viewAs'" />
   <BookingSettingsModal v-if="state.modal?.type === 'bookingSettings'" />
+  <ClientAccountsModal v-if="state.modal?.type === 'accounts'" />
   <BookingModal v-if="state.modal?.type === 'booking'" :booking="state.modal.data" :prefill="state.modal.prefill" />
   <PayslipViewModal v-if="state.modal?.type === 'payslipView'" :slip="state.modal.data" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />

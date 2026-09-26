@@ -850,3 +850,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .danger-text { color: var(--unpaid) !important; }
 .day-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
 .cal-body > .cal-gutter, .cal-head > .cal-gutter { position: sticky; left: 0; z-index: 2; background: var(--card); border-right: 1px solid var(--line); }
+.acct small { display: block; color: var(--muted); font-size: 12.5px; }
+.acct-linked { font-size: 13.5px; margin-top: 8px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.acct-matches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.acct-search { width: 100%; margin-top: 8px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 12px; font: inherit; background: var(--card); color: var(--ink); }

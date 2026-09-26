@@ -128,7 +128,8 @@ export async function notify(env, emails, msg) {
   const to = [...new Set(emails.map((e) => String(e || '').toLowerCase()).filter(Boolean))]
   if (!to.length) return []
   const results = []
-  const url = `${env.APP_URL}${msg.hash ? '#' + msg.hash : ''}`
+  // Clients' notifications open the booking page; the team's open the salon app.
+  const url = msg.client ? `${env.APP_URL}book/` : `${env.APP_URL}${msg.hash ? '#' + msg.hash : ''}`
   try {
     const keys = await vapid(db)
     const contact = `mailto:${String(env.ALLOWED_EMAILS || '').split(/[,\s]+/)[0] || 'owner@example.com'}`

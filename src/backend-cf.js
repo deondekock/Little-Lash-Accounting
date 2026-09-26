@@ -11,6 +11,8 @@ import { FAKE_API } from './config.js'
 import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
+import { clientKey } from './lib/stats.js'
+import { dayName } from './lib/booking.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES } from './lib/schema.js'
 import { BOOKING_FIELDS, bookingSettings, planFor, toMin } from './lib/booking.js'
 
@@ -383,6 +385,7 @@ export async function saveAppointment(input) {
   // Completing a booking: link them, and mark the booking done.
   const booking = !existing && input.bookingId ? db.bookings.find((b) => b.id === input.bookingId) : null
   if (booking) Object.assign(appt, { bookingId: booking.id, clientId: booking.clientId || null })
+  else if (!existing?.clientId) appt.clientId = accountFor(appt.client)?.id || null
   const rec = apptRec(appt, existing?.rec.created_at || now, now)
   const put = { appointments: [rec] }
   const before = { appts: { [appt.id]: existing ? existing.rec : null } }
@@ -670,9 +673,16 @@ export async function saveBooking(input) {
   if (input.id && !existing) throw new Error('This booking was removed on another phone.')
   const rec = bookingFromInput(input, existing, now)
   const moved = existing && (existing.date !== rec.date || existing.start !== rec.start || existing.employeeId !== rec.employee_id)
+  // A booking for someone with an online account links to it (by the name she's linked under).
+  if (!rec.client_id && rec.kind === 'booking') rec.client_id = accountFor(rec.client_name)?.id || null
+  const who = (nameOf(rec.employee_id) || '').split(' ')[0]
+  const tell = rec.client_id && (moved || !existing)
+    ? [{ clientId: rec.client_id, tag: `booking-${rec.id}`, title: existing ? '🔁 Your appointment time has changed' : '✅ Your booking is confirmed',
+      body: `${existing ? 'Now ' : ''}${dayName(rec.date, true)} at ${rec.start} with ${who}. You'll get a reminder the day before.` }]
+    : undefined
   await commit('booking', `${existing ? (moved ? 'Moved' : 'Changed') : rec.kind === 'block' ? 'Blocked time' : 'Booked'} ${bookingLabel(rec)}`, {
     put: { bookings: [rec] }, before: { books: { [rec.id]: existing ? existing.rec : null } },
-    expect: existing ? expectOf('bookings', [existing]) : undefined,
+    expect: existing ? expectOf('bookings', [existing]) : undefined, notify: tell,
   })
   return publicBookings()
 }
@@ -688,8 +698,40 @@ export async function setBookingStatus(id, status) {
   const rec = { ...b.rec, status, updated_by: user || null, updated_at: new Date().toISOString() }
   await commit('booking', `${STATUS_WORD[status] || status}: ${bookingLabel(b.rec)}`, {
     put: { bookings: [rec] }, before: { books: { [id]: b.rec } }, expect: expectOf('bookings', [b]),
+    notify: status === 'cancelled' && b.clientId
+      ? [{ clientId: b.clientId, tag: `booking-${id}`, title: 'Your appointment was cancelled', body: `${dayName(b.date, true)} at ${b.start}. Please phone the salon or book a new time.` }]
+      : undefined,
   })
   return publicBookings()
+}
+
+/** The online account linked to this client name (the owner links them once). */
+function accountFor(name) {
+  const k = clientKey(name || '')
+  return k ? db.clients.find((c) => c.clientKey === k) : null
+}
+
+/**
+ * Links a client's online account to the name her past visits are under: her visits, amounts and
+ * paid / unpaid then show on her booking page, and new ones link by themselves. key = '' unlinks.
+ */
+export async function linkClient(clientId, name) {
+  const c = db.clients.find((x) => x.id === clientId)
+  if (!c) throw new Error('That client account was not found.')
+  const key = name ? clientKey(name) : ''
+  const taken = key && db.clients.find((x) => x.clientKey === key && x.id !== clientId)
+  if (taken) throw new Error(`"${name}" is already linked to ${taken.email}.`)
+  const now = new Date().toISOString()
+  const oldKey = c.clientKey
+  const appts = db.appts.filter((a) => (key && clientKey(a.client) === key && a.clientId !== clientId) || (!key && oldKey && a.clientId === clientId && !a.bookingId))
+  const put = {
+    clients: [{ ...c.rec, client_key: key || null, updated_at: now }],
+    appointments: appts.map((a) => ({ ...a.rec, client_id: key ? clientId : null, updated_at: now })),
+  }
+  await commit('clients', key ? `Linked ${c.email} to ${name} (${appts.length} visits)` : `Unlinked ${c.email}`, {
+    put, before: { clients: { [c.id]: c.rec }, appts: Object.fromEntries(appts.map((a) => [a.id, a.rec])) },
+  })
+  return { clients: publicClients(), appts: appts.map((a) => publicAppt(db.appts.find((x) => x.id === a.id))) }
 }
 
 /** Online booking settings (Settings → Online booking). */

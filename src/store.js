@@ -228,9 +228,11 @@ export function openHash(hash) {
   if (state.role === 'staff') {
     if (h === 'leave') setView('my-leave')
     if (h === 'payslips') setView('my-payslips')
+    if (h === 'calendar') setView('my-appointments')
   } else {
     if (h === 'leave' || h === 'payslips') setView('payroll', { payrollTab: h })
     if (h === 'team') setView('team')
+    if (h === 'calendar') setView('calendar')
   }
   if (location.hash) history.replaceState(null, '', location.pathname + location.search)
 }
@@ -535,7 +537,13 @@ export const openBooking = (booking, prefill = null) => (state.modal = { type: '
 export async function saveBookingSettings(values) {
   state.booking = await api('saveBookingSettings', values)
 }
+export async function linkClient(clientId, name) {
+  const res = await api('linkClient', clientId, name)
+  state.clients = res.clients
+  upsertAppts(res.appts)
+}
 export const openBookingSettings = () => (state.modal = { type: 'bookingSettings', data: null })
+export const openAccounts = () => (state.modal = { type: 'accounts', data: null })
 
 export async function saveCompany(company) {
   state.company = await api('saveCompany', company)

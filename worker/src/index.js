@@ -79,8 +79,9 @@ export default {
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/appointment') return json(await staffAppointment(env.DB, me, await request.json()), cors)
-        if (route === 'POST /api/staff/booking') return json(await staffBooking(env.DB, me, await request.json()), cors)
-        if (route === 'POST /api/staff/booking/status') return json(await staffBookingStatus(env.DB, me, await request.json()), cors)
+        const tellClientOf = (n) => ctx.waitUntil(notifyStaff(env, [n]))
+        if (route === 'POST /api/staff/booking') return json(await staffBooking(env.DB, me, await request.json(), tellClientOf), cors)
+        if (route === 'POST /api/staff/booking/status') return json(await staffBookingStatus(env.DB, me, await request.json(), tellClientOf), cors)
         if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
@@ -103,10 +104,15 @@ export default {
   },
 
   /** Nightly backup of everything into KV. */
+  /** Every hour: reminders for tomorrow's bookings. Once a night (01:00 UTC): a backup of everything. */
   async scheduled(event, env) {
-    const day = new Date().toISOString().slice(0, 10)
-    const body = await loadAll(env.DB, { withHistory: true })
-    await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
+    if (event.cron === '0 1 * * *') {
+      const day = new Date().toISOString().slice(0, 10)
+      const body = await loadAll(env.DB, { withHistory: true })
+      await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
+      return // the hourly run (at the same time) sends the reminders
+    }
+    await sendReminders(env)
   },
 }
 
@@ -415,6 +421,12 @@ async function staffProfile(db, me, body, tell) {
 /** Owner's changes that concern a staff member (e.g. leave approved) → her login email. */
 async function notifyStaff(env, list) {
   for (const n of list.slice(0, 20)) {
+    if (n.clientId) {
+      // A client of the booking page (her booking was changed by the salon).
+      const c = await env.DB.prepare('SELECT email FROM clients WHERE id = ?1').bind(String(n.clientId)).first()
+      if (c?.email) await notify(env, [c.email], { title: String(n.title || '').slice(0, 120), body: String(n.body || '').slice(0, 300), client: true, tag: n.tag })
+      continue
+    }
     const emp = await env.DB.prepare(`SELECT lower(trim(json_extract(pay, '$.loginEmail'))) AS email FROM employees WHERE id = ?1 AND active = 1`).bind(String(n.employeeId || '')).first()
     if (emp?.email) await notify(env, [emp.email], { title: String(n.title || '').slice(0, 120), body: String(n.body || '').slice(0, 300), hash: String(n.hash || ''), tag: n.tag })
   }
@@ -513,8 +525,11 @@ async function staffAppointment(db, me, b) {
   const now = new Date().toISOString()
   // Completing one of her bookings: link them and mark the booking done.
   const booking = !existing && b.bookingId ? await recordOf(db, 'bookings', 'id = ?1 AND employee_id = ?2', String(b.bookingId), me.employeeId) : null
+  // A client with an online account (linked by the owner) gets her visits on her page.
+  const account = !existing?.client_id && !booking?.client_id
+    ? await db.prepare('SELECT id FROM clients WHERE client_key = ?1').bind(client.toLowerCase().replace(/\s+/g, ' ')).first() : null
   const rec = {
-    booking_id: existing?.booking_id || booking?.id || null, client_id: existing?.client_id || booking?.client_id || null,
+    booking_id: existing?.booking_id || booking?.id || null, client_id: existing?.client_id || booking?.client_id || account?.id || null,
     id: existing?.id || crypto.randomUUID(), date, month, employee_id: me.employeeId, employee_name: me.name, client, service, amount,
     method: b.method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
     created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.actor || me.email, updated_by: me.actor || me.email,
@@ -562,7 +577,7 @@ const TIME = /^\d{2}:\d{2}$/
 const minsOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
 
 /** Her booking (new or changed). She can't give it to someone else; the prices come from the service list. */
-async function staffBooking(db, me, b) {
+async function staffBooking(db, me, b, tellClientOf = () => {}) {
   const date = String(b.date || '')
   const start = String(b.start || '')
   const minutes = Math.round(Number(b.minutes))
@@ -600,6 +615,7 @@ async function staffBooking(db, me, b) {
       ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
     logEntry(db, me, 'booking', `${me.name} ${existing ? (moved ? 'moved' : 'changed') : kind === 'block' ? 'blocked time' : 'booked'} ${rec.client_name} · ${ddmm(date)} ${start}`, { books: { [rec.id]: existing || null } }),
   ])
+  if (moved && rec.client_id) tellClientOf({ clientId: rec.client_id, title: '🔁 Your appointment time has changed', body: `Now ${dayName(date, true)} at ${start} with ${firstName(me.name)}. Questions? Please phone the salon.`, tag: `booking-${rec.id}` })
   return JSON.stringify(staffBookingOut(rec))
 }
 
@@ -610,7 +626,7 @@ function staffBookingOut(rec) {
   return { ...rec, services: JSON.stringify(services) }
 }
 
-async function staffBookingStatus(db, me, b) {
+async function staffBookingStatus(db, me, b, tellClientOf = () => {}) {
   const existing = await recordOf(db, 'bookings', 'id = ?1 AND employee_id = ?2', String(b.id || ''), me.employeeId)
   if (!existing) throw new HttpError(404, 'That booking was not found.')
   if (existing.status === 'done') throw new HttpError(403, 'This booking is done and paid. Ask the owner to change it.')
@@ -626,6 +642,7 @@ async function staffBookingStatus(db, me, b) {
     db.prepare('UPDATE bookings SET status = ?1, updated_by = ?2, updated_at = ?3 WHERE id = ?4').bind(status, me.actor || me.email, now, existing.id),
     logEntry(db, me, 'booking', `${me.name} ${word} ${existing.client_name} · ${ddmm(existing.date)} ${existing.start}`, { books: { [existing.id]: existing } }),
   ])
+  if (status === 'cancelled' && existing.client_id) tellClientOf({ clientId: existing.client_id, title: 'Your appointment was cancelled', body: `${dayName(existing.date, true)} at ${existing.start}. Please phone the salon or book a new time.`, tag: `booking-${existing.id}` })
   return JSON.stringify(staffBookingOut({ ...existing, status, updated_at: now }))
 }
 
@@ -849,7 +866,7 @@ async function clientBook(env, ctx, client, b, now, move = false) {
       .bind(crypto.randomUUID(), nowIso, client.email, 'booking', `${client.name} ${existing ? 'moved her booking to' : 'booked online:'} ${ddmm(date)} ${start} · ${firstName(c.employees.find((e) => e.id === rec.employee_id)?.name)}`,
         JSON.stringify({ books: { [rec.id]: existing || null } })),
   ])
-  ctx.waitUntil(tellTeamAboutBooking(env, rec, existing ? 'moved' : 'new'))
+  ctx.waitUntil(Promise.all([tellTeamAboutBooking(env, rec, existing ? 'moved' : 'new'), tellClient(env, client.email, rec, existing ? 'moved' : 'new')]))
   return { booking: { id: rec.id, date, start, minutes: rec.minutes, with: firstName(c.employees.find((e) => e.id === rec.employee_id)?.name), services: parseJ(rec.services, []), price: plan.price }, overview: await clientOverview(db, client, now) }
 }
 
@@ -878,4 +895,41 @@ async function tellTeamAboutBooking(env, rec, what) {
   const title = { new: `🌐 New online booking: ${rec.client_name}`, moved: `🔁 ${rec.client_name} changed her booking`, cancelled: `❌ ${rec.client_name} cancelled` }[what]
   const body = `${dayName(rec.date, true)} at ${rec.start} · ${firstName(emp?.name)}${svc ? ' · ' + svc : ''}`
   await notify(env, [emp?.email, ...owners].filter(Boolean), { title, body, hash: 'calendar', tag: `booking-${rec.id}` })
+}
+
+/* ---------------- reminders and client messages ---------------- */
+
+/** Bookings starting in the next 24 hours (and not within the hour) get one reminder each. */
+async function sendReminders(env) {
+  const db = env.DB
+  const now = salonNow()
+  const soon = salonNow(Date.now() + 24 * 3600e3)
+  const hour = salonNow(Date.now() + 3600e3)
+  const at = (x) => `${x.date} ${String(Math.floor(x.minutes / 60)).padStart(2, '0')}:${String(x.minutes % 60).padStart(2, '0')}`
+  const { results } = await db.prepare(`SELECT b.*, c.email AS client_email, e.name AS emp_name FROM bookings b
+    JOIN clients c ON c.id = b.client_id LEFT JOIN employees e ON e.id = b.employee_id
+    WHERE b.status = 'booked' AND b.kind = 'booking' AND b.reminded_at IS NULL AND b.date >= ?1 AND b.date <= ?2`).bind(now.date, soon.date).all()
+  const settings = bookingSettings(await settingsMap(db))
+  for (const b of results) {
+    const when = `${b.date} ${b.start}`
+    if (when <= at(hour) || when > at(soon)) continue
+    const svc = parseJ(b.services, []).map((s) => s.name).join(' + ')
+    await notify(env, [b.client_email], {
+      title: `⏰ Reminder: ${b.date === now.date ? 'today' : 'tomorrow'} at ${b.start}`,
+      body: `${svc || 'Your appointment'} with ${firstName(b.emp_name)} at Little Lash Lounge.${settings.phone ? ` Can't make it? Phone ${settings.phone}.` : ''}`,
+      client: true, tag: `reminder-${b.id}`,
+    })
+    await db.prepare('UPDATE bookings SET reminded_at = ?1 WHERE id = ?2').bind(new Date().toISOString(), b.id).run()
+  }
+}
+
+/** A client hears that her booking is confirmed (online booking or time change). */
+async function tellClient(env, clientEmail, rec, what) {
+  const emp = await env.DB.prepare('SELECT name FROM employees WHERE id = ?1').bind(rec.employee_id).first()
+  const svc = parseJ(rec.services, []).map((s) => s.name).join(' + ')
+  await notify(env, [clientEmail], {
+    title: what === 'moved' ? '🔁 Your new time is confirmed' : '✅ Your booking is confirmed',
+    body: `${dayName(rec.date, true)} at ${rec.start} · ${svc} with ${firstName(emp?.name)}. You'll get a reminder the day before.`,
+    client: true, tag: `booking-${rec.id}`,
+  })
 }
