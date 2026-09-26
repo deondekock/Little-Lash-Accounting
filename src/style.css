@@ -727,3 +727,5 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .import-card dl { display: grid; grid-template-columns: 42% 1fr; gap: 3px 10px; margin: 10px 0 0; font-size: 13px; }
 .import-card dt { color: var(--muted); text-transform: capitalize; }
 .import-card dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.import-cta { border: 1.5px solid var(--brand); }
+.import-cta .title { white-space: normal; }

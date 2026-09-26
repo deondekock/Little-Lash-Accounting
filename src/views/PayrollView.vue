@@ -49,6 +49,8 @@ const totals = computed(() => {
   }
   return t
 })
+/** Someone active still has no payslip details (ID number / salary). */
+const missingDetails = computed(() => state.employees.some((e) => e.active && !e.pay?.idNumber && e.pay?.basic === ''))
 const savedSlips = computed(() => rows.value.filter((r) => r.slip).map((r) => r.slip.details).filter(Boolean))
 
 /* ---------------- leave ---------------- */
@@ -85,7 +87,12 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
 
     <template v-if="tab === 'Payslips'">
       <TaxNotice />
-      <button v-if="!state.company.name" class="card list-row" style="padding: 16px; margin-bottom: 14px" @click="openCompany">
+      <button v-if="missingDetails" class="card list-row import-cta" style="padding: 16px; margin-bottom: 14px" @click="openImportPayslips">
+        <div class="history-icon"><Icon name="sparkle" :size="16" /></div>
+        <div class="grow"><div class="title">Fill in the team's details from your old payslips</div><div class="meta">ID &amp; tax numbers, address, bank, salary, commission, leave — one tap</div></div>
+        <Icon name="right" />
+      </button>
+      <button v-else-if="!state.company.name" class="card list-row" style="padding: 16px; margin-bottom: 14px" @click="openCompany">
         <div class="history-icon"><Icon name="receipt" :size="16" /></div>
         <div class="grow"><div class="title">Add your company details</div><div class="meta">Name, registration number and address for the payslips</div></div>
         <Icon name="right" />
