@@ -115,9 +115,12 @@ async function remove() {
         <label for="l-notes">Notes (optional)</label>
         <input id="l-notes" v-model="form.notes">
       </div>
-      <p v-if="form.type === 'Annual' && balance?.start" class="muted-note" :class="{ orange: after < 0 }">
+      <p v-if="form.type === 'Annual' && balance?.start" class="muted-note" :class="{ orange: after < 0 && !sick?.owner }">
         🌴 {{ emp.name }} will have {{ leaveText(balance.days, perDay) }} on {{ form.from }};
         after this: {{ leaveText(after, perDay) }}.
+      </p>
+      <p v-else-if="sick?.owner && form.type !== 'Annual'" class="muted-note">
+        {{ emp.name }} is the owner, so there are no leave limits. It's recorded so you can see it later.
       </p>
       <p v-else-if="form.type === 'Sick' && sick" class="muted-note" :class="{ orange: sick.hours - hrs < 0 }">
         🤒 {{ sick.hours }} h sick leave left in her cycle {{ nice(sick.from) }} – {{ nice(sick.to) }}<template v-if="sick.firstSix"> (first 6 months: 1 day per 26 worked)</template>;

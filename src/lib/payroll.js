@@ -234,12 +234,15 @@ const dayBefore = (date) => {
  * annual leave 3 weeks a year; sick leave 6 weeks per 3-year cycle; family responsibility 3 days a year.
  */
 export function leaveSettings(pay = {}) {
+  const owner = !!pay.owner
   const perDay = Number(pay.hoursPerDay) || 8
   const perWeek = Math.min(7, Math.max(1, Number(pay.daysPerWeek) || 5))
   const weekHours = perDay * perWeek
-  const minYear = 3 * weekHours
+  // The owner isn't bound by the legal minimums: her leave is whatever she sets (none by default).
+  const minYear = owner ? 0 : 3 * weekHours
   const perYear = pay.leavePerYear === '' || pay.leavePerYear == null ? minYear : Number(pay.leavePerYear) || 0
   return {
+    owner,
     perDay,
     perWeek,
     minYear,
@@ -283,6 +286,13 @@ export function leaveBalance(emp, leave, onDate) {
   }
 }
 
+/** The owner has no set sick or family leave: just what she took in the last 12 months. */
+function ownerTaken(emp, leave, onDate, type, set) {
+  const from = addMonths(onDate, -12)
+  const taken = hoursOf(leave, emp.id, type, from, onDate)
+  return { owner: true, from, to: onDate, eligible: true, entitled: null, taken: round2(taken), booked: 0, hours: null, perDay: set.perDay }
+}
+
 /** The cycle (from the date engaged, every `months`) that `onDate` falls in. */
 function cycleOf(engaged, onDate, months) {
   const i = Math.floor(monthsBetween(engaged, onDate) / months)
@@ -300,6 +310,7 @@ const hoursOf = (leave, empId, type, from, to) =>
  */
 export function sickBalance(emp, leave, onDate) {
   const pay = emp.pay || {}
+  if (pay.owner) return ownerTaken(emp, leave, onDate, 'Sick', leaveSettings(pay))
   if (!pay.engaged || onDate < pay.engaged) return null
   const set = leaveSettings(pay)
   const cycle = cycleOf(pay.engaged, onDate, 36)
@@ -320,6 +331,7 @@ export function sickBalance(emp, leave, onDate) {
  */
 export function familyBalance(emp, leave, onDate) {
   const pay = emp.pay || {}
+  if (pay.owner) return ownerTaken(emp, leave, onDate, 'Family', leaveSettings(pay))
   if (!pay.engaged || onDate < pay.engaged) return null
   const set = leaveSettings(pay)
   const cycle = cycleOf(pay.engaged, onDate, 12)
@@ -354,7 +366,7 @@ export function payDefaults(p = {}) {
     fullName: '', code: '', idNumber: '', address: '', engaged: '', taxNumber: '',
     bankName: '', accountType: '', accountNumber: '', branchCode: '',
     salaryLabel: 'Basic Salary', basic: '', commissionPct: '', commissionOn: 'all', threshold: '', overtimePct: '',
-    leavePerYear: '', hoursPerDay: 8, daysPerWeek: 5, leaveOpening: '', leaveFrom: '', sickUsed: '',
+    leavePerYear: '', hoursPerDay: 8, daysPerWeek: 5, leaveOpening: '', leaveFrom: '', sickUsed: '', owner: false,
     ...p,
   }
 }

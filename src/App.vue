@@ -11,6 +11,7 @@ import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import LeaveModal from './components/LeaveModal.vue'
 import CompanyModal from './components/CompanyModal.vue'
+import ImportPayslipsModal from './components/ImportPayslipsModal.vue'
 import ServiceModal from './components/ServiceModal.vue'
 import ServiceMergeModal from './components/ServiceMergeModal.vue'
 import BulkBar from './components/BulkBar.vue'
@@ -103,6 +104,7 @@ const retry = () => location.reload()
   <PayslipModal v-if="state.modal?.type === 'payslip'" :employee-id="state.modal.data.employeeId" />
   <LeaveModal v-if="state.modal?.type === 'leave'" :leave="state.modal.data" :prefill="state.modal.prefill" />
   <CompanyModal v-if="state.modal?.type === 'company'" />
+  <ImportPayslipsModal v-if="state.modal?.type === 'importPayslips'" />
   <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 
   <Teleport to="body">

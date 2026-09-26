@@ -25,6 +25,7 @@
 import { sheetsApi, range, enc, parseSheetId } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0 } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
+import { parsePayslipTab } from './lib/payslipImport.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const TITLE = 'Little Lash Lounge Payments'
@@ -47,7 +48,7 @@ const PAY_FIELDS = [
   ['commissionOn', 'Commission On'], ['threshold', 'Commission Above', 'num'], ['overtimePct', 'Overtime Commission %', 'num'],
   ['leavePerYear', 'Annual Leave Hours / Year', 'num'], ['hoursPerDay', 'Hours / Day', 'num'],
   ['leaveOpening', 'Leave Balance (days)', 'num'], ['leaveFrom', 'Leave Balance On', 'date'],
-  ['daysPerWeek', 'Days / Week', 'num'], ['sickUsed', 'Sick Hours Used Before', 'num'],
+  ['daysPerWeek', 'Days / Week', 'num'], ['sickUsed', 'Sick Hours Used Before', 'num'], ['owner', 'Owner', 'bool'],
 ]
 /** Older sheets kept annual leave as days per month in this column (converted to hours per year on load). */
 const OLD_LEAVE_HEADER = 'Leave Days / Month'
@@ -117,7 +118,8 @@ function rowToEmployee(r, row) {
   const pay = {}
   PAY_FIELDS.forEach(([key, , kind], i) => {
     const v = r[6 + i]
-    pay[key] = kind === 'date' ? dateText(v) : kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v)) : clean(v)
+    pay[key] = kind === 'date' ? dateText(v) : kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v))
+      : kind === 'bool' ? v === true || /^(yes|true|1)$/i.test(clean(v)) : clean(v)
   })
   // A leave balance saved without its date: it was her balance when it was saved.
   if ((pay.leaveOpening !== '' || pay.sickUsed !== '') && !pay.leaveFrom) pay.leaveFrom = dateText(r[E.UPDATED]).slice(0, 10)
@@ -145,6 +147,7 @@ function payCells(pay = {}) {
       if (!Number.isFinite(n) || n < 0) throw new Error(`Please check "${label}".`)
       return n
     }
+    if (kind === 'bool') return v ? 'Yes' : ''
     if (kind === 'date') {
       const d = clean(v)
       if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`Please check "${label}".`)
@@ -1031,4 +1034,17 @@ export function saveCompany(company) {
     db.company = Object.fromEntries(COMPANY_FIELDS.map(([key]) => [key, String(company[key] ?? '').trim()]))
     return { ...db.company }
   })
+}
+
+/** Reads the old Google Sheets payslips (one tab per person) from another sheet, for filling in details. */
+export async function readOldPayslips(idOrUrl) {
+  const id = parseSheetId(idOrUrl)
+  if (!id) throw new Error('That doesn\'t look like a Google Sheets link.')
+  const meta = await readMeta(id)
+  const titles = meta.sheets.map((s) => s.properties.title)
+  if (!titles.length) return []
+  const res = await sheetsApi(`/${id}/values:batchGet`, {
+    query: { ranges: titles.map((t) => range(t, 'A1:F80')), valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'SERIAL_NUMBER' },
+  })
+  return res.valueRanges.map((vr, i) => parsePayslipTab(titles[i], vr.values || [])).filter((x) => x.pay.fullName || x.earnings.length)
 }

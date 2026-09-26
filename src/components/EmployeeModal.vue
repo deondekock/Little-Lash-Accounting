@@ -187,25 +187,26 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
       </div>
 
       <button type="button" class="fold" :aria-expanded="open === 'leave'" @click="toggle('leave')">
-        <span><b>Leave</b><small>{{ set.perYear }} h annual leave a year · {{ set.perWeek }} days × {{ set.perDay }} h a week</small></span><span class="chev">{{ open === 'leave' ? '−' : '+' }}</span>
+        <span><b>Leave</b><small>{{ set.owner ? 'Owner · ' : '' }}{{ set.perYear }} h annual leave a year · {{ set.perWeek }} days × {{ set.perDay }} h a week</small></span><span class="chev">{{ open === 'leave' ? '−' : '+' }}</span>
       </button>
       <div v-if="open === 'leave'" class="fold-body">
+        <label class="calc-check" style="margin: 0 0 12px"><input v-model="pay.owner" type="checkbox"> Owner — no legal leave minimums or limits</label>
         <div class="row2">
           <div class="field">
             <label for="l-hours">Hours in a work day</label>
-            <input id="l-hours" v-model="pay.hoursPerDay" type="number" inputmode="decimal" step="0.25" min="1" max="24">
+            <input id="l-hours" v-model="pay.hoursPerDay" type="number" inputmode="decimal" step="0.25" min="1" max="24" placeholder="8">
           </div>
           <div class="field">
             <label for="l-week">Work days a week</label>
-            <input id="l-week" v-model="pay.daysPerWeek" type="number" inputmode="numeric" step="1" min="1" max="7">
+            <input id="l-week" v-model="pay.daysPerWeek" type="number" inputmode="numeric" step="1" min="1" max="7" placeholder="5">
           </div>
         </div>
         <div class="field">
           <label for="l-year">Annual leave hours per year</label>
-          <input id="l-year" v-model="pay.leavePerYear" type="number" inputmode="decimal" step="0.5" min="0" :placeholder="`${set.minYear} (legal minimum)`">
-          <div class="field-hint" :class="{ orange: set.perYear < set.minYear }">
+          <input id="l-year" v-model="pay.leavePerYear" type="number" inputmode="decimal" step="0.5" min="0" :placeholder="set.owner ? '0 (not tracked)' : `${set.minYear} (legal minimum)`">
+          <div class="field-hint" :class="{ orange: !set.owner && set.perYear < set.minYear }">
             = {{ round(set.perYear / set.perDay) }} days a year · she earns <b>{{ round(set.perYear / 12) }} h ({{ set.perMonth }} days) a month</b>
-            <template v-if="set.perYear < set.minYear"> · below the legal minimum of {{ set.minYear }} h (3 weeks)</template>
+            <template v-if="!set.owner && set.perYear < set.minYear"> · below the legal minimum of {{ set.minYear }} h (3 weeks)</template>
           </div>
         </div>
         <div class="row2">
@@ -218,11 +219,14 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
             <input id="l-from" v-model="pay.leaveFrom" type="date" :required="hasBefore">
           </div>
         </div>
-        <div class="field">
+        <div v-if="!set.owner" class="field">
           <label for="l-sick">Sick leave hours already used this 3-year cycle (before the app)</label>
           <input id="l-sick" v-model="pay.sickUsed" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0">
         </div>
-        <p class="field-hint" style="margin-top: -4px">
+        <p v-if="set.owner" class="field-hint" style="margin-top: -4px">
+          As the owner she has no legal minimums or limits: set her own hours above, and any leave she books is just recorded.
+        </p>
+        <p v-else class="field-hint" style="margin-top: -4px">
           Legal minimums, worked out from her week:
           <b>sick leave {{ set.sickCycle }} h</b> every 3 years from the date engaged (6 weeks; in her first 6 months 1 day per 26 days worked),
           <b>family responsibility {{ set.family }} h</b> a year (3 days, after 4 months, if she works 4+ days a week) and

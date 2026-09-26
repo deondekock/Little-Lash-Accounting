@@ -60,7 +60,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
           <div class="grow">
             <div class="name">{{ m.name }}<span v-if="!m.active" class="tag">inactive</span></div>
             <div class="role">{{ m.lifetime.toLocaleString('en-ZA') }} appointments<template v-if="m.since"> since {{ m.since }}</template></div>
-            <button v-if="m.active && m.leave.start" class="role link-btn" style="padding: 0; font-size: 12.5px" @click="setView('payroll', { payrollTab: 'leave' })">🌴 {{ m.leave.hours }} h leave ({{ m.leave.days }} days)</button>
+            <button v-if="m.active && m.leave.start && (m.leave.perYear || m.leave.opening)" class="role link-btn" style="padding: 0; font-size: 12.5px" @click="setView('payroll', { payrollTab: 'leave' })">🌴 {{ m.leave.hours }} h leave ({{ m.leave.days }} days)</button>
           </div>
           <button class="btn small ghost" @click="openEmployee(m)">Edit</button>
         </div>

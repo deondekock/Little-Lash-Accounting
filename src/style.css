@@ -719,3 +719,11 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 /* Date inputs have a wide built-in minimum on phones; let them fit their column. */
 .row2 > .field { min-width: 0; }
 .field input[type=date] { min-width: 0; max-width: 100%; }
+.import-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; margin-bottom: 10px; background: var(--card-2); }
+.import-head { display: flex; align-items: center; gap: 10px; }
+.import-head input { width: auto; }
+.import-head b { display: block; }
+.import-head small { color: var(--muted); font-size: 12px; }
+.import-card dl { display: grid; grid-template-columns: 42% 1fr; gap: 3px 10px; margin: 10px 0 0; font-size: 13px; }
+.import-card dt { color: var(--muted); text-transform: capitalize; }
+.import-card dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }

@@ -402,6 +402,8 @@ export async function saveCompany(company) {
 export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
 export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
 export const openCompany = () => (state.modal = { type: 'company', data: null })
+export const openImportPayslips = () => (state.modal = { type: 'importPayslips', data: null })
+export const readOldPayslips = (link) => api('readOldPayslips', link)
 
 /** Prints payslips (the phone's print screen also saves them as a PDF). */
 export async function printPayslips(slips) {

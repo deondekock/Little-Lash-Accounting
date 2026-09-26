@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
-import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips } from '../store.js'
+import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, openImportPayslips, printPayslips } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
 
@@ -127,6 +127,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px">
         <button v-if="savedSlips.length" class="btn soft" @click="printPayslips(savedSlips)"><Icon name="receipt" :size="16" /> Print / PDF all saved ({{ savedSlips.length }})</button>
         <button class="btn ghost" @click="openCompany">Company details</button>
+        <button class="btn ghost" @click="openImportPayslips">Fill in from old payslips</button>
       </div>
     </template>
 
@@ -138,7 +139,8 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
             <div class="grow"><div class="name">{{ e.name }}</div></div>
             <button class="btn small ghost" @click="openLeave(null, { employeeId: e.id })">Book</button>
           </div>
-          <template v-if="b.start">
+          <div v-if="sick?.owner && !b.perYear && !b.opening" class="meta" style="margin-top: 10px">Owner · annual leave not tracked (set hours a year under Edit → Leave to track it)</div>
+          <template v-else-if="b.start">
             <div class="leave-fig">
               <b>{{ b.hours }}</b> h <span>available ({{ b.days }} days)</span>
             </div>
@@ -148,7 +150,11 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
             </div>
           </template>
           <button v-else class="link-btn" style="margin-top: 8px" @click="openEmployee(e)">Add her leave balance →</button>
-          <div v-if="sick" class="leave-others">
+          <div v-if="sick?.owner" class="leave-others">
+            <div><span>🤒 Sick</span><b>{{ sick.taken }} h</b><small>taken in the last 12 months</small></div>
+            <div><span>👨‍👩‍👧 Family</span><b>{{ family.taken }} h</b><small>owner · no limits</small></div>
+          </div>
+          <div v-else-if="sick" class="leave-others">
             <div><span>🤒 Sick</span><b>{{ sick.hours }} h</b><small>of {{ sick.entitled }} h · until {{ shortDate(sick.to) }} {{ sick.to.slice(0, 4) }}<template v-if="sick.booked"> · {{ sick.booked }} h booked</template></small></div>
             <div><span>👨‍👩‍👧 Family</span><b>{{ family.hours }} h</b><small>{{ family.eligible ? `of ${family.entitled} h · until ${shortDate(family.to)} ${family.to.slice(0, 4)}` : 'after 4 months' }}</small></div>
           </div>
