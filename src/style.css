@@ -727,3 +727,16 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .request-row { flex-wrap: wrap; }
 .request-row .grow { cursor: pointer; }
 .request-actions { display: flex; gap: 8px; margin-left: auto; }
+.toggle-row { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.toggle-row .grow { flex: 1; min-width: 0; }
+.toggle-row .title { font-weight: 600; }
+.toggle-row .meta { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
+.switch { position: relative; flex: none; width: 50px; height: 30px; border-radius: 15px; border: 0; background: var(--line); transition: background .15s; }
+.switch span { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--brand); }
+.switch[aria-checked="true"] span { transform: translateX(20px); }
+.switch:disabled { opacity: .45; }
+.setup-steps { margin: 0 0 4px; padding-left: 20px; font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+.setup-steps li { margin-bottom: 6px; }
+.setup-steps a { color: var(--brand); }
+.script-box { width: 100%; font: 12px/1.4 ui-monospace, monospace; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: var(--card-2); color: var(--ink); }

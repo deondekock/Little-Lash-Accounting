@@ -8,7 +8,7 @@
 import { API_URL } from './config.js'
 import { getToken } from './google/auth.js'
 import { AuthError } from './google/sheets.js'
-import { businessMonth, todayStr, fmt0 } from './lib/format.js'
+import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES } from './lib/schema.js'
 
@@ -202,13 +202,13 @@ export const lastEntryId = () => lastEntry
  * Saves a change with its history entry. `before` = { appts: { id: recordOrNull }, … } — the records
  * as they were before (null = didn't exist yet). `expect` guards single edits against changes on another phone.
  */
-async function commit(action, summary, { put = {}, del = {}, settings, before = {}, expect, undone }) {
+async function commit(action, summary, { put = {}, del = {}, settings, before = {}, expect, undone, notify }) {
   let data = JSON.stringify(before)
   const tooBig = data.length > MAX_HISTORY_DATA
   if (tooBig) data = '{"tooBig":true}'
   const entry = { id: uuid(), time: new Date().toISOString(), who: user, action, summary: summary + (tooBig ? ' (too large to undo)' : ''), data }
   try {
-    await send({ put, del, settings, expect, undone, history: entry })
+    await send({ put, del, settings, expect, undone, notify, history: entry })
   } catch (err) {
     if (err instanceof StaleError) await load()
     throw err
@@ -516,6 +516,11 @@ export async function decideLeave(id, status) {
   const rec = { ...l.rec, status, updated_at: new Date().toISOString() }
   await commit('leave', `${status === 'approved' ? 'Approved' : 'Declined'} ${nameOf(l.employeeId) || l.employeeName}'s ${l.type.toLowerCase()} leave · ${ddmm(l.from)}${l.to !== l.from ? '–' + ddmm(l.to) : ''}`, {
     put: { leave: [rec] }, before: { leave: { [id]: l.rec } }, expect: expectOf('leave', [l]),
+    notify: [{
+      employeeId: l.employeeId, hash: 'leave', tag: `leave-${id}`,
+      title: status === 'approved' ? '✅ Your leave was approved' : 'Your leave request was declined',
+      body: `${l.type} · ${ddmm(l.from)}${l.to !== l.from ? '–' + ddmm(l.to) : ''} · ${l.hours} h`,
+    }],
   })
   return publicLeave()
 }
@@ -541,6 +546,8 @@ export async function savePayslip(slip) {
   }
   await commit('pays', `${existing ? 'Updated' : 'Made'} payslip · ${emp.name} · ${slip.month} · net ${fmt0(slip.net)}`, {
     put: { payslips: [rec] }, before: { pays: { [id]: existing ? existing.rec : null } },
+    // Only the first time (she may re-save it while checking the figures).
+    notify: existing ? undefined : [{ employeeId: emp.id, hash: 'payslips', tag: `payslip-${id}`, title: `🧾 Your ${monthLabel(slip.month)} payslip is ready`, body: 'Open the app to view it or save it as a PDF.' }],
   })
   return { saved: strip(db.payslips.find((p) => p.id === id)), payslips: publicPayslips() }
 }
@@ -643,3 +650,15 @@ export function summarize(src = db) {
     payslips: src.payslips.length,
   }
 }
+
+/* ---------------- notifications ---------------- */
+
+/** { emailOn, emailReady, vapidKey } for the signed-in person. */
+export const getNotify = () => request('/api/notify')
+export const setEmailNotify = (emailOn) => request('/api/notify/prefs', { method: 'POST', body: { emailOn } })
+export const addPushSubscription = (sub) => request('/api/notify/subscribe', { method: 'POST', body: sub })
+export const removePushSubscription = (endpoint) => request('/api/notify/unsubscribe', { method: 'POST', body: { endpoint } })
+export const testNotify = () => request('/api/notify/test', { method: 'POST', body: {} })
+/** Owner: the Gmail relay (Apps Script) link and the script to paste. */
+export const getEmailRelay = () => request('/api/notify/email')
+export const setEmailRelay = (url) => request('/api/notify/email', { method: 'POST', body: { url } })

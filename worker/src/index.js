@@ -16,11 +16,21 @@
  *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
  *   POST /api/staff/leave/cancel withdraw a request that's still waiting
  *   POST /api/staff/profile      change her phone number and address
+ * Everyone (her own notifications):
+ *   GET  /api/notify             { emailOn, emailReady, vapidKey }
+ *   POST /api/notify/prefs       { emailOn }
+ *   POST /api/notify/subscribe   a phone's push subscription;  POST /api/notify/unsubscribe { endpoint }
+ *   POST /api/notify/test        sends a test notification to yourself
+ * Owners: GET/POST /api/notify/email   the Gmail relay (Apps Script) link and script
+ *
+ * Owners are told when staff ask for, change or withdraw leave, or change their details; staff when
+ * the owner approves/declines their leave or saves a new payslip (sent with /api/write as `notify`).
  *
  * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE } from '../../src/lib/schema.js'
+import { notify, vapid, getConfig, setConfig, relayScript } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
 const MAX_HISTORY = 400
@@ -34,16 +44,25 @@ export default {
       if (url.pathname === '/') return text('Little Lash Lounge API', 200, cors)
       const me = await identify(env.DB, await authenticate(request, env, ctx), env)
       const route = `${request.method} ${url.pathname}`
+      // Notifications go out after the answer, so they never slow down or fail a change.
+      const tell = (emails, msg) => ctx.waitUntil(notify(env, emails, msg))
+      const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
       if (route === 'GET /api/me') return json(JSON.stringify(me), cors)
+      if (url.pathname.startsWith('/api/notify')) return json(await notifyRoute(env, me, route, request), cors)
       if (me.role === 'staff') {
         if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
-        if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json()), cors)
-        if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json()), cors)
-        if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
+        if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
+        if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
       if (route === 'GET /api/load') return json(await loadAll(env.DB), cors)
-      if (route === 'POST /api/write') return await write(env.DB, await request.json(), cors)
+      if (route === 'POST /api/write') {
+        const body = await request.json()
+        const res = await write(env.DB, body, cors)
+        if (res.ok && body.notify?.length) ctx.waitUntil(notifyStaff(env, body.notify))
+        return res
+      }
       if (route === 'GET /api/history') return json(await history(env.DB, url.searchParams.get('since')), cors)
       return text('Not found', 404, cors)
     } catch (err) {
@@ -240,7 +259,7 @@ const logEntry = (db, me, action, summary, before) =>
     .bind(crypto.randomUUID(), new Date().toISOString(), me.email, action, summary, JSON.stringify(before))
 
 /** A leave request from her (new, or a change to one that's still waiting). Always 'requested'. */
-async function staffLeave(db, me, body) {
+async function staffLeave(db, me, body, tell) {
   const type = LEAVE_TYPES.includes(body.type) ? body.type : null
   const from = String(body.from || '')
   const to = String(body.to || from)
@@ -262,10 +281,15 @@ async function staffLeave(db, me, body) {
     logEntry(db, me, 'leave', `${me.name} ${existing ? `changed her ${type.toLowerCase()} leave request` : `asked for ${type.toLowerCase()} leave`} · ${ddmm(from)}${to !== from ? '–' + ddmm(to) : ''} · ${hours} h`,
       { leave: { [id]: existing || null } }),
   ])
+  tell({
+    title: `🌴 ${me.name} ${existing ? 'changed her leave request' : 'asked for leave'}`,
+    body: `${type} · ${ddmm(from)}${to !== from ? '–' + ddmm(to) : ''} · ${hours} h${notes ? ` · “${notes}”` : ''}`,
+    hash: 'leave', tag: `leave-${id}`,
+  })
   return JSON.stringify(await recordOf(db, 'leave', 'id = ?1', id))
 }
 
-async function staffCancel(db, me, body) {
+async function staffCancel(db, me, body, tell) {
   const existing = await recordOf(db, 'leave', 'id = ?1 AND employee_id = ?2', String(body.id || ''), me.employeeId)
   if (!existing) throw new HttpError(404, 'That leave request was not found.')
   if (existing.status !== 'requested') throw new HttpError(403, 'Only requests that are still waiting can be withdrawn.')
@@ -273,11 +297,12 @@ async function staffCancel(db, me, body) {
     db.prepare('DELETE FROM leave WHERE id = ?1').bind(existing.id),
     logEntry(db, me, 'leave', `${me.name} withdrew a ${String(existing.type).toLowerCase()} leave request · ${ddmm(existing.from_date)}`, { leave: { [existing.id]: existing } }),
   ])
+  tell({ title: `${me.name} withdrew a leave request`, body: `${existing.type} · ${ddmm(existing.from_date)}${existing.to_date !== existing.from_date ? '–' + ddmm(existing.to_date) : ''}`, hash: 'leave', tag: `leave-${existing.id}` })
   return JSON.stringify({ ok: true })
 }
 
 /** She can change her phone number and address (nothing else about her record). */
-async function staffProfile(db, me, body) {
+async function staffProfile(db, me, body, tell) {
   const emp = await recordOf(db, 'employees', 'id = ?1', me.employeeId)
   let pay = {}
   try { pay = JSON.parse(emp.pay || '{}') } catch { pay = {} }
@@ -290,5 +315,67 @@ async function staffProfile(db, me, body) {
     db.prepare('UPDATE employees SET phone = ?1, pay = ?2, updated_at = ?3 WHERE id = ?4').bind(phone, JSON.stringify({ ...pay, address }), now, emp.id),
     logEntry(db, me, 'team', `${me.name} updated her ${changed}`, { emps: { [emp.id]: emp } }),
   ])
+  tell({ title: `${me.name} updated her ${changed}`, body: [phone !== (emp.phone || '') && `Phone: ${phone || '—'}`, address !== (pay.address || '') && `Address: ${address.replace(/\n/g, ', ') || '—'}`].filter(Boolean).join(' · '), hash: 'team' })
   return JSON.stringify(await recordOf(db, 'employees', 'id = ?1', emp.id))
+}
+
+/* ---------------- notifications ---------------- */
+
+/** Owner's changes that concern a staff member (e.g. leave approved) → her login email. */
+async function notifyStaff(env, list) {
+  for (const n of list.slice(0, 20)) {
+    const emp = await env.DB.prepare(`SELECT lower(trim(json_extract(pay, '$.loginEmail'))) AS email FROM employees WHERE id = ?1 AND active = 1`).bind(String(n.employeeId || '')).first()
+    if (emp?.email) await notify(env, [emp.email], { title: String(n.title || '').slice(0, 120), body: String(n.body || '').slice(0, 300), hash: String(n.hash || ''), tag: n.tag })
+  }
+}
+
+async function notifyRoute(env, me, route, request) {
+  const db = env.DB
+  const relayReady = async () => !!((await getConfig(db, 'email_relay_url')) && (await getConfig(db, 'email_relay_secret')))
+  if (route === 'GET /api/notify') {
+    const pref = await db.prepare('SELECT email_on FROM notify_prefs WHERE email = ?1').bind(me.email).first()
+    return JSON.stringify({ emailOn: pref ? !!pref.email_on : true, emailReady: await relayReady(), vapidKey: (await vapid(db)).publicKey })
+  }
+  if (route === 'POST /api/notify/prefs') {
+    const body = await request.json()
+    await db.prepare('INSERT INTO notify_prefs (email, email_on, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO UPDATE SET email_on = excluded.email_on, updated_at = excluded.updated_at')
+      .bind(me.email, body.emailOn ? 1 : 0, new Date().toISOString()).run()
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/notify/subscribe') {
+    const sub = await request.json()
+    const local = env.DEV_EMAIL && /^http:\/\/127\.0\.0\.1:\d+\//.test(sub?.endpoint || '') // local testing only
+    if ((!/^https:\/\//.test(sub?.endpoint || '') && !local) || !sub.keys?.p256dh || !sub.keys?.auth) throw new HttpError(400, 'Invalid push subscription.')
+    await db.prepare(`INSERT INTO push_subscriptions (endpoint, email, p256dh, auth, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+      ON CONFLICT(endpoint) DO UPDATE SET email = excluded.email, p256dh = excluded.p256dh, auth = excluded.auth`)
+      .bind(sub.endpoint, me.email, sub.keys.p256dh, sub.keys.auth, new Date().toISOString()).run()
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/notify/unsubscribe') {
+    const { endpoint } = await request.json()
+    await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?1 AND email = ?2').bind(String(endpoint || ''), me.email).run()
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/notify/test') {
+    const results = await notify(env, [me.email], { title: '✨ Test from Little Lash Lounge', body: 'Notifications are working.', hash: '', tag: 'test' })
+    return JSON.stringify({ results })
+  }
+  if (me.role !== 'admin') throw new HttpError(403, 'Only the owner can do that.')
+  if (route === 'GET /api/notify/email') {
+    let secret = await getConfig(db, 'email_relay_secret')
+    if (!secret) {
+      secret = [...crypto.getRandomValues(new Uint8Array(24))].map((b) => b.toString(16).padStart(2, '0')).join('')
+      await setConfig(db, 'email_relay_secret', secret)
+    }
+    return JSON.stringify({ url: (await getConfig(db, 'email_relay_url')) || '', script: relayScript(secret) })
+  }
+  if (route === 'POST /api/notify/email') {
+    const { url } = await request.json()
+    const u = String(url || '').trim()
+    const local = env.DEV_EMAIL && /^http:\/\/127\.0\.0\.1:\d+\//.test(u) // local testing only
+    if (u && !local && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) throw new HttpError(400, 'That should be the Web app link from Apps Script, ending in /exec.')
+    await setConfig(db, 'email_relay_url', u)
+    return JSON.stringify({ ok: true })
+  }
+  throw new HttpError(404, 'Not found')
 }

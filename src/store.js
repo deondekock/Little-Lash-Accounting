@@ -188,6 +188,7 @@ export async function openSheet(idOrUrl) {
     await loadAll()
     state.loadedAt = Date.now()
     state.phase = 'ready'
+    openHash(location.hash)
     return true
   } catch (err) {
     state.error = String(err?.message || err)
@@ -213,6 +214,25 @@ export function useDifferentSheet() {
 }
 
 /** Re-reads the sheet (e.g. after changes made on another phone). */
+/** Opens the page a notification points to (#leave, #payslips, #team). */
+export function openHash(hash) {
+  const h = String(hash || '').replace(/^#/, '')
+  if (!h || state.phase !== 'ready') return
+  if (state.role === 'staff') {
+    if (h === 'leave') setView('my-leave')
+    if (h === 'payslips') setView('my-payslips')
+  } else {
+    if (h === 'leave' || h === 'payslips') setView('payroll', { payrollTab: h })
+    if (h === 'team') setView('team')
+  }
+  if (location.hash) history.replaceState(null, '', location.pathname + location.search)
+}
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'open') refresh().then(() => openHash(e.data.hash))
+  })
+}
+
 /** Staff: her own data only. */
 async function openStaff() {
   try {
@@ -221,6 +241,7 @@ async function openStaff() {
     state.month = currentMonth(state.monthStartDay)
     state.loadedAt = Date.now()
     state.phase = 'ready'
+    openHash(location.hash)
   } catch (err) {
     state.error = String(err?.message || err)
     if (!(err instanceof AuthError)) state.phase = 'error'
@@ -446,6 +467,7 @@ export async function saveCompany(company) {
 export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
 export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
 export const openCompany = () => (state.modal = { type: 'company', data: null })
+export const openNotifications = () => (state.modal = { type: 'notifications', data: null })
 export const openMyLeave = (leave) => (state.modal = { type: 'myLeave', data: leave ? { ...leave } : null })
 export const openMove = () => (state.modal = { type: 'move', data: null })
 export const openExport = () => (state.modal = { type: 'export', data: null })

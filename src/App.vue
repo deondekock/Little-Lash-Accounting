@@ -11,6 +11,7 @@ import MyLeaveView from './views/staff/MyLeaveView.vue'
 import MyPayslipsView from './views/staff/MyPayslipsView.vue'
 import MyDetailsView from './views/staff/MyDetailsView.vue'
 import MyLeaveModal from './components/MyLeaveModal.vue'
+import NotificationsModal from './components/NotificationsModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import LeaveModal from './components/LeaveModal.vue'
@@ -118,6 +119,7 @@ const retry = () => location.reload()
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
   <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
+  <NotificationsModal v-if="state.modal?.type === 'notifications'" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
   <HistoryModal v-if="state.modal?.type === 'history'" />

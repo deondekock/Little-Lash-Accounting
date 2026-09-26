@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 
 function run(fn) {
@@ -50,6 +50,10 @@ function run(fn) {
         <div class="grow"><div class="title">Move data to Cloudflare</div><div class="meta">Copy everything to the new database and compare</div></div>
       </button>
       </template>
+      <button v-if="BACKEND === 'cloudflare'" class="list-row" @click="openNotifications()">
+        <Icon name="bell" />
+        <div class="grow"><div class="title">Notifications</div><div class="meta">On this phone and by email</div></div>
+      </button>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
         <div class="grow"><div class="title">Refresh</div><div class="meta">Load changes made on another phone</div></div>

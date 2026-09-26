@@ -93,6 +93,12 @@ owner). The Worker enforces this: staff can't reach anyone else's data. Requests
 under Team → Leave to approve or decline; only approved leave counts in balances and payslips. Owners are the
 `ALLOWED_EMAILS`.
 
+**Notifications** (Settings → Notifications, for owners and staff): a toggle for push notifications on this phone
+(Android, or iPhone once the app is on the Home Screen) and one for email. Owners hear when staff ask for, change or
+withdraw leave or change their details; staff when their leave is approved/declined or a new payslip is ready. Push
+is sent by the Worker (Web Push, keys made automatically). Email goes out from the owner's Gmail through a small Google
+Apps Script the owner deploys once (the steps and the script are in the Notifications screen); free up to 100 a day.
+
 **Settings → Download data** saves appointments, team, services, leave and payslips as CSV files (Excel / Sheets).
 
 ## Running it on your own computer
