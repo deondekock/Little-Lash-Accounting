@@ -6,7 +6,8 @@
  * with a history entry holding the records as they were before, so any change can be undone.
  */
 import { API_URL } from './config.js'
-import { getToken } from './google/auth.js'
+import { getToken, googleToken, sessionToken, saveSession, clearSession } from './google/auth.js'
+import { FAKE_API } from './config.js'
 import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
@@ -48,7 +49,10 @@ async function request(path, { method = 'GET', body } = {}) {
   } catch {
     throw new Error('No connection to the salon\'s data. Check your internet and try again.')
   }
-  if (res.status === 401) throw new AuthError('Your Google sign-in expired. Please sign in again.')
+  if (res.status === 401) {
+    clearSession()
+    throw new AuthError('Your sign-in expired. Please sign in again.')
+  }
   const data = await res.json().catch(() => ({}))
   if (res.status === 409 && data.stale) throw new StaleError(data.error)
   if (!res.ok) throw new Error(data.error || `Server error ${res.status}`)
@@ -575,7 +579,27 @@ export async function saveCompany(company) {
 /* ---------------- signed-in person, and staff (her own data only) ---------------- */
 
 /** { role: 'admin' | 'staff', email, employeeId?, name? } */
-export const whoami = () => request('/api/me')
+export async function whoami() {
+  await ensureSession()
+  return request('/api/me')
+}
+
+/** Swaps a fresh Google sign-in for the app's own 60-day session (once, after signing in). */
+export async function ensureSession() {
+  if (FAKE_API || sessionToken()) return
+  const google = googleToken()
+  if (!google) throw new AuthError('Please sign in with Google again.')
+  let res
+  try {
+    res = await fetch(API_URL + '/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + google } })
+  } catch {
+    throw new Error('No connection to the salon\'s data. Check your internet and try again.')
+  }
+  const data = await res.json().catch(() => ({}))
+  if (res.status === 401) throw new AuthError(data.error || 'Please sign in with Google again.')
+  if (!res.ok) throw new Error(data.error || `Server error ${res.status}`)
+  saveSession(data)
+}
 
 /** Staff: loads her own record, leave and payslips (the Worker only sends hers). */
 export async function staffLoad() {

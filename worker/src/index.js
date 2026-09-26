@@ -5,6 +5,7 @@
  * The addresses in the ALLOWED_EMAILS secret are the owners and see everything; a team member
  * whose "Login Email" matches (and who is active) is staff and only ever gets her own records.
  *
+ *   POST /api/session            swap a Google sign-in (1 hour) for the app's own session (60 days)
  *   GET  /api/me                 who is signed in: { role: 'admin' | 'staff', email, employeeId, name }
  * Owners:
  *   GET  /api/load               everything the app needs (all tables, settings)
@@ -38,7 +39,7 @@
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING } from '../../src/lib/schema.js'
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
-import { notify, vapid, getConfig, setConfig, relayScript } from './notify.js'
+import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
 const MAX_HISTORY = 400
@@ -50,6 +51,11 @@ export default {
     try {
       const url = new URL(request.url)
       if (url.pathname === '/') return text('Little Lash Lounge API', 200, cors)
+      if (url.pathname === '/api/session' && request.method === 'POST') {
+        const email = await authenticate(request, env, ctx, { googleOnly: true })
+        await identify(env.DB, email, env) // only people with access get a session
+        return json(JSON.stringify(await issueSession(env.DB, email)), cors)
+      }
       const url0 = new URL(request.url)
       // Notification settings always belong to the real person, even while viewing as someone else.
       const viewAs = url0.pathname.startsWith('/api/notify') ? '' : request.headers.get('X-View-As') || ''
@@ -109,11 +115,13 @@ async function sha256(s) {
 }
 
 /** Checks the Google access token (cached for a few minutes); returns the verified email. */
-async function authenticate(request, env, ctx) {
+async function authenticate(request, env, ctx, { googleOnly = false } = {}) {
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
   if (!token) throw new HttpError(401, 'Please sign in.')
+  if (token.startsWith('llp1.') && !googleOnly) return verifySession(env.DB, token)
   // Local development only (set in worker/.dev.vars, never in production): "dev:<email>" signs in as that email.
-  if (env.DEV_EMAIL) return token.startsWith('dev:') ? token.slice(4).toLowerCase() : env.DEV_EMAIL
+  if (env.DEV_EMAIL && token.startsWith('dev:')) return token.slice(4).toLowerCase()
+  if (env.DEV_EMAIL && token === 'fake-token') return env.DEV_EMAIL
   const cache = caches.default
   const key = new Request(`https://auth.cache/${await sha256(token)}`)
   let info = await cache.match(key).then((r) => r && r.json())
@@ -128,6 +136,38 @@ async function authenticate(request, env, ctx) {
   const email = String(info.email || '').toLowerCase()
   if (!email || String(info.email_verified) !== 'true') throw new HttpError(403, 'This Google account has no verified email address.')
   return email
+}
+
+/* ---------------- the app's own sessions ---------------- */
+
+// Google's sign-in token lasts an hour; the app would have to sign in again mid-use. After checking it
+// once, the Worker gives the app its own signed session instead. Access is still checked on every
+// request (identify), so removing someone's access takes effect at once.
+const SESSION_DAYS = 60
+
+async function sessionKey(db) {
+  let secret = await getConfig(db, 'session_key')
+  if (!secret) {
+    secret = b64url(crypto.getRandomValues(new Uint8Array(32)))
+    await setConfig(db, 'session_key', secret)
+  }
+  return crypto.subtle.importKey('raw', unb64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
+}
+
+async function issueSession(db, email) {
+  const exp = Date.now() + SESSION_DAYS * 864e5
+  const body = b64url(new TextEncoder().encode(JSON.stringify({ e: email, exp })))
+  const sig = await crypto.subtle.sign('HMAC', await sessionKey(db), new TextEncoder().encode(body))
+  return { session: `llp1.${body}.${b64url(sig)}`, exp, email }
+}
+
+async function verifySession(db, token) {
+  const [, body, sig] = token.split('.')
+  const ok = body && sig && await crypto.subtle.verify('HMAC', await sessionKey(db), unb64url(sig), new TextEncoder().encode(body)).catch(() => false)
+  if (!ok) throw new HttpError(401, 'Please sign in again.')
+  const { e, exp } = JSON.parse(new TextDecoder().decode(unb64url(body)))
+  if (!e || !(exp > Date.now())) throw new HttpError(401, 'Your sign-in expired. Please sign in again.')
+  return String(e).toLowerCase()
 }
 
 /** Owner (ALLOWED_EMAILS), or an active team member with this login email, or nobody. */
@@ -231,6 +271,7 @@ async function write(db, body, cors) {
   for (const [table, rows] of Object.entries(body.put || {})) {
     checkTable(table)
     if (!rows.length) continue
+    if (rows.some((r) => !r || typeof r.id !== 'string' || !r.id)) throw new HttpError(400, 'Every record needs an id.')
     const cols = TABLES[table]
     stmts.push(db.prepare(`INSERT INTO ${table} (${cols.join(', ')})
       SELECT ${cols.map((c) => `json_extract(value, '$.${c}')`).join(', ')} FROM json_each(?1) WHERE true

@@ -140,10 +140,13 @@ export async function init() {
   }
   state.email = auth.knownEmail()
   backend.setUser(state.email)
-  if (!state.email) auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
+  if (!state.email && BACKEND !== 'cloudflare') auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
   if (BACKEND === 'cloudflare') {
     try {
       const me = await api('whoami')
+      state.email = me.email
+      backend.setUser(me.email)
+      auth.rememberEmail(me.email)
       state.role = me.role
       if (me.role === 'staff') {
         state.me = me
