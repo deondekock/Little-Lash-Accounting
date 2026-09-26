@@ -5,7 +5,7 @@
 export const TABLES = {
   employees: ['id', 'name', 'phone', 'active', 'pay', 'created_at', 'updated_at'],
   appointments: ['id', 'date', 'month', 'employee_id', 'employee_name', 'client', 'service', 'amount', 'method', 'status',
-    'paid_on', 'notes', 'overtime', 'length', 'created_at', 'updated_at'],
+    'paid_on', 'notes', 'overtime', 'length', 'created_at', 'updated_at', 'created_by', 'updated_by'],
   services: ['id', 'name', 'price', 'active', 'prices', 'created_at', 'updated_at'],
   leave: ['id', 'employee_id', 'employee_name', 'type', 'from_date', 'to_date', 'hours', 'notes', 'created_at', 'updated_at', 'status'],
   payslips: ['id', 'employee_id', 'employee_name', 'month', 'pay_date', 'gross', 'paye', 'uif', 'deductions', 'net', 'details',
@@ -37,5 +37,10 @@ export const MONTH_START_SETTING = 'Month starts on day'
 export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Maternity', 'Unpaid']
 /** Leave from the owner is approved straight away; staff requests wait for her. */
 export const LEAVE_STATUS = { requested: 'Waiting', approved: 'Approved', declined: 'Declined' }
+/** Staff may add and change their own appointments in the current and previous business month, until their
+ * payslip for that month is saved; they can delete ones they added themselves within this many hours. */
+export const STAFF_DELETE_HOURS = 24
+export const METHODS = ['Cash', 'Card', 'EFT']
+
 /** What staff may change about themselves. */
 export const STAFF_EDITABLE = ['phone', 'address']

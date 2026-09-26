@@ -11,6 +11,9 @@ import MyLeaveView from './views/staff/MyLeaveView.vue'
 import MyPayslipsView from './views/staff/MyPayslipsView.vue'
 import MyDetailsView from './views/staff/MyDetailsView.vue'
 import MyLeaveModal from './components/MyLeaveModal.vue'
+import MyAppointmentModal from './components/MyAppointmentModal.vue'
+import MyAppointmentsView from './views/staff/MyAppointmentsView.vue'
+import MyClientsView from './views/staff/MyClientsView.vue'
 import NotificationsModal from './components/NotificationsModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
@@ -36,7 +39,7 @@ import { state, init, setView, refresh, useDifferentSheet, openSettings, openHis
 import { BACKEND } from './config.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
-  'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyDetailsView }
+  'my-appointments': MyAppointmentsView, 'my-clients': MyClientsView, 'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyDetailsView }
 const ownerTabs = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'payments', label: 'Payments', icon: 'receipt' },
@@ -45,9 +48,11 @@ const ownerTabs = [
   { id: 'insights', label: 'Insights', icon: 'chart' },
 ]
 const staffTabs = [
+  { id: 'my-appointments', label: 'Appointments', icon: 'sparkle' },
+  { id: 'my-clients', label: 'Clients', icon: 'heart' },
   { id: 'my-leave', label: 'Leave', icon: 'calendar' },
   { id: 'my-payslips', label: 'Payslips', icon: 'receipt' },
-  { id: 'my-details', label: 'My details', icon: 'users' },
+  { id: 'my-details', label: 'Me', icon: 'users' },
 ]
 const tabs = computed(() => (state.role === 'staff' ? staffTabs : ownerTabs))
 
@@ -119,6 +124,7 @@ const retry = () => location.reload()
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
   <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
+  <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />
   <NotificationsModal v-if="state.modal?.type === 'notifications'" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />

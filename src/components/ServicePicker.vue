@@ -11,7 +11,7 @@ import { looseKey, servicePrice } from '../lib/stats.js'
 import { splitServices, joinServices, serviceKey } from '../lib/services.js'
 
 const model = defineModel({ type: String, default: '' })
-const props = defineProps({ id: String, employeeId: String })
+const props = defineProps({ id: String, employeeId: String, hidePrices: Boolean })
 
 const query = ref('')
 const open = ref(false)
@@ -85,7 +85,7 @@ const priceOf = (s) => servicePrice(s, props.employeeId)
           <div class="s-name">{{ s.name }}</div>
           <div class="s-meta">{{ s.inList ? 'On your list' : 'Used before' }} · {{ s.count }} time{{ s.count === 1 ? '' : 's' }}</div>
         </div>
-        <div v-if="priceOf(s) != null" class="s-right">{{ fmt0(priceOf(s)) }}</div>
+        <div v-if="!hidePrices && priceOf(s) != null" class="s-right">{{ fmt0(priceOf(s)) }}</div>
       </li>
       <li v-if="canAddNew" @mousedown.prevent="add(query.trim())">
         <Icon name="plus" :size="16" /><div class="grow"><div class="s-name">Add "{{ query.trim() }}"</div></div>

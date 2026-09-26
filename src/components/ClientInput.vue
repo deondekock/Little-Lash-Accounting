@@ -7,7 +7,7 @@ import { looseKey } from '../lib/stats.js'
 
 const model = defineModel({ type: String, default: '' })
 const emit = defineEmits(['pick'])
-defineProps({ id: String })
+defineProps({ id: String, hideAmounts: Boolean })
 
 const open = ref(false)
 const active = ref(0)
@@ -54,7 +54,7 @@ function onKey(e) {
           <div class="s-name">{{ c.name }}</div>
           <div class="s-meta">{{ c.visits }} visit{{ c.visits === 1 ? '' : 's' }} · last {{ shortDate(c.last) }}<template v-if="employeeById(c.staffId)"> · {{ employeeById(c.staffId).name }}</template></div>
         </div>
-        <div class="s-right">{{ fmt0(c.history[0]?.amount) }}<small v-if="c.history[0]?.service">{{ c.history[0].service }}</small></div>
+        <div class="s-right">{{ hideAmounts ? `${c.visits}×` : fmt0(c.history[0]?.amount) }}<small v-if="c.history[0]?.service">{{ c.history[0].service }}</small></div>
       </li>
     </ul>
   </div>

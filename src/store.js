@@ -146,7 +146,7 @@ export async function init() {
       state.role = me.role
       if (me.role === 'staff') {
         state.me = me
-        state.view = 'my-leave'
+        state.view = 'my-appointments'
         return await openStaff()
       }
     } catch (err) {
@@ -258,6 +258,17 @@ export async function cancelLeave(id) {
 export async function decideLeave(id, status) {
   state.leave = await api('decideLeave', id, status)
 }
+export async function saveMyAppointment(input) {
+  const saved = await api('saveMyAppointment', input)
+  upsertAppts([saved])
+  return saved
+}
+export async function deleteMyAppointment(id) {
+  await api('deleteMyAppointment', id)
+  all.value = all.value.filter((a) => a.id !== id)
+}
+export const openMyAppointment = (appt, prefill = null) => (state.modal = { type: 'myAppointment', data: appt ? { ...appt } : null, prefill })
+
 export async function updateMyDetails(details) {
   state.employees = await api('updateMyDetails', details)
 }

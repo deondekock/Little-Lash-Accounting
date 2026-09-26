@@ -93,6 +93,13 @@ owner). The Worker enforces this: staff can't reach anyone else's data. Requests
 under Team → Leave to approve or decline; only approved leave counts in balances and payslips. Owners are the
 `ALLOWED_EMAILS`.
 
+**Staff appointments.** Staff have an Appointments tab to add the clients they saw (client, services, amount,
+Cash/Card/EFT, paid/unpaid, overtime) and a Clients tab (their clients, visits, who is due for a fill). They type
+the amount when adding (or to change it) but never see an amount again: the Worker leaves amounts out of everything
+it sends them. They can add/change appointments in the current and previous business month until their payslip for
+it is saved, and delete ones they added within 24 hours. Every change is kept with who made it; the owner sees
+"added/changed by …" in Payments and a Changes list (with the amount before each change) on each appointment.
+
 **Notifications** (Settings → Notifications, for owners and staff): a toggle for push notifications on this phone
 (Android, or iPhone once the app is on the Home Screen) and one for email. Owners hear when staff ask for, change or
 withdraw leave or change their details; staff when their leave is approved/declined or a new payslip is ready. Push

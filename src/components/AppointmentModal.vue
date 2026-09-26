@@ -9,10 +9,25 @@ import { all, serviceCatalog } from '../store.js'
 import { OVERTIME_CHOICES, LENGTH_CHOICES, minutesLabel, overtimeShare } from '../lib/payroll.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
-import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
+import { METHODS, businessMonth, monthRange, todayStr, fmt } from '../lib/format.js'
+import { cloudflare } from '../api.js'
+import { BACKEND } from '../config.js'
 import { state, saveAppointment, deleteAppointment, closeModal, toastUndo, fail } from '../store.js'
 
 const props = defineProps({ appt: Object, prefill: Object })
+
+/* Every change to this appointment: who, when, and how it was before (owner, on Cloudflare). */
+const changes = ref(null)
+onMounted(async () => {
+  if (!props.appt?.id || BACKEND !== 'cloudflare') return
+  try {
+    changes.value = await cloudflare.appointmentHistory(props.appt.id)
+  } catch {
+    changes.value = []
+  }
+})
+const who = (email) => state.employees.find((e) => e.pay?.loginEmail && e.pay.loginEmail === email)?.name || (!email || email === state.email ? 'You' : email.split('@')[0])
+const when = (t) => new Date(t).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 const editing = !!props.appt
 
 function blank() {
@@ -179,6 +194,15 @@ async function remove() {
         <button v-if="editing" type="button" class="btn danger" @click="remove">Delete</button>
         <button type="button" class="btn ghost" @click="closeModal">Cancel</button>
         <button type="submit" class="btn" :disabled="saving">{{ editing ? 'Save' : 'Add' }}</button>
+      </div>
+      <div v-if="changes?.length" class="changes">
+        <h4 class="section-label" style="margin: 16px 0 6px">Changes</h4>
+        <div v-for="c in changes" :key="c.id" class="change-row" :class="{ undone: c.undone_at }">
+          <div><b>{{ who(c.who) }}</b> · {{ when(c.time) }}<template v-if="c.undone_at"> · undone</template></div>
+          <div class="meta">{{ c.summary }}</div>
+          <div v-if="c.before" class="meta">Before: {{ fmt(c.before.amount) }} · {{ c.before.status }} · {{ c.before.method }}{{ c.before.client !== appt.client ? ' · ' + c.before.client : '' }}</div>
+          <div v-else class="meta">Before: (new)</div>
+        </div>
       </div>
       <p v-if="!editing" class="another">
         <label><input v-model="another" type="checkbox"> Add another after saving</label>

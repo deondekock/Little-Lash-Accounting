@@ -7,8 +7,16 @@ import { state, updateMany, openAppointment, employeeColor, toastUndo } from '..
 
 const props = defineProps({ appt: { type: Object, required: true } })
 
+/** Staff member (by login email) who added or last changed it. */
+const staffName = (email) => (email ? state.employees.find((e) => e.pay?.loginEmail && e.pay.loginEmail === email)?.name : '')
+const byStaff = computed(() => {
+  const added = staffName(props.appt.createdBy)
+  const changed = staffName(props.appt.updatedBy)
+  if (changed && props.appt.updatedBy !== props.appt.createdBy) return `✎ changed by ${changed}`
+  return added ? `✎ added by ${added}` : ''
+})
 const meta = computed(() =>
-  [overtimeLabel(props.appt) && '⏰ ' + overtimeLabel(props.appt), props.appt.service, props.appt.notes, props.appt.status === 'Paid' && props.appt.paidOn ? 'paid ' + props.appt.paidOn : '']
+  [byStaff.value, overtimeLabel(props.appt) && '⏰ ' + overtimeLabel(props.appt), props.appt.service, props.appt.notes, props.appt.status === 'Paid' && props.appt.paidOn ? 'paid ' + props.appt.paidOn : '']
     .filter(Boolean)
     .join(' · '),
 )

@@ -84,15 +84,16 @@ function toAppt(r) {
     id: r.id, date: r.date, month: r.month || r.date.slice(0, 7), employeeId: clean(r.employee_id), employeeName: clean(r.employee_name),
     client: clean(r.client), service: clean(r.service), amount: Number(r.amount) || 0, method: clean(r.method),
     status: r.status === 'Paid' ? 'Paid' : 'Unpaid', paidOn: clean(r.paid_on), notes: clean(r.notes),
-    overtime: overtimeValue(r.overtime), length: Number(r.length) > 0 ? Number(r.length) : 0, rec: r,
+    overtime: overtimeValue(r.overtime), length: Number(r.length) > 0 ? Number(r.length) : 0,
+    createdBy: clean(r.created_by), updatedBy: clean(r.updated_by), createdAt: clean(r.created_at), rec: r,
   }
 }
-function apptRec(a, created, updated) {
+function apptRec(a, created, updated, by = user) {
   return {
     id: a.id, date: a.date, month: a.month, employee_id: a.employeeId, employee_name: a.employeeName, client: a.client,
     service: a.service, amount: a.amount, method: a.method, status: a.status, paid_on: a.paidOn || '', notes: a.notes || '',
     overtime: a.overtime === 'all' ? 'All' : a.overtime ? String(a.overtime) : '', length: a.overtime && a.length ? a.length : null,
-    created_at: created, updated_at: updated,
+    created_at: created, updated_at: updated, created_by: a.rec ? a.rec.created_by ?? null : by || null, updated_by: by || a.rec?.updated_by || null,
   }
 }
 
@@ -600,6 +601,28 @@ export async function cancelLeave(id) {
   return publicLeave()
 }
 
+/** Staff: add or change one of her appointments. `amount` only when she typed one (she never sees it again). */
+export async function saveMyAppointment(input) {
+  const body = { ...input }
+  if (body.amount === '' || body.amount == null) delete body.amount
+  const rec = await request('/api/staff/appointment', { method: 'POST', body })
+  applyLocal({ appointments: [rec] })
+  return publicAppt(db.appts.find((a) => a.id === rec.id))
+}
+
+/** Staff: delete an appointment she added herself (within 24 hours). */
+export async function deleteMyAppointment(id) {
+  await request('/api/staff/appointment/delete', { method: 'POST', body: { id } })
+  applyLocal({}, { appointments: [id] })
+  return true
+}
+
+/** Owner: every change to one appointment (who, when, and how it was before). */
+export async function appointmentHistory(id) {
+  const list = await request('/api/history?record=' + encodeURIComponent(id))
+  return list.map((e) => ({ ...e, before: typeof e.before === 'string' ? parse(e.before, null) : e.before }))
+}
+
 /** Staff: change her phone number and address. */
 export async function updateMyDetails({ phone, address }) {
   const rec = await request('/api/staff/profile', { method: 'POST', body: { phone, address } })
@@ -627,7 +650,7 @@ export async function replaceAll(data, onProgress = () => {}) {
   // First request empties the database (history too: undo starts fresh here) and adds the small
   // tables; then the appointments in parts.
   await request('/api/write', { method: 'POST', body: { replace: true, put, settings } })
-  const appts = data.appts.map((a) => apptRec(a, t(a), u(a)))
+  const appts = data.appts.map((a) => apptRec(a, t(a), u(a), null))
   for (let i = 0; i < appts.length; i += CHUNK_ROWS) {
     await request('/api/write', { method: 'POST', body: { put: { appointments: appts.slice(i, i + CHUNK_ROWS) } } })
     onProgress(Math.min(1, (i + CHUNK_ROWS) / appts.length))

@@ -11,8 +11,13 @@
  *   POST /api/write              add / change / delete records in one transaction, with a history entry
  *   GET  /api/history            recent history entries (without the stored records)
  *   GET  /api/history?since=T    entries from time T on, with their stored records (for undo)
+ *   GET  /api/history?record=ID  the changes to one appointment (who, when, what it was before)
  * Staff (her own data only):
- *   GET  /api/staff/load         her team record, leave, payslips and settings (no appointments: they hold client names)
+ *   GET  /api/staff/load         her team record, leave, payslips, settings, service names, and HER appointments
+ *                                without amounts (she types an amount, but never sees one again)
+ *   POST /api/staff/appointment  add or change one of her appointments (current / previous business month, until
+ *                                her payslip for it is saved); amount only replaced when given
+ *   POST /api/staff/appointment/delete   delete one she added herself, within 24 hours
  *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
  *   POST /api/staff/leave/cancel withdraw a request that's still waiting
  *   POST /api/staff/profile      change her phone number and address
@@ -29,7 +34,8 @@
  * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
-import { TABLES, LEAVE_TYPES, STAFF_EDITABLE } from '../../src/lib/schema.js'
+import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING } from '../../src/lib/schema.js'
+import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
 import { notify, vapid, getConfig, setConfig, relayScript } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
@@ -53,6 +59,8 @@ export default {
         if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
+        if (route === 'POST /api/staff/appointment') return json(await staffAppointment(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
@@ -63,6 +71,7 @@ export default {
         if (res.ok && body.notify?.length) ctx.waitUntil(notifyStaff(env, body.notify))
         return res
       }
+      if (route === 'GET /api/history' && url.searchParams.get('record')) return json(await recordHistory(env.DB, url.searchParams.get('record')), cors)
       if (route === 'GET /api/history') return json(await history(env.DB, url.searchParams.get('since')), cors)
       return text('Not found', 404, cors)
     } catch (err) {
@@ -241,15 +250,21 @@ function checkTable(t) {
 const cols = (t) => TABLES[t].join(', ')
 const recordOf = (db, table, where, ...args) => db.prepare(`SELECT ${cols(table)} FROM ${table} WHERE ${where}`).bind(...args).first()
 
+/** Her appointments, amount left out (NULL) so it never reaches her phone. */
+const STAFF_APPT_COLS = TABLES.appointments.map((c) => (c === 'amount' ? 'NULL' : c)).join(', ')
+
 async function staffLoad(db, me) {
   const res = await db.batch([
     db.prepare(arraysOf('employees', 'WHERE id = ?1')).bind(me.employeeId),
     db.prepare(arraysOf('leave', 'WHERE employee_id = ?1')).bind(me.employeeId),
     db.prepare(arraysOf('payslips', 'WHERE employee_id = ?1')).bind(me.employeeId),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
+    db.prepare(`SELECT json_group_array(json_array(${STAFF_APPT_COLS})) AS j FROM appointments WHERE employee_id = ?1`).bind(me.employeeId),
+    // Service names only (no prices).
+    db.prepare(`SELECT json_group_array(json_array(id, name, NULL, active, NULL, created_at, updated_at)) AS j FROM services`),
   ])
-  const [emps, leave, payslips, settings] = res.map((r) => r.results[0]?.j || '[]')
-  return `{"employees":${emps},"services":[],"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":[]}`
+  const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
+  return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts}}`
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -378,4 +393,85 @@ async function notifyRoute(env, me, route, request) {
     return JSON.stringify({ ok: true })
   }
   throw new HttpError(404, 'Not found')
+}
+
+/* ---------------- staff: her own appointments ---------------- */
+
+/** Today's date in South Africa (UTC+2). */
+const saToday = () => new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10)
+const withoutAmount = (r) => r && { ...r, amount: null }
+
+/** Which business months she may still change: current and previous, unless her payslip for it is saved. */
+async function checkMonths(db, me, months) {
+  const startDay = parseInt((await db.prepare('SELECT value FROM settings WHERE key = ?1').bind(MONTH_START_SETTING).first())?.value, 10) || 1
+  const cur = businessMonth(saToday(), startDay)
+  const open = [shiftMonth(cur, -1), cur]
+  for (const m of months) {
+    if (!open.includes(m)) throw new HttpError(403, 'Only this month\'s and last month\'s appointments can be changed here. Ask the owner.')
+    const paid = await db.prepare('SELECT 1 AS x FROM payslips WHERE employee_id = ?1 AND month = ?2').bind(me.employeeId, m).first()
+    if (paid) throw new HttpError(403, 'Your payslip for that month is done, so it can\'t be changed any more. Ask the owner.')
+  }
+  return startDay
+}
+
+async function staffAppointment(db, me, b) {
+  const date = String(b.date || '')
+  if (!DATE.test(date) || date > saToday()) throw new HttpError(400, 'Please choose a valid date (not in the future).')
+  const client = String(b.client || '').trim().slice(0, 80)
+  const service = String(b.service || '').trim().slice(0, 200)
+  if (!client) throw new HttpError(400, 'Please enter the client\'s name.')
+  if (!METHODS.includes(b.method)) throw new HttpError(400, 'Please choose Cash, Card or EFT.')
+  const status = b.status === 'Paid' ? 'Paid' : 'Unpaid'
+  const notes = String(b.notes || '').trim().slice(0, 300)
+  const overtime = String(b.overtime ?? '').toLowerCase() === 'all' ? 'All' : Number(b.overtime) > 0 && Number(b.overtime) <= 600 ? String(Math.round(Number(b.overtime))) : ''
+  const length = overtime && Number(b.length) > 0 && Number(b.length) <= 720 ? Math.round(Number(b.length)) : null
+  const existing = b.id ? await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
+  if (b.id && !existing) throw new HttpError(404, 'That appointment was not found.')
+  const given = b.amount !== undefined && b.amount !== null && b.amount !== ''
+  const amount = given ? Math.round(Number(String(b.amount).replace(',', '.')) * 100) / 100 : existing?.amount
+  if (!existing && !given) throw new HttpError(400, 'Please enter the amount.')
+  if (!(amount >= 0 && amount < 1e6)) throw new HttpError(400, 'Please enter a valid amount.')
+  const startDay = await checkMonths(db, me, [])
+  const month = existing && existing.date === date ? existing.month : businessMonth(date, startDay)
+  await checkMonths(db, me, [...new Set([month, existing?.month].filter(Boolean))])
+  const now = new Date().toISOString()
+  const rec = {
+    id: existing?.id || crypto.randomUUID(), date, month, employee_id: me.employeeId, employee_name: me.name, client, service, amount,
+    method: b.method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
+    created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.email, updated_by: me.email,
+  }
+  const cols = TABLES.appointments
+  const what = existing
+    ? [`${me.name} edited ${client} · ${ddmm(date)}`,
+        existing.amount !== amount && `amount ${fmt0(existing.amount)} → ${fmt0(amount)}`,
+        existing.status !== status && `${existing.status} → ${status}`,
+        existing.method !== b.method && `${existing.method} → ${b.method}`].filter(Boolean).join(' · ')
+    : `${me.name} added ${client} · ${fmt0(amount)} · ${b.method} · ${status} · ${ddmm(date)}`
+  await db.batch([
+    db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
+      ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
+    logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null } }),
+  ])
+  return JSON.stringify(withoutAmount(rec))
+}
+
+async function staffDeleteAppointment(db, me, b) {
+  const existing = await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id || ''), me.employeeId)
+  if (!existing) throw new HttpError(404, 'That appointment was not found.')
+  const fresh = Date.now() - Date.parse(existing.created_at || 0) < STAFF_DELETE_HOURS * 3600e3
+  if (existing.created_by !== me.email || !fresh) throw new HttpError(403, `You can only delete appointments you added in the last ${STAFF_DELETE_HOURS} hours. Ask the owner.`)
+  await checkMonths(db, me, [existing.month])
+  await db.batch([
+    db.prepare('DELETE FROM appointments WHERE id = ?1').bind(existing.id),
+    logEntry(db, me, 'delete', `${me.name} deleted ${existing.client || 'client'} · ${fmt0(existing.amount)} · ${ddmm(existing.date)}`, { appts: { [existing.id]: existing } }),
+  ])
+  return JSON.stringify({ ok: true })
+}
+
+/** Owners: every change to one appointment, newest first, with how it was before each change. */
+async function recordHistory(db, id) {
+  const r = await db.prepare(`SELECT json_group_array(json_object('id', id, 'time', time, 'who', who, 'action', action, 'summary', summary,
+      'undone_at', undone_at, 'before', json_extract(data, '$.appts."' || ?1 || '"'))) AS j
+    FROM (SELECT * FROM history WHERE json_valid(data) AND EXISTS (SELECT 1 FROM json_each(history.data, '$.appts') WHERE key = ?1) ORDER BY time DESC LIMIT 50)`).bind(id).first()
+  return r?.j || '[]'
 }
