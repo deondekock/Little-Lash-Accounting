@@ -2,53 +2,67 @@
 import { computed, ref } from 'vue'
 import Icon from '../../components/Icon.vue'
 import { all, state, openMyAppointment } from '../../store.js'
-import { businessMonth, dayLabel, monthLabel, monthRange, shiftMonth, shortDate, todayStr } from '../../lib/format.js'
+import { businessMonth, todayStr } from '../../lib/format.js'
 import { overtimeLabel } from '../../lib/payroll.js'
 import { lockedReason } from '../../lib/staffRules.js'
 
-/** Staff: her appointments by day (no amounts). */
-const month = ref(businessMonth(todayStr(), state.monthStartDay))
-const thisMonth = computed(() => businessMonth(todayStr(), state.monthStartDay))
-const range = computed(() => monthRange(month.value, state.monthStartDay))
-const list = computed(() => all.value.filter((a) => a.month === month.value))
-const groups = computed(() => {
-  const by = new Map()
-  for (const a of [...list.value].sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : (x.createdAt < y.createdAt ? 1 : -1)))) {
-    if (!by.has(a.date)) by.set(a.date, [])
-    by.get(a.date).push(a)
-  }
-  return [...by.entries()]
+/** Staff: one day at a time (today first), in the order the appointments were added. No amounts. */
+const today = todayStr()
+const day = ref(today)
+const shift = (n) => {
+  const d = new Date(day.value + 'T12:00:00')
+  d.setDate(d.getDate() + n)
+  const next = d.toISOString().slice(0, 10)
+  day.value = next > today ? today : next
+}
+const pick = (e) => e.target.value && (day.value = e.target.value > today ? today : e.target.value)
+const label = computed(() => {
+  if (day.value === today) return 'Today'
+  const y = new Date(today + 'T12:00:00')
+  y.setDate(y.getDate() - 1)
+  if (day.value === y.toISOString().slice(0, 10)) return 'Yesterday'
+  return new Date(day.value + 'T12:00:00').toLocaleDateString('en-ZA', { weekday: 'long' })
 })
+const long = computed(() => new Date(day.value + 'T12:00:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }))
+
+const list = computed(() => all.value
+  .filter((a) => a.date === day.value)
+  .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.client.localeCompare(b.client)))
 const unpaid = computed(() => list.value.filter((a) => a.status !== 'Paid').length)
-const locked = computed(() => lockedReason({ month: month.value }, state.monthStartDay, state.payslips))
+const locked = computed(() => lockedReason({ month: businessMonth(day.value, state.monthStartDay) }, state.monthStartDay, state.payslips))
+const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '')
 </script>
 
 <template>
   <div class="page">
-    <div class="greeting"><div class="hello">Your <em>appointments</em></div></div>
-    <div class="period-nav-simple">
-      <button class="icon-btn" aria-label="Previous month" @click="month = shiftMonth(month, -1)"><Icon name="left" /></button>
-      <div><b>{{ monthLabel(month) }}</b><small>{{ shortDate(range.from) }} – {{ shortDate(range.to) }}</small></div>
-      <button class="icon-btn" aria-label="Next month" :disabled="month >= thisMonth" @click="month = shiftMonth(month, 1)"><Icon name="right" /></button>
+    <div class="day-nav">
+      <button class="icon-btn" aria-label="Previous day" @click="shift(-1)"><Icon name="left" /></button>
+      <label class="day-pick">
+        <b>{{ label }}</b><small>{{ long }}</small>
+        <input type="date" :value="day" :max="today" aria-label="Choose a day" @change="pick">
+      </label>
+      <button class="icon-btn" aria-label="Next day" :disabled="day >= today" @click="shift(1)"><Icon name="right" /></button>
     </div>
-    <p class="muted-note" style="margin: 0 0 10px">
+    <p class="muted-note day-summary">
       {{ list.length }} appointment{{ list.length === 1 ? '' : 's' }}<template v-if="unpaid"> · {{ unpaid }} not paid yet</template>
-      <template v-if="locked"> · 🔒 {{ locked.split('.')[0] }}</template>
+      <button v-if="day !== today" class="link-btn" @click="day = today">Back to today</button>
     </p>
+    <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
 
-    <div v-if="groups.length" class="card" style="padding: 4px 0">
-      <template v-for="[date, items] in groups" :key="date">
-        <div class="date-head">{{ dayLabel(date) }}<span>{{ items.length }}</span></div>
-        <button v-for="a in items" :key="a.id" class="list-row" @click="openMyAppointment(a)">
-          <div class="grow">
-            <div class="title">{{ a.client || 'Client' }}</div>
-            <div class="meta">{{ [overtimeLabel(a) && '⏰ ' + overtimeLabel(a), a.service, a.method, a.notes].filter(Boolean).join(' · ') || ' ' }}</div>
-          </div>
+    <div v-if="list.length" class="card" style="padding: 4px 0">
+      <button v-for="(a, i) in list" :key="a.id" class="list-row" @click="openMyAppointment(a)">
+        <div class="appt-num">{{ i + 1 }}</div>
+        <div class="grow">
+          <div class="title">{{ a.client || 'Client' }}</div>
+          <div class="meta">{{ [overtimeLabel(a) && '⏰ ' + overtimeLabel(a), a.service, a.method, a.notes].filter(Boolean).join(' · ') || ' ' }}</div>
+        </div>
+        <div class="right">
           <span class="tag" :class="a.status === 'Paid' ? 'green-tag' : 'orange-tag'">{{ a.status }}</span>
-        </button>
-      </template>
+          <div v-if="added(a)" class="meta" style="margin-top: 4px">added {{ added(a) }}</div>
+        </div>
+      </button>
     </div>
-    <div v-else class="card empty" style="padding: 18px">No appointments in {{ monthLabel(month).split(' ')[0] }}.</div>
+    <div v-else class="card empty" style="padding: 22px">{{ day === today ? 'No appointments yet today. Tap Add after each client ✨' : 'No appointments on this day.' }}</div>
   </div>
-  <button v-if="!lockedReason({ month: thisMonth }, state.monthStartDay, state.payslips)" class="fab" @click="openMyAppointment()"><Icon name="plus" :stroke="2.4" /> Add</button>
+  <button v-if="!locked" class="fab" @click="openMyAppointment(null, { date: day })"><Icon name="plus" :stroke="2.4" /> Add</button>
 </template>
