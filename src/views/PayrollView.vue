@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
-import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, openImportPayslips, printPayslips } from '../store.js'
+import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
 
@@ -49,8 +49,6 @@ const totals = computed(() => {
   }
   return t
 })
-/** Someone active still has no payslip details (ID number / salary). */
-const missingDetails = computed(() => state.employees.some((e) => e.active && !e.pay?.idNumber && e.pay?.basic === ''))
 const savedSlips = computed(() => rows.value.filter((r) => r.slip).map((r) => r.slip.details).filter(Boolean))
 
 /* ---------------- leave ---------------- */
@@ -87,12 +85,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
 
     <template v-if="tab === 'Payslips'">
       <TaxNotice />
-      <button v-if="missingDetails" class="card list-row import-cta" style="padding: 16px; margin-bottom: 14px" @click="openImportPayslips">
-        <div class="history-icon"><Icon name="sparkle" :size="16" /></div>
-        <div class="grow"><div class="title">Fill in the team's details from your old payslips</div><div class="meta">ID &amp; tax numbers, address, bank, salary, commission, leave — one tap</div></div>
-        <Icon name="right" />
-      </button>
-      <button v-else-if="!state.company.name" class="card list-row" style="padding: 16px; margin-bottom: 14px" @click="openCompany">
+      <button v-if="!state.company.name" class="card list-row" style="padding: 16px; margin-bottom: 14px" @click="openCompany">
         <div class="history-icon"><Icon name="receipt" :size="16" /></div>
         <div class="grow"><div class="title">Add your company details</div><div class="meta">Name, registration number and address for the payslips</div></div>
         <Icon name="right" />
@@ -134,7 +127,6 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px">
         <button v-if="savedSlips.length" class="btn soft" @click="printPayslips(savedSlips)"><Icon name="receipt" :size="16" /> Print / PDF all saved ({{ savedSlips.length }})</button>
         <button class="btn ghost" @click="openCompany">Company details</button>
-        <button class="btn ghost" @click="openImportPayslips">Fill in from old payslips</button>
       </div>
     </template>
 

@@ -1,17 +1,15 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor, importPastServices, toastUndo, fail } from '../store.js'
+import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor } from '../store.js'
 import { fmt0, shortDate } from '../lib/format.js'
 import { looseKey, findServiceDuplicates, priceRange, servicePrice } from '../lib/stats.js'
 
 const query = ref('')
 const filter = ref('all') // 'all' | employee id | 'dupes' | 'hidden'
 const shown = ref(60)
-const importing = ref(false)
 
 const dupes = computed(() => findServiceDuplicates(serviceCatalog.value))
-const notLinked = computed(() => serviceCatalog.value.filter((s) => !s.inList))
 const hidden = computed(() => serviceCatalog.value.filter((s) => !s.active))
 
 // A team member's services: ones she has done, or has a price for.
@@ -61,19 +59,6 @@ function meta(s) {
   }
   return parts.join(' · ')
 }
-
-async function linkAll() {
-  if (!confirm(`Add all ${notLinked.value.length} past services to your list, each linked to the team members who did them at their usual price?`)) return
-  importing.value = true
-  try {
-    const n = await importPastServices()
-    toastUndo(`${n} services linked to the team`)
-  } catch (err) {
-    fail(err)
-  } finally {
-    importing.value = false
-  }
-}
 </script>
 
 <template>
@@ -87,14 +72,6 @@ async function linkAll() {
         <div class="sub">{{ serviceCatalog.filter((s) => s.active).length }} services · tap one to set prices</div>
       </div>
       <button class="btn small soft" @click="openService()"><Icon name="plus" :size="16" /> Add</button>
-    </div>
-
-    <div v-if="notLinked.length" class="card link-card">
-      <div class="grow">
-        <b>{{ notLinked.length }} past services aren't on your list yet</b>
-        <div class="meta">Link them to the team members who did them, at their usual prices — in one tap. You can undo it.</div>
-      </div>
-      <button class="btn small" :disabled="importing" @click="linkAll">{{ importing ? 'Linking…' : 'Link all' }}</button>
     </div>
 
     <label class="search" style="margin-top: 14px">

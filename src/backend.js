@@ -25,7 +25,6 @@
 import { sheetsApi, range, enc, parseSheetId } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0 } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
-import { parsePayslipTab } from './lib/payslipImport.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const TITLE = 'Little Lash Lounge Payments'
@@ -50,8 +49,6 @@ const PAY_FIELDS = [
   ['leaveOpening', 'Leave Balance (days)', 'num'], ['leaveFrom', 'Leave Balance On', 'date'],
   ['daysPerWeek', 'Days / Week', 'num'], ['sickUsed', 'Sick Hours Used Before', 'num'], ['owner', 'Owner', 'bool'],
 ]
-/** Older sheets kept annual leave as days per month in this column (converted to hours per year on load). */
-const OLD_LEAVE_HEADER = 'Leave Days / Month'
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At', ...PAY_FIELDS.map((f) => f[1])]
 const APPOINTMENT_HEADERS = [
   'ID', 'Date', 'Month', 'Employee ID', 'Employee', 'Client', 'Service',
@@ -503,8 +500,7 @@ async function load() {
   })
   const vals = res.valueRanges.map((vr) => vr.values || [])
   const [emps, appts, services, leave, payslips, settings] = vals
-  await migrateLeaveColumn(vals[6][0] || [], emps)
-  // Sheets made by an older version: add the newer column headers.
+  // Add any column headers the sheet is missing (e.g. after new columns are added to the app).
   const fix = DATA.filter((t, i) => (vals[6 + i][0] || []).length < HEADERS[t].length)
   if (fix.length) {
     await sheetsApi(`/${db.id}/values:batchUpdate`, {
@@ -521,33 +517,6 @@ async function load() {
   const day = parseInt(setting(MONTH_START_SETTING), 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(setting(label) ?? '').trim()]))
-}
-
-/**
- * Sheets from before annual leave was set in hours per year: turn "days per month" into hours per year
- * (days × 12 × hours a day) and rename the column. Runs once.
- */
-async function migrateLeaveColumn(header, emps) {
-  const col = 6 + PAY_FIELDS.findIndex((f) => f[0] === 'leavePerYear')
-  if (clean(header[col]) !== OLD_LEAVE_HEADER) return
-  const perDayCol = 6 + PAY_FIELDS.findIndex((f) => f[0] === 'hoursPerDay')
-  const values = emps.map((r) => {
-    const v = r[col]
-    if (v === '' || v == null || !Number.isFinite(Number(v))) return ['']
-    return [Math.round(Number(v) * 12 * (Number(r[perDayCol]) || 8) * 100) / 100]
-  })
-  emps.forEach((r, i) => { if (r.length > col) r[col] = values[i][0] })
-  const letter = colLetter(col + 1)
-  await sheetsApi(`/${db.id}/values:batchUpdate`, {
-    method: 'POST',
-    body: {
-      valueInputOption: 'RAW',
-      data: [
-        { range: range(EMPLOYEES, 'A1'), values: [EMPLOYEE_HEADERS] },
-        ...(values.length ? [{ range: range(EMPLOYEES, `${letter}2:${letter}${values.length + 1}`), values }] : []),
-      ],
-    },
-  })
 }
 
 /** Opens a sheet by link or ID, adding missing tabs, and loads everything. */
@@ -900,32 +869,6 @@ async function replaceInAppointments(fromNames, toName, now) {
   return before
 }
 
-/**
- * Adds many services to the Services tab at once (e.g. every service used on past
- * appointments), each with prices per team member. Names already on the list are skipped.
- */
-export function importServices(items) {
-  return serial(() => guarded(async () => {
-    const now = new Date().toISOString()
-    const have = new Set(db.services.map((x) => serviceKey(x.name)))
-    const rows = []
-    for (const it of items) {
-      const name = clean(it.name).replace(/\s*\+\s*/g, ' & ')
-      const key = serviceKey(name)
-      if (!name || have.has(key)) continue
-      have.add(key)
-      rows.push([uuid(), name, cleanPrice(it.price), true, now, now, pricesCell(it.prices)])
-    }
-    if (!rows.length) return { services: publicServices(), added: 0 }
-    const res = await sheetsApi(`/${db.id}/values/${enc(range(SERVICES, 'A:G'))}:append`, {
-      method: 'POST', query: { valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS' }, body: { values: rows },
-    })
-    const first = rowOf(res.updates.updatedRange)
-    rows.forEach((r, i) => db.services.push(rowToService(r, first + i)))
-    await logChange('services', `Added ${rows.length} past services to the list, linked to the team`, { svcs: Object.fromEntries(rows.map((r) => [r[0], null])) })
-    return { services: publicServices(), added: rows.length }
-  }))
-}
 
 /* ---------------- leave & payslips ---------------- */
 
@@ -1034,17 +977,4 @@ export function saveCompany(company) {
     db.company = Object.fromEntries(COMPANY_FIELDS.map(([key]) => [key, String(company[key] ?? '').trim()]))
     return { ...db.company }
   })
-}
-
-/** Reads the old Google Sheets payslips (one tab per person) from another sheet, for filling in details. */
-export async function readOldPayslips(idOrUrl) {
-  const id = parseSheetId(idOrUrl)
-  if (!id) throw new Error('That doesn\'t look like a Google Sheets link.')
-  const meta = await readMeta(id)
-  const titles = meta.sheets.map((s) => s.properties.title)
-  if (!titles.length) return []
-  const res = await sheetsApi(`/${id}/values:batchGet`, {
-    query: { ranges: titles.map((t) => range(t, 'A1:F80')), valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'SERIAL_NUMBER' },
-  })
-  return res.valueRanges.map((vr, i) => parsePayslipTab(titles[i], vr.values || [])).filter((x) => x.pay.fullName || x.earnings.length)
 }

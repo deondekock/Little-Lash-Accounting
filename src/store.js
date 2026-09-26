@@ -320,16 +320,6 @@ export async function mergeServices(fromNames, toName, summary) {
   if (res.appts.length) upsertAppts(res.appts)
 }
 
-/** Puts every past service on her list, linked to whoever did it at her usual price. */
-export async function importPastServices() {
-  const items = serviceCatalog.value
-    .filter((s) => !s.inList)
-    .map((s) => ({ name: s.name, prices: { ...s.typicalBy } }))
-  const res = await api('importServices', items)
-  state.services = res.services
-  return res.added
-}
-
 export const openService = (service) => (state.modal = { type: 'service', data: service ? { ...service } : null })
 export const openServiceMerge = (service, opts = {}) => (state.modal = { type: 'serviceMerge', data: { service, with: opts.with || [] } })
 
@@ -402,8 +392,6 @@ export async function saveCompany(company) {
 export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
 export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
 export const openCompany = () => (state.modal = { type: 'company', data: null })
-export const openImportPayslips = () => (state.modal = { type: 'importPayslips', data: null })
-export const readOldPayslips = (link) => api('readOldPayslips', link)
 
 /** Prints payslips (the phone's print screen also saves them as a PDF). */
 export async function printPayslips(slips) {

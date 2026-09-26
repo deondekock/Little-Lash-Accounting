@@ -33,9 +33,6 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
     first 6 months). Family responsibility: 3 days per 12-month cycle after 4 months (4+ days a week).
     Maternity: 4 consecutive months, unpaid (UIF). These follow the BCEA minimums and her days/hours a week.
   - **Owner** (Edit → Leave): no legal minimums or limits; her leave is only recorded.
-- **Fill in from old payslips** (Payslips page): paste the link to the old Google Sheets payslips (one tab per
-  person) and the app fills in each person's empty details: ID and tax numbers, address, bank, salary, commission %
-  (worked out from that month's takings), leave balance and accrual, and the company details. Shows everything first.
 - **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
 - **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
   so any change — or everything done today — can be rolled back (and the rollback undone too).
