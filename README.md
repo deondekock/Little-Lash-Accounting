@@ -88,7 +88,7 @@ GitHub Actions deploys it on every push once the repo secrets `CLOUDFLARE_API_TO
 
 **Staff login.** Give a team member her Google email (Team → Edit → "Her Google email"). She signs in to the same
 address and only sees her own leave (and can ask for leave, change or withdraw a request that's still waiting), her
-saved payslips (as PDF), and her details (she can change her phone number and address; bank details only by the
+saved payslips (on screen, and as PDF), and her details (she can change her phone number and address; bank details only by the
 owner). The Worker enforces this: staff can't reach anyone else's data. Requests show on the owner's Home page and
 under Team → Leave to approve or decline; only approved leave counts in balances and payslips. Owners are the
 `ALLOWED_EMAILS`.
@@ -99,6 +99,10 @@ the amount when adding (or to change it) but never see an amount again: the Work
 it sends them. They can add/change appointments in the current and previous business month until their payslip for
 it is saved, and delete ones they added within 24 hours. Every change is kept with who made it; the owner sees
 "added/changed by …" in Payments and a Changes list (with the amount before each change) on each appointment.
+
+**View as a team member** (owners): Team → 👀 on her card, or Settings → View the app as…, shows the app exactly as she
+sees it (the Worker serves her data under her rules). A banner has "Back to my view". Changes made there really
+happen as her and are logged as "owner (as Stefni)".
 
 **Notifications** (Settings → Notifications, for owners and staff): a toggle for push notifications on this phone
 (Android, or iPhone once the app is on the Home Screen) and one for email. Owners hear when staff ask for, change or

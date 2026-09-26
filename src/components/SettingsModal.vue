@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 
 function run(fn) {
@@ -50,7 +50,15 @@ function run(fn) {
         <div class="grow"><div class="title">Move data to Cloudflare</div><div class="meta">Copy everything to the new database and compare</div></div>
       </button>
       </template>
-      <button v-if="BACKEND === 'cloudflare'" class="list-row" @click="openNotifications()">
+      <button v-if="state.viewAs" class="list-row" @click="run(exitViewAs)">
+        <Icon name="swap" />
+        <div class="grow"><div class="title">Back to my view</div><div class="meta">Stop viewing as {{ state.viewAs.name }}</div></div>
+      </button>
+      <button v-else-if="BACKEND === 'cloudflare' && state.role !== 'staff'" class="list-row" @click="openViewAsPicker()">
+        <Icon name="users" />
+        <div class="grow"><div class="title">View the app as…</div><div class="meta">See exactly what a team member sees</div></div>
+      </button>
+      <button v-if="BACKEND === 'cloudflare' && !state.viewAs" class="list-row" @click="openNotifications()">
         <Icon name="bell" />
         <div class="grow"><div class="title">Notifications</div><div class="meta">On this phone and by email</div></div>
       </button>
@@ -66,7 +74,7 @@ function run(fn) {
         <Icon name="swap" />
         <div class="grow"><div class="title">Use a different sheet</div></div>
       </button>
-      <button class="list-row" @click="run(signOut)">
+      <button v-if="!state.viewAs" class="list-row" @click="run(signOut)">
         <Icon name="logout" />
         <div class="grow"><div class="title">Sign out</div></div>
       </button>

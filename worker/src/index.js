@@ -21,6 +21,8 @@
  *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
  *   POST /api/staff/leave/cancel withdraw a request that's still waiting
  *   POST /api/staff/profile      change her phone number and address
+ * Owners can view the app as a team member: header `X-View-As: <employeeId>` makes the request a staff
+ * request for her (same data, same rules); what they do is logged as "owner (as <name>)".
  * Everyone (her own notifications):
  *   GET  /api/notify             { emailOn, emailReady, vapidKey }
  *   POST /api/notify/prefs       { emailOn }
@@ -48,7 +50,10 @@ export default {
     try {
       const url = new URL(request.url)
       if (url.pathname === '/') return text('Little Lash Lounge API', 200, cors)
-      const me = await identify(env.DB, await authenticate(request, env, ctx), env)
+      const url0 = new URL(request.url)
+      // Notification settings always belong to the real person, even while viewing as someone else.
+      const viewAs = url0.pathname.startsWith('/api/notify') ? '' : request.headers.get('X-View-As') || ''
+      const me = await identify(env.DB, await authenticate(request, env, ctx), env, viewAs)
       const route = `${request.method} ${url.pathname}`
       // Notifications go out after the answer, so they never slow down or fail a change.
       const tell = (emails, msg) => ctx.waitUntil(notify(env, emails, msg))
@@ -126,9 +131,15 @@ async function authenticate(request, env, ctx) {
 }
 
 /** Owner (ALLOWED_EMAILS), or an active team member with this login email, or nobody. */
-async function identify(db, email, env) {
+async function identify(db, email, env, viewAs = '') {
   const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
-  if (owners.includes(email)) return { role: 'admin', email }
+  if (owners.includes(email)) {
+    if (!viewAs) return { role: 'admin', email }
+    // An owner looking at the app as this team member (for checking what she sees).
+    const emp = await db.prepare(`SELECT id, name, lower(trim(json_extract(pay, '$.loginEmail'))) AS login FROM employees WHERE id = ?1`).bind(viewAs).first()
+    if (!emp) throw new HttpError(404, 'That team member was not found.')
+    return { role: 'staff', email: emp.login || `team-member:${emp.id}`, employeeId: emp.id, name: emp.name, actor: email }
+  }
   const emp = await db.prepare(`SELECT id, name FROM employees
     WHERE active = 1 AND lower(trim(json_extract(pay, '$.loginEmail'))) = ?1 LIMIT 1`).bind(email).first()
   if (emp) return { role: 'staff', email, employeeId: emp.id, name: emp.name }
@@ -142,7 +153,7 @@ function corsHeaders(request, env) {
   return {
     'Access-Control-Allow-Origin': ok ? origin : allowed[0] || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-View-As',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   }
@@ -253,11 +264,14 @@ const recordOf = (db, table, where, ...args) => db.prepare(`SELECT ${cols(table)
 /** Her appointments, amount left out (NULL) so it never reaches her phone. */
 const STAFF_APPT_COLS = TABLES.appointments.map((c) => (c === 'amount' ? 'NULL' : c)).join(', ')
 
+const STAFF_PAYSLIP_COLS = TABLES.payslips.map((c) => (c === 'details' ? "json_remove(details, '$.appts', '$.inputs')" : c)).join(', ')
+
 async function staffLoad(db, me) {
   const res = await db.batch([
     db.prepare(arraysOf('employees', 'WHERE id = ?1')).bind(me.employeeId),
     db.prepare(arraysOf('leave', 'WHERE employee_id = ?1')).bind(me.employeeId),
-    db.prepare(arraysOf('payslips', 'WHERE employee_id = ?1')).bind(me.employeeId),
+    // Her payslips without the owner's working (her takings and the figures typed over).
+    db.prepare(`SELECT json_group_array(json_array(${STAFF_PAYSLIP_COLS})) AS j FROM payslips WHERE employee_id = ?1`).bind(me.employeeId),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
     db.prepare(`SELECT json_group_array(json_array(${STAFF_APPT_COLS})) AS j FROM appointments WHERE employee_id = ?1`).bind(me.employeeId),
     // Service names only (no prices).
@@ -271,7 +285,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/
 const ddmm = (d) => `${d.slice(8)}/${d.slice(5, 7)}`
 const logEntry = (db, me, action, summary, before) =>
   db.prepare('INSERT INTO history (id, time, who, action, summary, undone_at, data) VALUES (?1, ?2, ?3, ?4, ?5, \'\', ?6)')
-    .bind(crypto.randomUUID(), new Date().toISOString(), me.email, action, summary, JSON.stringify(before))
+    .bind(crypto.randomUUID(), new Date().toISOString(), me.actor ? `${me.actor} (as ${me.name})` : me.email, action, summary, JSON.stringify(before))
 
 /** A leave request from her (new, or a change to one that's still waiting). Always 'requested'. */
 async function staffLeave(db, me, body, tell) {
@@ -438,7 +452,7 @@ async function staffAppointment(db, me, b) {
   const rec = {
     id: existing?.id || crypto.randomUUID(), date, month, employee_id: me.employeeId, employee_name: me.name, client, service, amount,
     method: b.method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
-    created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.email, updated_by: me.email,
+    created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.actor || me.email, updated_by: me.actor || me.email,
   }
   const cols = TABLES.appointments
   const what = existing
@@ -459,7 +473,7 @@ async function staffDeleteAppointment(db, me, b) {
   const existing = await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id || ''), me.employeeId)
   if (!existing) throw new HttpError(404, 'That appointment was not found.')
   const fresh = Date.now() - Date.parse(existing.created_at || 0) < STAFF_DELETE_HOURS * 3600e3
-  if (existing.created_by !== me.email || !fresh) throw new HttpError(403, `You can only delete appointments you added in the last ${STAFF_DELETE_HOURS} hours. Ask the owner.`)
+  if (existing.created_by !== (me.actor || me.email) || !fresh) throw new HttpError(403, `You can only delete appointments you added in the last ${STAFF_DELETE_HOURS} hours. Ask the owner.`)
   await checkMonths(db, me, [existing.month])
   await db.batch([
     db.prepare('DELETE FROM appointments WHERE id = ?1').bind(existing.id),

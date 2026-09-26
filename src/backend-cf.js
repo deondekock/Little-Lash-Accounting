@@ -31,6 +31,10 @@ const db = {
 
 class StaleError extends Error {}
 
+/** Owner viewing the app as this team member (employee id), or ''. */
+let viewAsId = ''
+export const setViewAs = (id) => (viewAsId = id || '')
+
 async function request(path, { method = 'GET', body } = {}) {
   const token = getToken()
   if (!token) throw new AuthError('Please sign in with Google again.')
@@ -38,7 +42,7 @@ async function request(path, { method = 'GET', body } = {}) {
   try {
     res = await fetch(API_URL + path, {
       method,
-      headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(viewAsId ? { 'X-View-As': viewAsId } : {}) },
       body: body ? JSON.stringify(body) : undefined,
     })
   } catch {
@@ -69,6 +73,7 @@ async function send(change) {
 const clean = (v) => (v === null || v === undefined ? '' : String(v).trim())
 const uuid = () => (crypto.randomUUID ? crypto.randomUUID() : 'id-' + Date.now().toString(36) + Math.random().toString(36).slice(2))
 const parse = (s, fallback) => {
+  if (s && typeof s === 'object') return s // already JSON (e.g. a payslip trimmed by the Worker)
   try { return s ? JSON.parse(s) : fallback } catch { return fallback }
 }
 const fromArray = (table, arr) => Object.fromEntries(TABLES[table].map((c, i) => [c, arr[i] ?? null]))

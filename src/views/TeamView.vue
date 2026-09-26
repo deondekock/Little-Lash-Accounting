@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
-import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow } from '../store.js'
+import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow, viewAs } from '../store.js'
+import { BACKEND } from '../config.js'
 import { leaveBalance, payDefaults } from '../lib/payroll.js'
 import { todayStr } from '../lib/format.js'
 import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
@@ -62,6 +63,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
             <div class="role">{{ m.lifetime.toLocaleString('en-ZA') }} appointments<template v-if="m.since"> since {{ m.since }}</template></div>
             <button v-if="m.active && m.leave.start && (m.leave.perYear || m.leave.opening)" class="role link-btn" style="padding: 0; font-size: 12.5px" @click="setView('payroll', { payrollTab: 'leave' })">🌴 {{ m.leave.hours }} h leave ({{ m.leave.days }} days)</button>
           </div>
+          <button v-if="m.active && BACKEND === 'cloudflare'" class="btn small ghost" :title="`View the app as ${m.name}`" :aria-label="`View the app as ${m.name}`" @click="viewAs(m)">👀</button>
           <button class="btn small ghost" @click="openEmployee(m)">Edit</button>
         </div>
         <div class="figs">

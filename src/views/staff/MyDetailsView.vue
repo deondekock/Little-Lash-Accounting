@@ -27,7 +27,7 @@ async function save() {
 
 <template>
   <div class="page">
-    <div class="greeting"><div class="hello">Your <em>details</em></div><div class="sub">{{ state.email }}</div></div>
+    <div class="greeting"><div class="hello">Your <em>details</em></div><div class="sub">{{ state.viewAs ? (state.me?.email?.includes('@') ? state.me.email : 'No login yet') : state.email }}</div></div>
     <form class="card" autocomplete="off" @submit.prevent="save">
       <div class="field">
         <label for="d-phone">Phone number</label>

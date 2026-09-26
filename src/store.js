@@ -26,6 +26,7 @@ export const state = reactive({
   view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services' | 'payroll' (staff: 'my-leave' | 'my-payslips' | 'my-details')
   role: 'admin', // 'admin' (owner: everything) | 'staff' (her own leave, payslips and details)
   me: null, // staff: { employeeId, name, email }
+  viewAs: null, // owner viewing the app as a team member: { id, name }
   payrollTab: 'payslips', // Payroll view: 'payslips' | 'leave'
   employees: [],
   leave: [], // booked leave (Leave tab)
@@ -232,6 +233,37 @@ if ('serviceWorker' in navigator) {
     if (e.data?.type === 'open') refresh().then(() => openHash(e.data.hash))
   })
 }
+
+/** Owner: see the app exactly as this team member does (her data, her rules). */
+export async function viewAs(emp) {
+  backend.setViewAs(emp.id)
+  state.modal = null
+  state.viewAs = { id: emp.id, name: emp.name }
+  state.role = 'staff'
+  state.view = 'my-appointments'
+  state.phase = 'loading'
+  try {
+    state.me = await api('whoami')
+  } catch (err) {
+    return exitViewAs().then(() => fail(err))
+  }
+  await openStaff()
+  window.scrollTo({ top: 0 })
+}
+
+/** Owner: back to her own view. */
+export async function exitViewAs() {
+  backend.setViewAs('')
+  state.modal = null
+  state.viewAs = null
+  state.role = 'admin'
+  state.me = null
+  state.view = 'team'
+  await openSheet('cloudflare')
+  window.scrollTo({ top: 0 })
+}
+export const openViewAsPicker = () => (state.modal = { type: 'viewAs', data: null })
+export const openPayslipView = (slip) => (state.modal = { type: 'payslipView', data: slip })
 
 /** Staff: her own data only. */
 async function openStaff() {

@@ -17,9 +17,13 @@ const localDate = (iso) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 const time = (iso) => new Date(iso).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' })
-const who = (email) => {
-  const n = (email || '').split('@')[0].split(/[._\d]/)[0]
-  return n ? n[0].toUpperCase() + n.slice(1) : ''
+/** "chrisilda.dk@gmail.com" → "Chrisilda"; a team member's login → her name; "… (as Stefni)" is kept. */
+const who = (raw) => {
+  const [, email = '', as = ''] = String(raw || '').match(/^(\S*)(?:\s+\(as (.+)\))?$/) || []
+  const member = state.employees.find((e) => e.pay?.loginEmail && e.pay.loginEmail === email)?.name
+  const n = email.split('@')[0].split(/[._\d]/)[0]
+  const name = member || (n ? n[0].toUpperCase() + n.slice(1) : '')
+  return as ? `${name} (as ${as})` : name
 }
 
 const entries = computed(() => {

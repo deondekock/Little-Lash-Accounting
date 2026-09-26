@@ -15,6 +15,8 @@ import MyAppointmentModal from './components/MyAppointmentModal.vue'
 import MyAppointmentsView from './views/staff/MyAppointmentsView.vue'
 import MyClientsView from './views/staff/MyClientsView.vue'
 import NotificationsModal from './components/NotificationsModal.vue'
+import ViewAsModal from './components/ViewAsModal.vue'
+import PayslipViewModal from './components/PayslipViewModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import LeaveModal from './components/LeaveModal.vue'
@@ -35,7 +37,7 @@ import HistoryModal from './components/HistoryModal.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
-import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut } from './store.js'
+import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut, exitViewAs } from './store.js'
 import { BACKEND } from './config.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
@@ -72,6 +74,12 @@ const retry = () => location.reload()
   <div v-if="state.pending" class="loading" />
 
   <header class="top">
+    <div v-if="state.viewAs" class="viewas-banner" role="status">
+      <div class="wrap">
+        <span>👀 Viewing as <b>{{ state.viewAs.name }}</b></span>
+        <button class="btn small" @click="exitViewAs">Back to my view</button>
+      </div>
+    </div>
     <div class="wrap top-row">
       <div class="wordmark">Little Lash <em>Lounge</em></div>
       <div v-if="state.phase === 'ready'" class="top-actions">
@@ -126,6 +134,8 @@ const retry = () => location.reload()
   <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
   <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />
   <NotificationsModal v-if="state.modal?.type === 'notifications'" />
+  <ViewAsModal v-if="state.modal?.type === 'viewAs'" />
+  <PayslipViewModal v-if="state.modal?.type === 'payslipView'" :slip="state.modal.data" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
   <HistoryModal v-if="state.modal?.type === 'history'" />
