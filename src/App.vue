@@ -9,7 +9,7 @@ import ServicesView from './views/ServicesView.vue'
 import PayrollView from './views/PayrollView.vue'
 import MyLeaveView from './views/staff/MyLeaveView.vue'
 import MyPayslipsView from './views/staff/MyPayslipsView.vue'
-import MyDetailsView from './views/staff/MyDetailsView.vue'
+import MyMeView from './views/staff/MyMeView.vue'
 import MyLeaveModal from './components/MyLeaveModal.vue'
 import MyAppointmentModal from './components/MyAppointmentModal.vue'
 import MyAppointmentsView from './views/staff/MyAppointmentsView.vue'
@@ -41,7 +41,7 @@ import { state, init, setView, refresh, useDifferentSheet, openSettings, openHis
 import { BACKEND } from './config.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
-  'my-appointments': MyAppointmentsView, 'my-clients': MyClientsView, 'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyDetailsView }
+  'my-appointments': MyAppointmentsView, 'my-clients': MyClientsView, 'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyMeView }
 const ownerTabs = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'payments', label: 'Payments', icon: 'receipt' },

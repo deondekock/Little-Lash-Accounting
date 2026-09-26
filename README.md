@@ -100,6 +100,11 @@ it sends them. They can add/change appointments in the current and previous busi
 it is saved, and delete ones they added within 24 hours. Every change is kept with who made it; the owner sees
 "added/changed by …" in Payments and a Changes list (with the amount before each change) on each appointment.
 
+**Staff stats** (Me → My stats, and a "so far" strip on the day view): her month so far vs the same point last
+month, days worked, busiest day, unpaid count, overtime hours; her new / 2nd–3rd visit / regular clients, last month's
+new clients who came back, rebooking %, clients due for a fill; her top services; milestones (appointment totals, best
+week, clients' 10th/25th… visits, work anniversary). Counts only — no rands, no comparisons with colleagues.
+
 **View as a team member** (owners): Team → 👀 on her card, or Settings → View the app as…, shows the app exactly as she
 sees it (the Worker serves her data under her rules). A banner has "Back to my view". Changes made there really
 happen as her and are logged as "owner (as Stefni)".

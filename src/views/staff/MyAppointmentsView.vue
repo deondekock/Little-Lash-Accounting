@@ -5,6 +5,9 @@ import { all, state, openMyAppointment } from '../../store.js'
 import { businessMonth, todayStr } from '../../lib/format.js'
 import { overtimeLabel } from '../../lib/payroll.js'
 import { lockedReason } from '../../lib/staffRules.js'
+import { monthProgress } from '../../lib/staffStats.js'
+import { monthLabel } from '../../lib/format.js'
+import { setView } from '../../store.js'
 
 /** Staff: one day at a time (today first), in the order the appointments were added. No amounts. */
 const today = todayStr()
@@ -30,6 +33,7 @@ const list = computed(() => all.value
   .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.client.localeCompare(b.client)))
 const unpaid = computed(() => list.value.filter((a) => a.status !== 'Paid').length)
 const locked = computed(() => lockedReason({ month: businessMonth(day.value, state.monthStartDay) }, state.monthStartDay, state.payslips))
+const month = computed(() => monthProgress(all.value, state.monthStartDay, today))
 const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '')
 </script>
 
@@ -47,6 +51,12 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
       {{ list.length }} appointment{{ list.length === 1 ? '' : 's' }}<template v-if="unpaid"> · {{ unpaid }} not paid yet</template>
       <button v-if="day !== today" class="link-btn" @click="day = today">Back to today</button>
     </p>
+    <button class="month-strip" @click="setView('my-details')">
+      <span><b>{{ monthLabel(month.month).split(' ')[0] }} so far:</b> {{ month.count }} appointment{{ month.count === 1 ? '' : 's' }}</span>
+      <span v-if="month.change" :class="month.change > 0 ? 'green' : 'orange'">{{ month.change > 0 ? '↑' : '↓' }} {{ Math.abs(month.change) }} vs last month</span>
+      <span v-if="month.unpaid" class="orange">{{ month.unpaid }} unpaid</span>
+      <span class="more">My stats →</span>
+    </button>
     <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
 
     <div v-if="list.length" class="card" style="padding: 4px 0">
