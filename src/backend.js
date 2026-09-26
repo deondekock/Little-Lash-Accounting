@@ -978,3 +978,21 @@ export function saveCompany(company) {
     return { ...db.company }
   })
 }
+
+/* ---------------- moving to Cloudflare ---------------- */
+
+/** Everything in the sheet (with when each record was created / last changed), for copying to Cloudflare. */
+export function dumpAll() {
+  const times = (x, c, u) => ({ createdAt: clean(x.raw?.[c]), updatedAt: clean(x.raw?.[u]) })
+  const LEAVE_C = LEAVE_HEADERS.length - 2
+  const PAY_C = PAYSLIP_HEADERS.length - 2
+  return {
+    employees: db.employees.map((e) => ({ ...strip(e), ...times(e, E.CREATED, E.UPDATED) })),
+    services: db.services.map((x) => ({ ...strip(x), ...times(x, S.CREATED, S.UPDATED) })),
+    appts: db.appts.map((a) => ({ ...strip(a), ...times(a, A.CREATED, A.UPDATED) })),
+    leave: db.leave.map((l) => ({ ...strip(l), ...times(l, LEAVE_C, LEAVE_C + 1) })),
+    payslips: db.payslips.map((p) => ({ ...strip(p), ...times(p, PAY_C, PAY_C + 1) })),
+    company: { ...db.company },
+    monthStartDay: db.startDay,
+  }
+}

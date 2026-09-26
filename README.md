@@ -73,6 +73,21 @@ the Google client's origins and redirect URIs. Set `VITE_SPREADSHEET_ID` there t
 
 ---
 
+## Moving to Cloudflare (D1 database)
+
+The data can live in a Cloudflare D1 database instead of the Google Sheet. `worker/` holds the database tables
+(`worker/migrations`) and a small Worker (`worker/src/index.js`) that checks the Google sign-in and only lets the
+addresses in the `ALLOWED_EMAILS` secret in. It backs everything up to Cloudflare KV every night (kept 35 days).
+GitHub Actions deploys it on every push once the repo secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and
+`ALLOWED_EMAILS` are set.
+
+1. With the app still on the Google Sheet: **Settings → Move data to Cloudflare** copies everything across and shows
+   both side by side (it can be run again; it replaces what's in Cloudflare).
+2. Switch the app over with `VITE_BACKEND=cloudflare` (in `src/config.js` or the build). The Google Sheet stays as it
+   was, as an archive.
+
+**Settings → Download data** saves appointments, team, services, leave and payslips as CSV files (Excel / Sheets).
+
 ## Running it on your own computer
 
 ```bash
@@ -114,4 +129,7 @@ src/store.js            app state and actions
 src/views, components   Vue 3 screens
 public/sw.js            service worker (offline app shell, installable)
 dev/fake-sheets-api.cjs local stand-in for the Google Sheets API, for testing
+src/backend-cf.js       the same data functions on Cloudflare (talks to the Worker)
+src/lib/schema.js       database tables and fields, shared with the Worker
+worker/                 Cloudflare Worker + D1 migrations (cd worker && npm i && npm run migrate:local && npm run dev)
 ```

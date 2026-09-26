@@ -1,7 +1,8 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, setView } from '../store.js'
+import { BACKEND } from '../config.js'
 
 function run(fn) {
   closeModal()
@@ -19,7 +20,7 @@ function run(fn) {
           <div class="meta">Signed in with Google</div>
         </div>
       </div>
-      <a class="list-row" :href="state.spreadsheetUrl" target="_blank" rel="noopener" style="color: inherit; text-decoration: none">
+      <a v-if="state.spreadsheetUrl" class="list-row" :href="state.spreadsheetUrl" target="_blank" rel="noopener" style="color: inherit; text-decoration: none">
         <Icon name="external" />
         <div class="grow"><div class="title">Open the Google Sheet</div><div class="meta">All data lives here</div></div>
       </a>
@@ -39,15 +40,23 @@ function run(fn) {
         <Icon name="receipt" />
         <div class="grow"><div class="title">Company details</div><div class="meta">Shown on payslips</div></div>
       </button>
+      <button class="list-row" @click="openExport()">
+        <Icon name="external" />
+        <div class="grow"><div class="title">Download data</div><div class="meta">Appointments, team, payslips… as Excel/CSV files</div></div>
+      </button>
+      <button v-if="BACKEND === 'sheets'" class="list-row" @click="openMove()">
+        <Icon name="swap" />
+        <div class="grow"><div class="title">Move data to Cloudflare</div><div class="meta">Copy everything to the new database and compare</div></div>
+      </button>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
         <div class="grow"><div class="title">Refresh</div><div class="meta">Load changes made on another phone</div></div>
       </button>
       <div class="list-row">
         <Icon name="calendar" />
-        <div class="grow"><div class="title">Months start on day {{ state.monthStartDay }}</div><div class="meta">Change it in the sheet's Settings tab</div></div>
+        <div class="grow"><div class="title">Months start on day {{ state.monthStartDay }}</div><div v-if="BACKEND === 'sheets'" class="meta">Change it in the sheet's Settings tab</div></div>
       </div>
-      <button class="list-row" @click="run(useDifferentSheet)">
+      <button v-if="BACKEND === 'sheets'" class="list-row" @click="run(useDifferentSheet)">
         <Icon name="swap" />
         <div class="grow"><div class="title">Use a different sheet</div></div>
       </button>

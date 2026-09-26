@@ -1,0 +1,26 @@
+# Little Lash Lounge API (Cloudflare Worker + D1 database).
+# Deployed by .github/workflows/deploy.yml, which fills in the two IDs below.
+name = "little-lash-api"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+# Public by design (it only works from the allowed web addresses).
+GOOGLE_CLIENT_ID = "860201503699-s0u54svm3lpvd5i0nfq3plmpm4o86477.apps.googleusercontent.com"
+ALLOWED_ORIGINS = "https://deondekock.github.io"
+# ALLOWED_EMAILS is a secret (set from the GitHub secret of the same name).
+
+[[d1_databases]]
+binding = "DB"
+database_name = "little-lash"
+database_id = "__D1_ID__"
+migrations_dir = "migrations"
+
+[[kv_namespaces]]
+binding = "BACKUPS"
+id = "__KV_ID__"
+
+# Nightly backup at 03:00 South African time.
+[triggers]
+crons = ["0 1 * * *"]

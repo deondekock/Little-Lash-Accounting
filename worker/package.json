@@ -1,0 +1,12 @@
+{
+  "name": "little-lash-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8788",
+    "migrate:local": "wrangler d1 migrations apply little-lash --local"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

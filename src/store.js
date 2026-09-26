@@ -1,11 +1,10 @@
 import { reactive, computed, shallowRef, nextTick } from 'vue'
-import { call } from './api.js'
+import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow } from './lib/stats.js'
-import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
+import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
-import * as backend from './backend.js'
 
 const SHEET_KEY = 'llp.sheetId'
 function savedSheetId(value) {
@@ -41,6 +40,7 @@ export const state = reactive({
   modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
   toast: null, // { msg, error, action }
+  error: '', // why the data couldn't be opened
   history: null, // History entries (loaded when the History sheet opens)
   printing: null, // payslips being printed / saved as PDF
 })
@@ -138,6 +138,10 @@ export async function init() {
   state.email = auth.knownEmail()
   backend.setUser(state.email)
   if (!state.email) auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
+  if (BACKEND === 'cloudflare') {
+    await openSheet('cloudflare')
+    return
+  }
   const id = savedSheetId() || DEFAULT_SHEET_ID
   if (!id) {
     state.phase = 'pickSheet'
@@ -159,7 +163,7 @@ export async function openSheet(idOrUrl) {
   state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
   try {
     const id = await api('openSheet', idOrUrl)
-    savedSheetId(id)
+    if (BACKEND !== 'cloudflare') savedSheetId(id)
     const data = await api('getInitialData')
     applyData(data)
     state.spreadsheetUrl = data.spreadsheetUrl
@@ -170,7 +174,8 @@ export async function openSheet(idOrUrl) {
     state.phase = 'ready'
     return true
   } catch (err) {
-    if (!(err instanceof AuthError)) state.phase = savedSheetId() ? 'error' : 'pickSheet'
+    state.error = String(err?.message || err)
+    if (!(err instanceof AuthError)) state.phase = BACKEND === 'cloudflare' || savedSheetId() ? 'error' : 'pickSheet'
     fail(err)
     return false
   }
@@ -392,6 +397,8 @@ export async function saveCompany(company) {
 export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
 export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
 export const openCompany = () => (state.modal = { type: 'company', data: null })
+export const openMove = () => (state.modal = { type: 'move', data: null })
+export const openExport = () => (state.modal = { type: 'export', data: null })
 
 /** Prints payslips (the phone's print screen also saves them as a PDF). */
 export async function printPayslips(slips) {

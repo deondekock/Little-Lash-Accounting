@@ -11,6 +11,8 @@ import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import LeaveModal from './components/LeaveModal.vue'
 import CompanyModal from './components/CompanyModal.vue'
+import MoveModal from './components/MoveModal.vue'
+import ExportModal from './components/ExportModal.vue'
 import ServiceModal from './components/ServiceModal.vue'
 import ServiceMergeModal from './components/ServiceMergeModal.vue'
 import BulkBar from './components/BulkBar.vue'
@@ -25,7 +27,8 @@ import HistoryModal from './components/HistoryModal.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
-import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory } from './store.js'
+import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut } from './store.js'
+import { BACKEND } from './config.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView }
 const tabs = [
@@ -71,10 +74,18 @@ const retry = () => location.reload()
     <SignInScreen v-else-if="state.phase === 'signedOut'" />
     <SheetPicker v-else-if="state.phase === 'pickSheet'" />
     <div v-else-if="state.phase === 'error'" class="card welcome-card">
-      <h2>Couldn't open the sheet</h2>
-      <p>Check your internet connection, and that the sheet is shared with {{ state.email || 'this Google account' }}.</p>
-      <button class="btn wide" @click="retry">Try again</button>
-      <button class="btn ghost wide" style="margin-top: 10px" @click="useDifferentSheet">Use a different sheet</button>
+      <template v-if="BACKEND === 'cloudflare'">
+        <h2>Couldn't load the salon's data</h2>
+        <p>{{ state.error || 'Check your internet connection and try again.' }}</p>
+        <button class="btn wide" @click="retry">Try again</button>
+        <button class="btn ghost wide" style="margin-top: 10px" @click="signOut">Sign in with a different account</button>
+      </template>
+      <template v-else>
+        <h2>Couldn't open the sheet</h2>
+        <p>Check your internet connection, and that the sheet is shared with {{ state.email || 'this Google account' }}.</p>
+        <button class="btn wide" @click="retry">Try again</button>
+        <button class="btn ghost wide" style="margin-top: 10px" @click="useDifferentSheet">Use a different sheet</button>
+      </template>
     </div>
     <component :is="views[state.view]" v-else />
   </main>
@@ -103,6 +114,8 @@ const retry = () => location.reload()
   <PayslipModal v-if="state.modal?.type === 'payslip'" :employee-id="state.modal.data.employeeId" />
   <LeaveModal v-if="state.modal?.type === 'leave'" :leave="state.modal.data" :prefill="state.modal.prefill" />
   <CompanyModal v-if="state.modal?.type === 'company'" />
+  <MoveModal v-if="state.modal?.type === 'move'" />
+  <ExportModal v-if="state.modal?.type === 'export'" />
   <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 
   <Teleport to="body">
