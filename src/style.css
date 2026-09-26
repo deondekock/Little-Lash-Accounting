@@ -812,3 +812,41 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .checklist { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 13.5px; }
 .checklist li { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
 .checklist li .grow { flex: 1; }
+/* ---------------- calendar ---------------- */
+.cal { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); -webkit-overflow-scrolling: touch; }
+.cal-head, .cal-body { display: flex; min-width: fit-content; }
+.cal-head { position: sticky; top: 0; z-index: 3; background: var(--card); border-bottom: 1px solid var(--line); }
+.cal-gutter { flex: none; width: 46px; position: relative; }
+.cal-name { flex: 1 0 140px; padding: 10px 8px; font-weight: 700; font-size: 13.5px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.cal-name small { color: var(--unpaid); font-weight: 600; }
+.cal.single .cal-name, .cal.single .cal-col { flex-basis: 100%; }
+.cal-body { position: relative; }
+.cal-hour { position: absolute; right: 6px; transform: translateY(-50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cal-hour:first-child { transform: none; }
+.cal-col { flex: 1 0 140px; position: relative; border-left: 1px solid var(--line); cursor: pointer; }
+.cal-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--grid); pointer-events: none; }
+.cal-closed { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, var(--card-2), var(--card-2) 6px, var(--line) 6px, var(--line) 7px); opacity: .8; pointer-events: none; }
+.cal-booking {
+  position: absolute; z-index: 1; overflow: hidden; border-radius: 8px; padding: 3px 6px; font-size: 11.5px; line-height: 1.25; cursor: pointer;
+  background: color-mix(in srgb, var(--c) 18%, var(--card)); border-left: 3px solid var(--c); color: var(--ink); user-select: none; -webkit-user-select: none; touch-action: pan-y;
+}
+.cal-booking b { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-booking span { display: block; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cal-booking.block { background: repeating-linear-gradient(135deg, var(--line), var(--line) 5px, var(--card-2) 5px, var(--card-2) 10px); border-left-color: var(--muted); }
+.cal-booking.done { opacity: .6; }
+.cal-booking.noshow { opacity: .45; text-decoration: line-through; }
+.cal-booking.dragging { opacity: .3; }
+.cal-status { font-weight: 700; color: var(--paid) !important; }
+.cal-online { position: absolute; top: 2px; right: 4px; font-size: 10px; }
+.cal-ghost { position: absolute; left: 2px; right: 2px; z-index: 2; border: 2px dashed var(--brand); border-radius: 8px; background: color-mix(in srgb, var(--brand) 12%, transparent); font-size: 12px; font-weight: 700; padding: 3px 6px; color: var(--brand); pointer-events: none; }
+.cal-now { position: absolute; left: -1px; right: 0; border-top: 2px solid var(--unpaid); z-index: 2; pointer-events: none; }
+.cal-now::before { content: ''; position: absolute; left: -4px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--unpaid); }
+.day-back { text-align: center; margin: -4px 0 6px; font-size: 13px; }
+.length-row { display: flex; align-items: center; gap: 10px; }
+.length-val { flex: 1; text-align: center; }
+.length-val b { display: block; font-size: 17px; }
+.length-val small { color: var(--muted); font-size: 12px; }
+.booking-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 4px; }
+.danger-text { color: var(--unpaid) !important; }
+.day-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.cal-body > .cal-gutter, .cal-head > .cal-gutter { position: sticky; left: 0; z-index: 2; background: var(--card); border-right: 1px solid var(--line); }

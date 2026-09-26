@@ -19,6 +19,8 @@
  *   POST /api/staff/appointment  add or change one of her appointments (current / previous business month, until
  *                                her payslip for it is saved); amount only replaced when given
  *   POST /api/staff/appointment/delete   delete one she added herself, within 24 hours
+ *   POST /api/staff/booking      add / change / move one of her bookings (or block her time); prices filled in here
+ *   POST /api/staff/booking/status   cancel, no-show or back to booked (a block is removed)
  *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
  *   POST /api/staff/leave/cancel withdraw a request that's still waiting
  *   POST /api/staff/profile      change her phone number and address
@@ -71,6 +73,8 @@ export default {
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/appointment') return json(await staffAppointment(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/booking') return json(await staffBooking(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/booking/status') return json(await staffBookingStatus(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
@@ -500,7 +504,10 @@ async function staffAppointment(db, me, b) {
   const month = existing && existing.date === date ? existing.month : businessMonth(date, startDay)
   await checkMonths(db, me, [...new Set([month, existing?.month].filter(Boolean))])
   const now = new Date().toISOString()
+  // Completing one of her bookings: link them and mark the booking done.
+  const booking = !existing && b.bookingId ? await recordOf(db, 'bookings', 'id = ?1 AND employee_id = ?2', String(b.bookingId), me.employeeId) : null
   const rec = {
+    booking_id: existing?.booking_id || booking?.id || null, client_id: existing?.client_id || booking?.client_id || null,
     id: existing?.id || crypto.randomUUID(), date, month, employee_id: me.employeeId, employee_name: me.name, client, service, amount,
     method: b.method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
     created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.actor || me.email, updated_by: me.actor || me.email,
@@ -515,7 +522,8 @@ async function staffAppointment(db, me, b) {
   await db.batch([
     db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
       ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
-    logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null } }),
+    ...(booking ? [db.prepare("UPDATE bookings SET status = 'done', appointment_id = ?1, updated_by = ?2, updated_at = ?3 WHERE id = ?4").bind(rec.id, me.actor || me.email, now, booking.id)] : []),
+    logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null }, ...(booking ? { books: { [booking.id]: booking } } : {}) }),
   ])
   return JSON.stringify(withoutAmount(rec))
 }
@@ -539,4 +547,77 @@ async function recordHistory(db, id) {
       'undone_at', undone_at, 'before', json_extract(data, '$.appts."' || ?1 || '"'))) AS j
     FROM (SELECT * FROM history WHERE json_valid(data) AND EXISTS (SELECT 1 FROM json_each(history.data, '$.appts') WHERE key = ?1) ORDER BY time DESC LIMIT 50)`).bind(id).first()
   return r?.j || '[]'
+}
+
+/* ---------------- staff: her own calendar ---------------- */
+
+const TIME = /^\d{2}:\d{2}$/
+const minsOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3))
+
+/** Her booking (new or changed). She can't give it to someone else; the prices come from the service list. */
+async function staffBooking(db, me, b) {
+  const date = String(b.date || '')
+  const start = String(b.start || '')
+  const minutes = Math.round(Number(b.minutes))
+  if (!DATE.test(date) || !TIME.test(start)) throw new HttpError(400, 'Please choose a date and time.')
+  if (!(minutes >= 5 && minutes <= 720) || minsOf(start) + minutes > 1440) throw new HttpError(400, 'Please check how long it\'s booked for.')
+  if (date < new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10)) throw new HttpError(403, 'That\'s too long ago to change. Ask the owner.')
+  const kind = b.kind === 'block' ? 'block' : 'booking'
+  const clientName = String(b.clientName || '').trim().slice(0, 80)
+  if (kind === 'booking' && !clientName) throw new HttpError(400, 'Please enter the client\'s name.')
+  const existing = b.id ? await recordOf(db, 'bookings', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
+  if (b.id && !existing) throw new HttpError(404, 'That booking was not found.')
+  if (existing?.status === 'done') throw new HttpError(403, 'This booking is done and paid. Ask the owner to change it.')
+  // Services with her prices (from the list), in the order she chose.
+  const ids = (Array.isArray(b.services) ? b.services : []).slice(0, 20)
+  const svcRows = ids.length ? (await db.prepare(`SELECT id, name, price, prices, minutes, durations FROM services WHERE id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify(ids.map((x) => x.id).filter(Boolean))).all()).results : []
+  const parse = (s) => { try { return JSON.parse(s || '{}') } catch { return {} } }
+  const services = kind === 'block' ? [] : ids.map((x) => {
+    const row = svcRows.find((r) => r.id === x.id)
+    if (!row) return { id: null, name: String(x.name || '').slice(0, 80), price: null, minutes: Number(x.minutes) || 0 }
+    return { id: row.id, name: row.name, price: parse(row.prices)[me.employeeId] ?? row.price ?? null, minutes: Number(parse(row.durations)[me.employeeId] ?? row.minutes) || 0 }
+  })
+  const now = new Date().toISOString()
+  const rec = {
+    id: existing?.id || crypto.randomUUID(), date, start, minutes, employee_id: me.employeeId, client_id: existing?.client_id || null,
+    client_name: kind === 'block' ? clientName || 'Blocked' : clientName, client_phone: String(b.clientPhone || '').trim().slice(0, 40),
+    services: JSON.stringify(services), status: existing?.status || 'booked', kind, notes: String(b.notes || '').trim().slice(0, 500),
+    source: existing?.source || 'salon', appointment_id: existing?.appointment_id || null,
+    reminded_at: existing && existing.date === date && existing.start === start ? existing.reminded_at : null,
+    created_by: existing ? existing.created_by : me.actor || me.email, updated_by: me.actor || me.email, created_at: existing?.created_at || now, updated_at: now,
+  }
+  const cols = TABLES.bookings
+  const moved = existing && (existing.date !== date || existing.start !== start)
+  await db.batch([
+    db.prepare(`INSERT INTO bookings (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
+      ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
+    logEntry(db, me, 'booking', `${me.name} ${existing ? (moved ? 'moved' : 'changed') : kind === 'block' ? 'blocked time' : 'booked'} ${rec.client_name} · ${ddmm(date)} ${start}`, { books: { [rec.id]: existing || null } }),
+  ])
+  return JSON.stringify(staffBookingOut(rec))
+}
+
+/** Her booking as sent to her phone: no prices. */
+function staffBookingOut(rec) {
+  let services = []
+  try { services = JSON.parse(rec.services || '[]').map(({ price, ...x }) => x) } catch { services = [] }
+  return { ...rec, services: JSON.stringify(services) }
+}
+
+async function staffBookingStatus(db, me, b) {
+  const existing = await recordOf(db, 'bookings', 'id = ?1 AND employee_id = ?2', String(b.id || ''), me.employeeId)
+  if (!existing) throw new HttpError(404, 'That booking was not found.')
+  if (existing.status === 'done') throw new HttpError(403, 'This booking is done and paid. Ask the owner to change it.')
+  const status = ['cancelled', 'noshow', 'booked'].includes(b.status) ? b.status : null
+  if (!status) throw new HttpError(400, 'Invalid status.')
+  const now = new Date().toISOString()
+  const word = { cancelled: 'cancelled', noshow: 'marked a no-show:', booked: 'restored' }[status]
+  if (existing.kind === 'block' && status === 'cancelled') {
+    await db.batch([db.prepare('DELETE FROM bookings WHERE id = ?1').bind(existing.id), logEntry(db, me, 'booking', `${me.name} removed blocked time · ${ddmm(existing.date)} ${existing.start}`, { books: { [existing.id]: existing } })])
+    return JSON.stringify({ deleted: existing.id })
+  }
+  await db.batch([
+    db.prepare('UPDATE bookings SET status = ?1, updated_by = ?2, updated_at = ?3 WHERE id = ?4').bind(status, me.actor || me.email, now, existing.id),
+    logEntry(db, me, 'booking', `${me.name} ${word} ${existing.client_name} · ${ddmm(existing.date)} ${existing.start}`, { books: { [existing.id]: existing } }),
+  ])
+  return JSON.stringify(staffBookingOut({ ...existing, status, updated_at: now }))
 }

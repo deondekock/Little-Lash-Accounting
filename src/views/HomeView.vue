@@ -72,6 +72,7 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
           <Icon name="calendar" :size="16" />{{ monthLabel(state.month) }}<Icon name="down" :size="16" :stroke="2.2" />
         </button>
         <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">Back to this month</button>
+        <button class="today-btn" style="margin-left: auto" @click="setView('insights')">📊 Insights</button>
       </div>
     </div>
 

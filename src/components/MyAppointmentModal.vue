@@ -57,6 +57,7 @@ async function submit() {
     await saveMyAppointment({
       id: props.appt?.id, date: form.date, client: form.client, service: form.service, method: form.method, status: form.status,
       notes: form.notes, overtime: form.overtime, length: form.length, amount: changeAmount.value ? form.amount : '',
+      bookingId: props.prefill?.bookingId,
     })
     toast(editing ? 'Saved' : 'Appointment added')
     closeModal()

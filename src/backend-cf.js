@@ -730,7 +730,7 @@ export async function ensureSession() {
 export async function staffLoad() {
   const data = await request('/api/staff/load')
   db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
-  db.services = []
+  db.services = data.services.map((a) => toService(fromArray('services', a))) // no prices
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
@@ -764,8 +764,27 @@ export async function saveMyAppointment(input) {
   if (body.amount === '' || body.amount == null) delete body.amount
   const rec = await request('/api/staff/appointment', { method: 'POST', body })
   applyLocal({ appointments: [rec] })
+  const booking = input.bookingId && db.bookings.find((x) => x.id === input.bookingId)
+  if (booking) applyLocal({ bookings: [{ ...booking.rec, status: 'done', appointment_id: rec.id }] })
   return publicAppt(db.appts.find((a) => a.id === rec.id))
 }
+
+/** Staff: add / change / move one of her bookings (the Worker fills in prices). */
+export async function saveMyBooking(input) {
+  const rec = await request('/api/staff/booking', { method: 'POST', body: input })
+  applyLocal({ bookings: [rec] })
+  return publicBookings()
+}
+
+/** Staff: cancel, no-show or restore one of her bookings. */
+export async function setMyBookingStatus(id, status) {
+  const res = await request('/api/staff/booking/status', { method: 'POST', body: { id, status } })
+  if (res.deleted) applyLocal({}, { bookings: [res.deleted] })
+  else applyLocal({ bookings: [res] })
+  return publicBookings()
+}
+
+export const getBookings = () => publicBookings()
 
 /** Staff: delete an appointment she added herself (within 24 hours). */
 export async function deleteMyAppointment(id) {

@@ -299,6 +299,7 @@ export async function decideLeave(id, status) {
 export async function saveMyAppointment(input) {
   const saved = await api('saveMyAppointment', input)
   upsertAppts([saved])
+  if (input.bookingId) state.bookings = await api('getBookings')
   return saved
 }
 export async function deleteMyAppointment(id) {
@@ -392,6 +393,7 @@ function upsertAppts(list) {
 export async function saveAppointment(data) {
   const saved = await api('saveAppointment', data)
   upsertAppts([saved])
+  if (data.bookingId && BACKEND === 'cloudflare') state.bookings = await api('getBookings')
   if (saved.month !== state.month) changeMonth(saved.month)
   return saved
 }
@@ -518,6 +520,18 @@ export async function saveBooking(input) {
 export async function setBookingStatus(id, status) {
   state.bookings = await api('setBookingStatus', id, status)
 }
+/** Owner or staff (staff: only her own, checked by the Worker). */
+export async function saveBookingAs(input) {
+  state.bookings = await api(state.role === 'staff' ? 'saveMyBooking' : 'saveBooking', input)
+}
+export async function setBookingStatusAs(id, status) {
+  state.bookings = await api(state.role === 'staff' ? 'setMyBookingStatus' : 'setBookingStatus', id, status)
+}
+/** Moves a booking (drag in the calendar), keeping everything else. */
+export async function moveBooking(b, start, employeeId) {
+  await saveBookingAs({ ...b, start, employeeId, services: b.services, clientName: b.clientName, clientPhone: b.clientPhone })
+}
+export const openBooking = (booking, prefill = null) => (state.modal = { type: 'booking', data: booking ? { ...booking } : null, prefill })
 export async function saveBookingSettings(values) {
   state.booking = await api('saveBookingSettings', values)
 }
