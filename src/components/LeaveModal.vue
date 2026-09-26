@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { state, closeModal, saveLeave, deleteLeave, toastUndo, fail } from '../store.js'
+import { state, closeModal, saveLeave, deleteLeave, decideLeave, toastUndo, fail } from '../store.js'
 import { todayStr } from '../lib/format.js'
 import { LEAVE_TYPES, MATERNITY_MONTHS, addMonths, leaveBalance, sickBalance, familyBalance, leaveSettings, leaveText, payDefaults, weekDays, workDays } from '../lib/payroll.js'
 
@@ -66,6 +66,16 @@ async function submit() {
     saving.value = false
   }
 }
+async function decide(status) {
+  try {
+    await decideLeave(props.leave.id, status)
+    toastUndo(status === 'approved' ? 'Leave approved' : 'Leave declined')
+    closeModal()
+  } catch (err) {
+    fail(err)
+  }
+}
+
 async function remove() {
   if (!confirm('Remove this leave?')) return
   try {
@@ -138,6 +148,14 @@ async function remove() {
       <p v-else-if="(form.type === 'Sick' || form.type === 'Family') && !emp?.pay?.engaged" class="muted-note orange">
         Add {{ emp?.name }}'s date engaged (Team → Edit → Payslip details) to see how much she has left.
       </p>
+      <div v-if="leave?.status === 'requested'" class="calc-box" style="margin-bottom: 4px">
+        <div><span>⏳ {{ emp?.name }} asked for this leave. It doesn't count until you approve it.</span></div>
+        <div style="justify-content: flex-end; gap: 8px">
+          <button type="button" class="btn small ghost" @click="decide('declined')">Decline</button>
+          <button type="button" class="btn small" @click="decide('approved')">Approve</button>
+        </div>
+      </div>
+      <p v-else-if="leave?.status === 'declined'" class="muted-note">This request was declined.</p>
       <div class="modal-actions">
         <button v-if="editing" type="button" class="btn danger" @click="remove">Remove</button>
         <button type="button" class="btn ghost" @click="closeModal">Cancel</button>

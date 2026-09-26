@@ -1,18 +1,26 @@
 /**
  * Little Lash Lounge API — a Cloudflare Worker in front of the D1 database.
  *
- * Every request carries the Google sign-in token from the app. It is checked with Google
- * and only the addresses in the ALLOWED_EMAILS secret get in.
+ * Every request carries the Google sign-in token from the app. It is checked with Google.
+ * The addresses in the ALLOWED_EMAILS secret are the owners and see everything; a team member
+ * whose "Login Email" matches (and who is active) is staff and only ever gets her own records.
  *
+ *   GET  /api/me                 who is signed in: { role: 'admin' | 'staff', email, employeeId, name }
+ * Owners:
  *   GET  /api/load               everything the app needs (all tables, settings)
  *   POST /api/write              add / change / delete records in one transaction, with a history entry
  *   GET  /api/history            recent history entries (without the stored records)
  *   GET  /api/history?since=T    entries from time T on, with their stored records (for undo)
+ * Staff (her own data only):
+ *   GET  /api/staff/load         her team record, leave, payslips and settings (no appointments: they hold client names)
+ *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
+ *   POST /api/staff/leave/cancel withdraw a request that's still waiting
+ *   POST /api/staff/profile      change her phone number and address
  *
  * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
-import { TABLES } from '../../src/lib/schema.js'
+import { TABLES, LEAVE_TYPES, STAFF_EDITABLE } from '../../src/lib/schema.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
 const MAX_HISTORY = 400
@@ -24,11 +32,19 @@ export default {
     try {
       const url = new URL(request.url)
       if (url.pathname === '/') return text('Little Lash Lounge API', 200, cors)
-      const who = await authenticate(request, env, ctx)
-      if (url.pathname === '/api/load' && request.method === 'GET') return json(await loadAll(env.DB), cors)
-      if (url.pathname === '/api/write' && request.method === 'POST') return await write(env.DB, await request.json(), cors)
-      if (url.pathname === '/api/history' && request.method === 'GET') return json(await history(env.DB, url.searchParams.get('since')), cors)
-      if (url.pathname === '/api/me') return json(JSON.stringify({ email: who }), cors)
+      const me = await identify(env.DB, await authenticate(request, env, ctx), env)
+      const route = `${request.method} ${url.pathname}`
+      if (route === 'GET /api/me') return json(JSON.stringify(me), cors)
+      if (me.role === 'staff') {
+        if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
+        if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json()), cors)
+        throw new HttpError(403, 'Only the owner can do that.')
+      }
+      if (route === 'GET /api/load') return json(await loadAll(env.DB), cors)
+      if (route === 'POST /api/write') return await write(env.DB, await request.json(), cors)
+      if (route === 'GET /api/history') return json(await history(env.DB, url.searchParams.get('since')), cors)
       return text('Not found', 404, cors)
     } catch (err) {
       const status = err.status || 500
@@ -59,12 +75,12 @@ async function sha256(s) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
-/** Checks the Google access token (cached for a few minutes) and the email allow-list. */
+/** Checks the Google access token (cached for a few minutes); returns the verified email. */
 async function authenticate(request, env, ctx) {
   const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
   if (!token) throw new HttpError(401, 'Please sign in.')
-  // Local development only (set in worker/.dev.vars, never in production).
-  if (env.DEV_EMAIL) return env.DEV_EMAIL
+  // Local development only (set in worker/.dev.vars, never in production): "dev:<email>" signs in as that email.
+  if (env.DEV_EMAIL) return token.startsWith('dev:') ? token.slice(4).toLowerCase() : env.DEV_EMAIL
   const cache = caches.default
   const key = new Request(`https://auth.cache/${await sha256(token)}`)
   let info = await cache.match(key).then((r) => r && r.json())
@@ -77,11 +93,18 @@ async function authenticate(request, env, ctx) {
   }
   if (info.aud !== env.GOOGLE_CLIENT_ID && info.azp !== env.GOOGLE_CLIENT_ID) throw new HttpError(401, 'Please sign in again.')
   const email = String(info.email || '').toLowerCase()
-  const allowed = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
-  if (!email || String(info.email_verified) !== 'true' || !allowed.includes(email)) {
-    throw new HttpError(403, `${info.email || 'This Google account'} doesn't have access to the salon's data.`)
-  }
+  if (!email || String(info.email_verified) !== 'true') throw new HttpError(403, 'This Google account has no verified email address.')
   return email
+}
+
+/** Owner (ALLOWED_EMAILS), or an active team member with this login email, or nobody. */
+async function identify(db, email, env) {
+  const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
+  if (owners.includes(email)) return { role: 'admin', email }
+  const emp = await db.prepare(`SELECT id, name FROM employees
+    WHERE active = 1 AND lower(trim(json_extract(pay, '$.loginEmail'))) = ?1 LIMIT 1`).bind(email).first()
+  if (emp) return { role: 'staff', email, employeeId: emp.id, name: emp.name }
+  throw new HttpError(403, `${email} doesn't have access to the salon's app. Ask the owner to add it to your team profile.`)
 }
 
 function corsHeaders(request, env) {
@@ -192,4 +215,80 @@ async function write(db, body, cors) {
 
 function checkTable(t) {
   if (!TABLES[t]) throw new HttpError(400, `Unknown table ${t}`)
+}
+
+/* ---------------- staff: her own data only ---------------- */
+
+const cols = (t) => TABLES[t].join(', ')
+const recordOf = (db, table, where, ...args) => db.prepare(`SELECT ${cols(table)} FROM ${table} WHERE ${where}`).bind(...args).first()
+
+async function staffLoad(db, me) {
+  const res = await db.batch([
+    db.prepare(arraysOf('employees', 'WHERE id = ?1')).bind(me.employeeId),
+    db.prepare(arraysOf('leave', 'WHERE employee_id = ?1')).bind(me.employeeId),
+    db.prepare(arraysOf('payslips', 'WHERE employee_id = ?1')).bind(me.employeeId),
+    db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
+  ])
+  const [emps, leave, payslips, settings] = res.map((r) => r.results[0]?.j || '[]')
+  return `{"employees":${emps},"services":[],"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":[]}`
+}
+
+const DATE = /^\d{4}-\d{2}-\d{2}$/
+const ddmm = (d) => `${d.slice(8)}/${d.slice(5, 7)}`
+const logEntry = (db, me, action, summary, before) =>
+  db.prepare('INSERT INTO history (id, time, who, action, summary, undone_at, data) VALUES (?1, ?2, ?3, ?4, ?5, \'\', ?6)')
+    .bind(crypto.randomUUID(), new Date().toISOString(), me.email, action, summary, JSON.stringify(before))
+
+/** A leave request from her (new, or a change to one that's still waiting). Always 'requested'. */
+async function staffLeave(db, me, body) {
+  const type = LEAVE_TYPES.includes(body.type) ? body.type : null
+  const from = String(body.from || '')
+  const to = String(body.to || from)
+  const hours = Math.round(Number(body.hours) * 100) / 100
+  const notes = String(body.notes || '').trim().slice(0, 500)
+  if (!type) throw new HttpError(400, 'Please choose the type of leave.')
+  if (!DATE.test(from) || !DATE.test(to) || to < from) throw new HttpError(400, 'Please choose valid dates.')
+  if (!(hours > 0 && hours <= 2000)) throw new HttpError(400, 'Please enter the hours of leave.')
+  const existing = body.id ? await recordOf(db, 'leave', 'id = ?1 AND employee_id = ?2', body.id, me.employeeId) : null
+  if (body.id && !existing) throw new HttpError(404, 'That leave request was not found.')
+  if (existing && existing.status !== 'requested') throw new HttpError(403, 'Only requests that are still waiting can be changed.')
+  const now = new Date().toISOString()
+  const id = existing?.id || crypto.randomUUID()
+  await db.batch([
+    db.prepare(`INSERT INTO leave (${cols('leave')}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 'requested')
+      ON CONFLICT(id) DO UPDATE SET type = excluded.type, from_date = excluded.from_date, to_date = excluded.to_date,
+      hours = excluded.hours, notes = excluded.notes, updated_at = excluded.updated_at`)
+      .bind(id, me.employeeId, me.name, type, from, to, hours, notes, existing?.created_at || now, now),
+    logEntry(db, me, 'leave', `${me.name} ${existing ? `changed her ${type.toLowerCase()} leave request` : `asked for ${type.toLowerCase()} leave`} · ${ddmm(from)}${to !== from ? '–' + ddmm(to) : ''} · ${hours} h`,
+      { leave: { [id]: existing || null } }),
+  ])
+  return JSON.stringify(await recordOf(db, 'leave', 'id = ?1', id))
+}
+
+async function staffCancel(db, me, body) {
+  const existing = await recordOf(db, 'leave', 'id = ?1 AND employee_id = ?2', String(body.id || ''), me.employeeId)
+  if (!existing) throw new HttpError(404, 'That leave request was not found.')
+  if (existing.status !== 'requested') throw new HttpError(403, 'Only requests that are still waiting can be withdrawn.')
+  await db.batch([
+    db.prepare('DELETE FROM leave WHERE id = ?1').bind(existing.id),
+    logEntry(db, me, 'leave', `${me.name} withdrew a ${String(existing.type).toLowerCase()} leave request · ${ddmm(existing.from_date)}`, { leave: { [existing.id]: existing } }),
+  ])
+  return JSON.stringify({ ok: true })
+}
+
+/** She can change her phone number and address (nothing else about her record). */
+async function staffProfile(db, me, body) {
+  const emp = await recordOf(db, 'employees', 'id = ?1', me.employeeId)
+  let pay = {}
+  try { pay = JSON.parse(emp.pay || '{}') } catch { pay = {} }
+  const phone = STAFF_EDITABLE.includes('phone') && body.phone !== undefined ? String(body.phone).trim().slice(0, 40) : emp.phone
+  const address = STAFF_EDITABLE.includes('address') && body.address !== undefined ? String(body.address).replace(/\r/g, '').trim().slice(0, 300) : pay.address
+  if (phone === (emp.phone || '') && address === (pay.address || '')) return JSON.stringify(emp)
+  const now = new Date().toISOString()
+  const changed = [phone !== (emp.phone || '') && 'phone number', address !== (pay.address || '') && 'address'].filter(Boolean).join(' and ')
+  await db.batch([
+    db.prepare('UPDATE employees SET phone = ?1, pay = ?2, updated_at = ?3 WHERE id = ?4').bind(phone, JSON.stringify({ ...pay, address }), now, emp.id),
+    logEntry(db, me, 'team', `${me.name} updated her ${changed}`, { emps: { [emp.id]: emp } }),
+  ])
+  return JSON.stringify(await recordOf(db, 'employees', 'id = ?1', emp.id))
 }

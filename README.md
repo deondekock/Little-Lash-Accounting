@@ -86,6 +86,13 @@ GitHub Actions deploys it on every push once the repo secrets `CLOUDFLARE_API_TO
 2. Switch the app over with `VITE_BACKEND=cloudflare` (the default in `src/config.js` since the move on 26 Sept 2026).
    The Google Sheet stays as it was, as an archive; `VITE_BACKEND=sheets` switches back.
 
+**Staff login.** Give a team member her Google email (Team → Edit → "Her Google email"). She signs in to the same
+address and only sees her own leave (and can ask for leave, change or withdraw a request that's still waiting), her
+saved payslips (as PDF), and her details (she can change her phone number and address; bank details only by the
+owner). The Worker enforces this: staff can't reach anyone else's data. Requests show on the owner's Home page and
+under Team → Leave to approve or decline; only approved leave counts in balances and payslips. Owners are the
+`ALLOWED_EMAILS`.
+
 **Settings → Download data** saves appointments, team, services, leave and payslips as CSV files (Excel / Sheets).
 
 ## Running it on your own computer

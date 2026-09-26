@@ -23,7 +23,9 @@ export const state = reactive({
   email: '',
   loadedAt: 0,
   pending: 0,
-  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services' | 'payroll'
+  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services' | 'payroll' (staff: 'my-leave' | 'my-payslips' | 'my-details')
+  role: 'admin', // 'admin' (owner: everything) | 'staff' (her own leave, payslips and details)
+  me: null, // staff: { employeeId, name, email }
   payrollTab: 'payslips', // Payroll view: 'payslips' | 'leave'
   employees: [],
   leave: [], // booked leave (Leave tab)
@@ -139,6 +141,20 @@ export async function init() {
   backend.setUser(state.email)
   if (!state.email) auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
   if (BACKEND === 'cloudflare') {
+    try {
+      const me = await api('whoami')
+      state.role = me.role
+      if (me.role === 'staff') {
+        state.me = me
+        state.view = 'my-leave'
+        return await openStaff()
+      }
+    } catch (err) {
+      state.error = String(err?.message || err)
+      if (!(err instanceof AuthError)) state.phase = 'error'
+      fail(err)
+      return
+    }
     await openSheet('cloudflare')
     return
   }
@@ -197,7 +213,40 @@ export function useDifferentSheet() {
 }
 
 /** Re-reads the sheet (e.g. after changes made on another phone). */
+/** Staff: her own data only. */
+async function openStaff() {
+  try {
+    applyData(await api('staffLoad'))
+    await loadAll()
+    state.month = currentMonth(state.monthStartDay)
+    state.loadedAt = Date.now()
+    state.phase = 'ready'
+  } catch (err) {
+    state.error = String(err?.message || err)
+    if (!(err instanceof AuthError)) state.phase = 'error'
+    fail(err)
+  }
+}
+
+export async function requestLeave(input) {
+  state.leave = await api('requestLeave', input)
+}
+export async function cancelLeave(id) {
+  state.leave = await api('cancelLeave', id)
+}
+export async function decideLeave(id, status) {
+  state.leave = await api('decideLeave', id, status)
+}
+export async function updateMyDetails(details) {
+  state.employees = await api('updateMyDetails', details)
+}
+
 export async function refresh() {
+  if (state.role === 'staff') {
+    await openStaff()
+    if (state.phase === 'ready') toast('Up to date')
+    return
+  }
   try {
     await api('reload')
     applyData(await api('getInitialData'))
@@ -397,6 +446,7 @@ export async function saveCompany(company) {
 export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
 export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
 export const openCompany = () => (state.modal = { type: 'company', data: null })
+export const openMyLeave = (leave) => (state.modal = { type: 'myLeave', data: leave ? { ...leave } : null })
 export const openMove = () => (state.modal = { type: 'move', data: null })
 export const openExport = () => (state.modal = { type: 'export', data: null })
 

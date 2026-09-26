@@ -107,7 +107,7 @@ function toEmployee(r) {
 }
 
 /** Payslip details from the form, checked (numbers as numbers, blanks stay blank). */
-function cleanPay(pay = {}) {
+function cleanPay(pay = {}, selfId = null) {
   const out = {}
   for (const [key, label, kind] of PAY_FIELDS) {
     const v = pay[key]
@@ -125,6 +125,10 @@ function cleanPay(pay = {}) {
     } else if (kind === 'bool') out[key] = !!v
     else out[key] = String(v ?? '').replace(/\r/g, '').trim()
   }
+  out.loginEmail = out.loginEmail.toLowerCase()
+  if (out.loginEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.loginEmail)) throw new Error('Please check her Google email.')
+  const taken = out.loginEmail && db.employees.find((e) => e.pay.loginEmail === out.loginEmail && e.id !== selfId)
+  if (taken) throw new Error(`${out.loginEmail} is already ${taken.name}'s login.`)
   // A leave balance without a date is her balance today.
   if ((out.leaveOpening !== '' || out.sickUsed !== '') && !out.leaveFrom) out.leaveFrom = todayStr()
   return out
@@ -150,7 +154,8 @@ function pricesJson(prices) {
 
 const toLeave = (r) => ({
   id: r.id, employeeId: clean(r.employee_id), employeeName: clean(r.employee_name), type: LEAVE_TYPES.includes(r.type) ? r.type : 'Annual',
-  from: clean(r.from_date), to: clean(r.to_date) || clean(r.from_date), hours: Number(r.hours) || 0, notes: clean(r.notes), rec: r,
+  from: clean(r.from_date), to: clean(r.to_date) || clean(r.from_date), hours: Number(r.hours) || 0, notes: clean(r.notes),
+  status: r.status || 'approved', requestedAt: clean(r.created_at), rec: r,
 })
 const toPayslip = (r) => ({
   id: r.id, employeeId: clean(r.employee_id), employeeName: clean(r.employee_name), month: clean(r.month), payDate: clean(r.pay_date),
@@ -389,7 +394,7 @@ export async function saveEmployee(input) {
   const now = new Date().toISOString()
   const existing = input.id ? db.employees.find((e) => e.id === input.id) : null
   if (input.id && !existing) throw new Error('This team member was removed on another phone.')
-  const pay = cleanPay(input.pay || existing?.pay)
+  const pay = cleanPay(input.pay || existing?.pay, existing?.id)
   const rec = {
     id: existing?.id || uuid(), name, phone: clean(input.phone), active: existing ? (input.active !== false ? 1 : 0) : 1,
     pay: JSON.stringify(pay), created_at: existing?.rec.created_at || now, updated_at: now,
@@ -495,9 +500,22 @@ export async function saveLeave(input) {
   const rec = {
     id: existing?.id || uuid(), employee_id: emp.id, employee_name: emp.name, type, from_date: from, to_date: to, hours,
     notes: clean(input.notes), created_at: existing?.rec.created_at || now, updated_at: now,
+    status: input.status || existing?.rec.status || null,
   }
   await commit('leave', `${existing ? 'Changed' : 'Booked'} ${type.toLowerCase()} leave · ${emp.name} · ${ddmm(from)}${to !== from ? '–' + ddmm(to) : ''} · ${hours} h`, {
     put: { leave: [rec] }, before: { leave: { [rec.id]: existing ? existing.rec : null } },
+  })
+  return publicLeave()
+}
+
+/** Approves or declines a staff member's leave request. */
+export async function decideLeave(id, status) {
+  const l = db.leave.find((x) => x.id === id)
+  if (!l) throw new Error('That leave request was not found.')
+  if (!['approved', 'declined'].includes(status)) throw new Error('Invalid decision.')
+  const rec = { ...l.rec, status, updated_at: new Date().toISOString() }
+  await commit('leave', `${status === 'approved' ? 'Approved' : 'Declined'} ${nameOf(l.employeeId) || l.employeeName}'s ${l.type.toLowerCase()} leave · ${ddmm(l.from)}${l.to !== l.from ? '–' + ddmm(l.to) : ''}`, {
+    put: { leave: [rec] }, before: { leave: { [id]: l.rec } }, expect: expectOf('leave', [l]),
   })
   return publicLeave()
 }
@@ -541,6 +559,47 @@ export async function saveCompany(company) {
   return { ...db.company }
 }
 
+/* ---------------- signed-in person, and staff (her own data only) ---------------- */
+
+/** { role: 'admin' | 'staff', email, employeeId?, name? } */
+export const whoami = () => request('/api/me')
+
+/** Staff: loads her own record, leave and payslips (the Worker only sends hers). */
+export async function staffLoad() {
+  const data = await request('/api/staff/load')
+  db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
+  db.services = []
+  db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
+  db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
+  db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
+  db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
+  const day = parseInt(db.settings[MONTH_START_SETTING], 10)
+  db.startDay = day >= 1 && day <= 28 ? day : 1
+  db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(db.settings[label] ?? '').trim()]))
+  return getInitialData()
+}
+
+/** Staff: ask for leave, or change a request that's still waiting. */
+export async function requestLeave(input) {
+  const rec = await request('/api/staff/leave', { method: 'POST', body: input })
+  applyLocal({ leave: [rec] })
+  return publicLeave()
+}
+
+/** Staff: withdraw a request that's still waiting. */
+export async function cancelLeave(id) {
+  await request('/api/staff/leave/cancel', { method: 'POST', body: { id } })
+  applyLocal({}, { leave: [id] })
+  return publicLeave()
+}
+
+/** Staff: change her phone number and address. */
+export async function updateMyDetails({ phone, address }) {
+  const rec = await request('/api/staff/profile', { method: 'POST', body: { phone, address } })
+  applyLocal({ employees: [rec] })
+  return publicEmployees()
+}
+
 /* ---------------- moving the data in ---------------- */
 
 /**
@@ -552,7 +611,7 @@ export async function replaceAll(data, onProgress = () => {}) {
   const t = (x) => x.createdAt || new Date().toISOString()
   const u = (x) => x.updatedAt || x.createdAt || new Date().toISOString()
   const put = {
-    employees: data.employees.map((e) => ({ id: e.id, name: e.name, phone: e.phone || '', active: e.active ? 1 : 0, pay: JSON.stringify(cleanPay(e.pay)), created_at: t(e), updated_at: u(e) })),
+    employees: data.employees.map((e) => ({ id: e.id, name: e.name, phone: e.phone || '', active: e.active ? 1 : 0, pay: JSON.stringify(cleanPay(e.pay, e.id)), created_at: t(e), updated_at: u(e) })),
     services: data.services.map((s) => ({ id: s.id, name: s.name, price: s.price ?? null, active: s.active ? 1 : 0, prices: pricesJson(s.prices), created_at: t(s), updated_at: u(s) })),
     leave: data.leave.map((l) => ({ id: l.id, employee_id: l.employeeId, employee_name: l.employeeName, type: l.type, from_date: l.from, to_date: l.to, hours: l.hours, notes: l.notes || '', created_at: t(l), updated_at: u(l) })),
     payslips: data.payslips.map((p) => ({ id: p.id, employee_id: p.employeeId, employee_name: p.employeeName, month: p.month, pay_date: p.payDate, gross: p.gross, paye: p.paye, uif: p.uif, deductions: p.deductions, net: p.net, details: JSON.stringify(p.details), created_at: t(p), updated_at: u(p) })),

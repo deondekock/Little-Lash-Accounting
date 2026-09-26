@@ -1,9 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
-import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips } from '../store.js'
+import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips, decideLeave, toastUndo, fail } from '../store.js'
+import { LEAVE_STATUS } from '../lib/schema.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
 
@@ -62,8 +63,21 @@ const balances = computed(() =>
     })
     .sort((a, b) => a.e.name.localeCompare(b.e.name)),
 )
-const upcoming = computed(() => state.leave.filter((l) => l.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1)))
-const past = computed(() => state.leave.filter((l) => l.to < today).slice(0, 30))
+const requests = computed(() => state.leave.filter((l) => l.status === 'requested').sort((a, b) => (a.from < b.from ? -1 : 1)))
+const upcoming = computed(() => state.leave.filter((l) => l.status !== 'requested' && l.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1)))
+const past = computed(() => state.leave.filter((l) => l.status !== 'requested' && l.to < today).slice(0, 30))
+const deciding = ref('')
+async function decide(l, status) {
+  deciding.value = l.id
+  try {
+    await decideLeave(l.id, status)
+    toastUndo(status === 'approved' ? `${nameOf(l.employeeId)}'s leave approved` : 'Leave declined')
+  } catch (err) {
+    fail(err)
+  } finally {
+    deciding.value = ''
+  }
+}
 const nameOf = (id) => state.employees.find((e) => e.id === id)?.name || '—'
 const range = (l) => (l.to && l.to !== l.from ? `${shortDate(l.from)} – ${shortDate(l.to)}` : shortDate(l.from))
 const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧', Maternity: '🤱', Unpaid: '⏸️' }
@@ -131,6 +145,23 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
     </template>
 
     <template v-else>
+      <template v-if="requests.length">
+        <h4 class="section-label" style="margin-top: 0">Leave requests</h4>
+        <div class="list card" style="padding: 4px 0">
+          <div v-for="l in requests" :key="l.id" class="list-row request-row">
+            <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
+            <div class="grow" @click="openLeave(l)">
+              <div class="title">{{ nameOf(l.employeeId) }} · {{ l.type }}</div>
+              <div class="meta">{{ range(l) }} · {{ l.hours }} h{{ l.notes ? ' · “' + l.notes + '”' : '' }}</div>
+            </div>
+            <div class="request-actions">
+              <button class="btn small ghost" :disabled="deciding === l.id" @click="decide(l, 'declined')">Decline</button>
+              <button class="btn small" :disabled="deciding === l.id" @click="decide(l, 'approved')">Approve</button>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <div class="team-grid">
         <div v-for="{ e, b, sick, family } in balances" :key="e.id" class="card leave-card">
           <div class="head">
@@ -166,7 +197,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
         <button v-for="l in upcoming" :key="l.id" class="list-row" @click="openLeave(l)">
           <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
           <div class="grow"><div class="title">{{ nameOf(l.employeeId) }} · {{ l.type }}</div><div class="meta">{{ range(l) }}{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
-          <div class="right"><div class="title num">{{ l.hours }} h</div></div>
+          <div class="right"><div class="title num">{{ l.hours }} h</div><div v-if="l.status === 'declined'" class="meta"><span class="tag red-tag">{{ LEAVE_STATUS.declined }}</span></div></div>
         </button>
       </div>
       <div v-else class="card empty" style="padding: 18px">No leave booked ahead.</div>
@@ -177,7 +208,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
           <button v-for="l in past" :key="l.id" class="list-row" @click="openLeave(l)">
             <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
             <div class="grow"><div class="title">{{ nameOf(l.employeeId) }} · {{ l.type }}</div><div class="meta">{{ range(l) }} {{ l.from.slice(0, 4) }}{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
-            <div class="right"><div class="title num">{{ l.hours }} h</div></div>
+            <div class="right"><div class="title num">{{ l.hours }} h</div><div v-if="l.status === 'declined'" class="meta"><span class="tag red-tag">{{ LEAVE_STATUS.declined }}</span></div></div>
           </button>
         </div>
       </template>

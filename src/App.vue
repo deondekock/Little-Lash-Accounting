@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, onBeforeUnmount } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import HomeView from './views/HomeView.vue'
 import PaymentsView from './views/PaymentsView.vue'
 import ClientsView from './views/ClientsView.vue'
@@ -7,6 +7,10 @@ import TeamView from './views/TeamView.vue'
 import InsightsView from './views/InsightsView.vue'
 import ServicesView from './views/ServicesView.vue'
 import PayrollView from './views/PayrollView.vue'
+import MyLeaveView from './views/staff/MyLeaveView.vue'
+import MyPayslipsView from './views/staff/MyPayslipsView.vue'
+import MyDetailsView from './views/staff/MyDetailsView.vue'
+import MyLeaveModal from './components/MyLeaveModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import LeaveModal from './components/LeaveModal.vue'
@@ -30,14 +34,21 @@ import Icon from './components/Icon.vue'
 import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut } from './store.js'
 import { BACKEND } from './config.js'
 
-const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView }
-const tabs = [
+const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
+  'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyDetailsView }
+const ownerTabs = [
   { id: 'home', label: 'Home', icon: 'home' },
   { id: 'payments', label: 'Payments', icon: 'receipt' },
   { id: 'clients', label: 'Clients', icon: 'heart' },
   { id: 'team', label: 'Team', icon: 'users' },
   { id: 'insights', label: 'Insights', icon: 'chart' },
 ]
+const staffTabs = [
+  { id: 'my-leave', label: 'Leave', icon: 'calendar' },
+  { id: 'my-payslips', label: 'Payslips', icon: 'receipt' },
+  { id: 'my-details', label: 'My details', icon: 'users' },
+]
+const tabs = computed(() => (state.role === 'staff' ? staffTabs : ownerTabs))
 
 // Coming back to the app after a while: pick up changes made on another device.
 function onVisible() {
@@ -58,7 +69,7 @@ const retry = () => location.reload()
     <div class="wrap top-row">
       <div class="wordmark">Little Lash <em>Lounge</em></div>
       <div v-if="state.phase === 'ready'" class="top-actions">
-        <button class="icon-btn" aria-label="History and undo" title="History & undo" @click="openHistory"><Icon name="history" /></button>
+        <button v-if="state.role !== 'staff'" class="icon-btn" aria-label="History and undo" title="History & undo" @click="openHistory"><Icon name="history" /></button>
         <button class="icon-btn" aria-label="Refresh" title="Refresh" @click="refresh"><Icon name="refresh" /></button>
         <button class="avatar-btn" aria-label="Settings" @click="openSettings">{{ (state.email || '•')[0].toUpperCase() }}</button>
       </div>
@@ -106,6 +117,7 @@ const retry = () => location.reload()
   <EmployeeModal v-if="state.modal?.type === 'employee'" :employee="state.modal.data" />
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
+  <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />
   <HistoryModal v-if="state.modal?.type === 'history'" />

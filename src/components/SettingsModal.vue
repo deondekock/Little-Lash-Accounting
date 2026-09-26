@@ -20,6 +20,7 @@ function run(fn) {
           <div class="meta">Signed in with Google</div>
         </div>
       </div>
+      <template v-if="state.role !== 'staff'">
       <a v-if="state.spreadsheetUrl" class="list-row" :href="state.spreadsheetUrl" target="_blank" rel="noopener" style="color: inherit; text-decoration: none">
         <Icon name="external" />
         <div class="grow"><div class="title">Open the Google Sheet</div><div class="meta">All data lives here</div></div>
@@ -48,11 +49,12 @@ function run(fn) {
         <Icon name="swap" />
         <div class="grow"><div class="title">Move data to Cloudflare</div><div class="meta">Copy everything to the new database and compare</div></div>
       </button>
+      </template>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
         <div class="grow"><div class="title">Refresh</div><div class="meta">Load changes made on another phone</div></div>
       </button>
-      <div class="list-row">
+      <div v-if="state.role !== 'staff'" class="list-row">
         <Icon name="calendar" />
         <div class="grow"><div class="title">Months start on day {{ state.monthStartDay }}</div><div v-if="BACKEND === 'sheets'" class="meta">Change it in the sheet's Settings tab</div></div>
       </div>

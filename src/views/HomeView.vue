@@ -58,6 +58,7 @@ const due = computed(() =>
     .sort((a, b) => b.visits - a.visits)
     .slice(0, 5),
 )
+const leaveRequests = computed(() => state.leave.filter((l) => l.status === 'requested'))
 const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${Math.round(d / 7)} weeks ago`)
 </script>
 
@@ -82,6 +83,14 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
 
     <template v-else>
       <TaxNotice />
+      <button v-if="leaveRequests.length" class="card list-row" style="padding: 14px 16px; margin-bottom: 14px; width: 100%" @click="setView('payroll', { payrollTab: 'leave' })">
+        <div class="history-icon">🌴</div>
+        <div class="grow">
+          <div class="title">{{ leaveRequests.length }} leave request{{ leaveRequests.length === 1 ? '' : 's' }} waiting</div>
+          <div class="meta">{{ leaveRequests.map((l) => employeeById(l.employeeId)?.name).filter(Boolean).join(', ') }} · tap to approve or decline</div>
+        </div>
+        <Icon name="right" />
+      </button>
 
       <!-- Hero: this month's takings -->
       <section class="card hero">

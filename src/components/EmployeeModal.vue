@@ -83,6 +83,11 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
         <label for="f-phone">Phone (optional)</label>
         <input id="f-phone" v-model="form.phone" type="tel">
       </div>
+      <div class="field">
+        <label for="f-login">Her Google email, to sign in (optional)</label>
+        <input id="f-login" v-model="pay.loginEmail" type="email" inputmode="email" autocapitalize="off" placeholder="name@gmail.com">
+        <div v-if="pay.loginEmail" class="field-hint">She can sign in to the app with this Google account and see only her own leave, payslips and details.</div>
+      </div>
       <div v-if="editing" class="field">
         <label>Status</label>
         <SegmentedControl v-model="form.status" :options="['Active', 'Inactive']" />

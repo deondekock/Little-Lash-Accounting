@@ -259,6 +259,7 @@ export function leaveSettings(pay = {}) {
  * Returns days and hours.
  */
 export function leaveBalance(emp, leave, onDate) {
+  leave = approvedOnly(leave)
   const pay = emp.pay || {}
   const { perDay, perMonth, perYear } = leaveSettings(pay)
   const start = pay.leaveFrom || pay.engaged || ''
@@ -300,8 +301,12 @@ function cycleOf(engaged, onDate, months) {
   return { from, to: dayBefore(addMonths(engaged, (i + 1) * months)) }
 }
 
+/** Leave that counts: approved (or booked by the owner). Requests still waiting and declined ones don't. */
+export const isApproved = (l) => !l.status || l.status === 'approved'
+const approvedOnly = (leave) => leave.filter(isApproved)
+
 const hoursOf = (leave, empId, type, from, to) =>
-  leave.filter((l) => l.employeeId === empId && l.type === type && l.from >= from && l.from <= to).reduce((s, l) => s + l.hours, 0)
+  approvedOnly(leave).filter((l) => l.employeeId === empId && l.type === type && l.from >= from && l.from <= to).reduce((s, l) => s + l.hours, 0)
 
 /**
  * Sick leave (BCEA s22): 6 weeks of her normal working time per 3-year cycle from the date engaged.
@@ -321,7 +326,7 @@ export function sickBalance(emp, leave, onDate) {
   const before = Number(pay.sickUsed) || 0
   const usedBefore = before && (!pay.leaveFrom || (pay.leaveFrom >= cycle.from && pay.leaveFrom <= cycle.to)) ? before : 0
   const taken = usedBefore + hoursOf(leave, emp.id, 'Sick', cycle.from, onDate)
-  const booked = leave.filter((l) => l.employeeId === emp.id && l.type === 'Sick' && l.from > onDate && l.from <= cycle.to).reduce((s, l) => s + l.hours, 0)
+  const booked = approvedOnly(leave).filter((l) => l.employeeId === emp.id && l.type === 'Sick' && l.from > onDate && l.from <= cycle.to).reduce((s, l) => s + l.hours, 0)
   return { ...cycle, firstSix, entitled, taken: round2(taken), booked: round2(booked), hours: round2(entitled - taken), perDay: set.perDay }
 }
 
@@ -344,7 +349,7 @@ export function familyBalance(emp, leave, onDate) {
 /** Leave taken in a business month (for the payslip). */
 export function leaveInMonth(empId, leave, month, startDay) {
   const r = monthRange(month, startDay)
-  return leave.filter((l) => l.employeeId === empId && l.from >= r.from && l.from <= r.to)
+  return approvedOnly(leave).filter((l) => l.employeeId === empId && l.from >= r.from && l.from <= r.to)
 }
 
 export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Maternity', 'Unpaid']
@@ -366,7 +371,7 @@ export function payDefaults(p = {}) {
     fullName: '', code: '', idNumber: '', address: '', engaged: '', taxNumber: '',
     bankName: '', accountType: '', accountNumber: '', branchCode: '',
     salaryLabel: 'Basic Salary', basic: '', commissionPct: '', commissionOn: 'all', threshold: '', overtimePct: '',
-    leavePerYear: '', hoursPerDay: 8, daysPerWeek: 5, leaveOpening: '', leaveFrom: '', sickUsed: '', owner: false,
+    leavePerYear: '', hoursPerDay: 8, daysPerWeek: 5, leaveOpening: '', leaveFrom: '', sickUsed: '', owner: false, loginEmail: '',
     ...p,
   }
 }

@@ -4,12 +4,12 @@
  * The access token lives about an hour; after that we silently get a new one
  * with prompt=none (no screen shown if she's still signed in to Google).
  */
-import { CLIENT_ID, FAKE_API } from '../config.js'
+import { CLIENT_ID, FAKE_API, BACKEND } from '../config.js'
 
-const SCOPES = [
-  'https://www.googleapis.com/auth/spreadsheets',
-  'https://www.googleapis.com/auth/userinfo.email',
-].join(' ')
+// On Cloudflare the app only needs to know who you are (no access to your Google files).
+const SCOPES = (BACKEND === 'cloudflare'
+  ? ['openid', 'https://www.googleapis.com/auth/userinfo.email']
+  : ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/userinfo.email']).join(' ')
 const KEY = 'llp.auth'
 const STATE_KEY = 'llp.oauthState'
 const SILENT_KEY = 'llp.silentTried'
@@ -58,12 +58,13 @@ export function handleRedirect() {
 
 /** A still-valid access token, or null. */
 export function getToken() {
-  if (FAKE_API) return 'fake-token'
+  // Testing: ?as=<email> signs in as that person (the local Worker accepts "dev:<email>").
+  if (FAKE_API) return new URLSearchParams(location.search).get('as') ? 'dev:' + new URLSearchParams(location.search).get('as') : 'fake-token'
   const a = read()
   return a.token && a.expiresAt - 60_000 > Date.now() ? a.token : null
 }
 
-export const knownEmail = () => (FAKE_API ? 'test@example.com' : read().email || '')
+export const knownEmail = () => (FAKE_API ? new URLSearchParams(location.search).get('as') || 'test@example.com' : read().email || '')
 
 export function rememberEmail(email) {
   write({ ...read(), email })
