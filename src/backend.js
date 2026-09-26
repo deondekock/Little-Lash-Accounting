@@ -116,6 +116,8 @@ function rowToEmployee(r, row) {
     const v = r[6 + i]
     pay[key] = kind === 'date' ? dateText(v) : kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v)) : clean(v)
   })
+  // A leave balance saved without its date: it was her balance when it was saved.
+  if (pay.leaveOpening !== '' && !pay.leaveFrom) pay.leaveFrom = dateText(r[E.UPDATED]).slice(0, 10)
   return {
     id: clean(r[E.ID]),
     name: clean(r[E.NAME]),
@@ -129,6 +131,8 @@ function rowToEmployee(r, row) {
 
 /** Payslip details from the form → cells (numbers as numbers, blanks stay blank). */
 function payCells(pay = {}) {
+  // A leave balance without a date is her balance today.
+  if (pay.leaveOpening !== '' && pay.leaveOpening != null && !pay.leaveFrom) pay = { ...pay, leaveFrom: todayStr() }
   return PAY_FIELDS.map(([key, label, kind]) => {
     const v = pay[key]
     if (kind === 'num') {

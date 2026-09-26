@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
 import { payDefaults, birthDateFromId } from '../lib/payroll.js'
+import { todayStr } from '../lib/format.js'
 
 const props = defineProps({ employee: Object })
 const editing = !!props.employee
@@ -17,6 +18,10 @@ const pay = reactive(payDefaults(props.employee?.pay))
 // Open the payslip section straight away when it's still empty (after the name is in).
 const open = ref(editing && !pay.basic && !pay.idNumber ? 'pay' : '')
 const saving = ref(false)
+// Typing a leave balance: it's her balance today unless she picks another date.
+watch(() => pay.leaveOpening, (v) => {
+  if (v !== '' && v != null && !pay.leaveFrom) pay.leaveFrom = todayStr()
+})
 const nameInput = ref(null)
 
 onMounted(() => !editing && nameInput.value?.focus())
@@ -199,12 +204,12 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
           </div>
           <div class="field">
             <label for="l-from">…on this date</label>
-            <input id="l-from" v-model="pay.leaveFrom" type="date">
+            <input id="l-from" v-model="pay.leaveFrom" type="date" :required="pay.leaveOpening !== '' && pay.leaveOpening != null">
           </div>
         </div>
         <p class="field-hint" style="margin-top: -4px">
           1.25 days a month = 15 days a year (the BCEA minimum for a 5-day week; 1.5 a month for a 6-day week). From this starting balance the app adds the monthly days
-          and takes off annual leave booked in the app.<template v-if="!pay.leaveFrom"> Without a date it counts from the date engaged.</template>
+          and takes off annual leave booked in the app after that date.<template v-if="!pay.leaveFrom"> With no balance it counts from the date engaged.</template>
         </p>
       </div>
 

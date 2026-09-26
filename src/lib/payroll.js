@@ -210,7 +210,7 @@ export function workDays(from, to, days = [1, 2, 3, 4, 5, 6]) {
 }
 
 /**
- * Annual leave for an employee on a date: opening balance (at `leaveFrom`, or the
+ * Annual leave for an employee on a date: opening balance (at `leaveFrom`; with no balance, from the
  * date engaged) + days accrued each month since − annual leave taken since.
  * Returns days and hours.
  */
