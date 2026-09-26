@@ -2,10 +2,15 @@
  * Data layer: the Google Sheet is the database.
  *
  * Tabs (same layout the old Apps Script version created, so existing sheets keep working):
- *   Employees    ID | Name | Phone | Active | Created At | Updated At
+ *   Employees    ID | Name | Phone | Active | Created At | Updated At | payslip details
+ *                (Full Name, Employee Code, ID Number, Address, … Basic Salary, Commission %, leave — see PAY_FIELDS)
  *   Appointments ID | Date | Month | Employee ID | Employee | Client | Service |
- *                Amount | Method | Status | Paid On | Notes | Created At | Updated At
- *   Settings     Setting | Value      ("Month starts on day" → 26 = months run 26th–25th)
+ *                Amount | Method | Status | Paid On | Notes | Created At | Updated At |
+ *                Overtime (minutes done after hours, or "All") | Length (minutes the appointment took)
+ *   Leave        ID | Employee ID | Employee | Type | From | To | Hours | Notes | Created At | Updated At
+ *   Payslips     ID | Employee ID | Employee | Month | Pay Date | Gross | PAYE | UIF | Deductions | Net |
+ *                Details (the whole payslip as JSON) | Created At | Updated At
+ *   Settings     Setting | Value      ("Month starts on day" → 26 = months run 26th–25th; company details for payslips)
  *   Services     ID | Name | Price | Active | Created At | Updated At | Team Prices
  *                (Price = for anyone; Team Prices = JSON { employeeId: price } when someone charges differently)
  *   History      ID | Time | Who | Action | Summary | Undone At | Data 1…10
@@ -28,27 +33,51 @@ const APPOINTMENTS = 'Appointments'
 const SETTINGS = 'Settings'
 const HISTORY = 'History'
 const SERVICES = 'Services'
+const LEAVE = 'Leave'
+const PAYSLIPS = 'Payslips'
 const SERVICE_HEADERS = ['ID', 'Name', 'Price', 'Active', 'Created At', 'Updated At', 'Team Prices']
 const MONTH_START_SETTING = 'Month starts on day'
 
-const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At']
+/** Payslip details kept per employee (Employees tab, after Updated At). */
+const PAY_FIELDS = [
+  ['fullName', 'Full Name'], ['code', 'Employee Code'], ['idNumber', 'ID Number'], ['address', 'Address'],
+  ['engaged', 'Date Engaged', 'date'], ['taxNumber', 'Tax Number'], ['bankName', 'Bank Name'],
+  ['accountType', 'Account Type'], ['accountNumber', 'Account Number'], ['branchCode', 'Branch Code'],
+  ['salaryLabel', 'Salary Label'], ['basic', 'Basic Salary', 'num'], ['commissionPct', 'Commission %', 'num'],
+  ['commissionOn', 'Commission On'], ['threshold', 'Commission Above', 'num'], ['overtimePct', 'Overtime Commission %', 'num'],
+  ['leavePerMonth', 'Leave Days / Month', 'num'], ['hoursPerDay', 'Hours / Day', 'num'],
+  ['leaveOpening', 'Leave Balance (days)', 'num'], ['leaveFrom', 'Leave Balance On', 'date'],
+]
+const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At', ...PAY_FIELDS.map((f) => f[1])]
 const APPOINTMENT_HEADERS = [
   'ID', 'Date', 'Month', 'Employee ID', 'Employee', 'Client', 'Service',
-  'Amount', 'Method', 'Status', 'Paid On', 'Notes', 'Created At', 'Updated At',
+  'Amount', 'Method', 'Status', 'Paid On', 'Notes', 'Created At', 'Updated At', 'Overtime', 'Length (min)',
+]
+const LEAVE_HEADERS = ['ID', 'Employee ID', 'Employee', 'Type', 'From', 'To', 'Hours', 'Notes', 'Created At', 'Updated At']
+const PAYSLIP_HEADERS = ['ID', 'Employee ID', 'Employee', 'Month', 'Pay Date', 'Gross', 'PAYE', 'UIF', 'Deductions', 'Net', 'Details', 'Created At', 'Updated At']
+export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Unpaid']
+/** Company details for payslips (rows in the Settings tab). */
+const COMPANY_FIELDS = [
+  ['name', 'Company Name'], ['type', 'Company Type'], ['registration', 'Registration Number'],
+  ['address', 'Company Address'], ['payeRef', 'PAYE Reference'], ['uifRef', 'UIF Reference'],
 ]
 const HISTORY_HEADERS = ['ID', 'Time', 'Who', 'Action', 'Summary', 'Undone At',
   ...Array.from({ length: 10 }, (_, i) => `Data ${i + 1}`)]
-const HEADERS = { [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS, [SERVICES]: SERVICE_HEADERS }
-const LAST_COL = { [EMPLOYEES]: 'F', [APPOINTMENTS]: 'N', [SETTINGS]: 'B', [HISTORY]: 'P', [SERVICES]: 'G' }
-const TABS = [EMPLOYEES, APPOINTMENTS, SERVICES, SETTINGS, HISTORY]
+const HEADERS = {
+  [EMPLOYEES]: EMPLOYEE_HEADERS, [APPOINTMENTS]: APPOINTMENT_HEADERS, [SETTINGS]: ['Setting', 'Value'], [HISTORY]: HISTORY_HEADERS,
+  [SERVICES]: SERVICE_HEADERS, [LEAVE]: LEAVE_HEADERS, [PAYSLIPS]: PAYSLIP_HEADERS,
+}
+const colLetter = (n) => (n > 26 ? colLetter(Math.floor((n - 1) / 26)) : '') + String.fromCharCode(65 + ((n - 1) % 26))
+const LAST_COL = Object.fromEntries(Object.entries(HEADERS).map(([t, h]) => [t, colLetter(h.length)]))
+const TABS = [EMPLOYEES, APPOINTMENTS, SERVICES, LEAVE, PAYSLIPS, SETTINGS, HISTORY]
 /** History keys → tab (the rows each change touched, by kind). */
-const KIND_TAB = { appts: APPOINTMENTS, emps: EMPLOYEES, svcs: SERVICES }
+const KIND_TAB = { appts: APPOINTMENTS, emps: EMPLOYEES, svcs: SERVICES, leave: LEAVE, pays: PAYSLIPS }
 const CHUNK = 45000 // a cell holds up to 50,000 characters
 
 // Zero-based column indexes.
 const A = {
   ID: 0, DATE: 1, MONTH: 2, EMPLOYEE_ID: 3, EMPLOYEE: 4, CLIENT: 5, SERVICE: 6,
-  AMOUNT: 7, METHOD: 8, STATUS: 9, PAID_ON: 10, NOTES: 11, CREATED: 12, UPDATED: 13,
+  AMOUNT: 7, METHOD: 8, STATUS: 9, PAID_ON: 10, NOTES: 11, CREATED: 12, UPDATED: 13, OVERTIME: 14, LENGTH: 15,
 }
 const E = { ID: 0, NAME: 1, PHONE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5 }
 const S = { ID: 0, NAME: 1, PRICE: 2, ACTIVE: 3, CREATED: 4, UPDATED: 5, PRICES: 6 }
@@ -61,6 +90,9 @@ const db = {
   employees: [], // { id, name, phone, active, row, raw }
   services: [], // { id, name, price, active, row, raw }
   appts: [], // { ...appointment, row, raw }
+  leave: [], // { id, employeeId, type, from, to, hours, notes, row, raw }
+  payslips: [], // { id, employeeId, month, payDate, net, details, row, raw }
+  company: {},
 }
 
 /* ---------------- helpers ---------------- */
@@ -79,14 +111,39 @@ function dateText(v) {
 
 function rowToEmployee(r, row) {
   const active = r[E.ACTIVE]
+  const pay = {}
+  PAY_FIELDS.forEach(([key, , kind], i) => {
+    const v = r[6 + i]
+    pay[key] = kind === 'date' ? dateText(v) : kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v)) : clean(v)
+  })
   return {
     id: clean(r[E.ID]),
     name: clean(r[E.NAME]),
     phone: clean(r[E.PHONE]),
     active: active === true || String(active).toUpperCase() === 'TRUE',
+    pay,
     row,
     raw: r,
   }
+}
+
+/** Payslip details from the form → cells (numbers as numbers, blanks stay blank). */
+function payCells(pay = {}) {
+  return PAY_FIELDS.map(([key, label, kind]) => {
+    const v = pay[key]
+    if (kind === 'num') {
+      if (v === '' || v == null) return ''
+      const n = parseFloat(String(v).replace(',', '.'))
+      if (!Number.isFinite(n) || n < 0) throw new Error(`Please check "${label}".`)
+      return n
+    }
+    if (kind === 'date') {
+      const d = clean(v)
+      if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error(`Please check "${label}".`)
+      return d
+    }
+    return String(v ?? '').replace(/\r/g, '').trim()
+  })
 }
 
 function rowToAppointment(r, row) {
@@ -104,15 +161,48 @@ function rowToAppointment(r, row) {
     status: clean(r[A.STATUS]) === 'Paid' ? 'Paid' : 'Unpaid',
     paidOn: dateText(r[A.PAID_ON]),
     notes: clean(r[A.NOTES]),
+    overtime: overtimeValue(r[A.OVERTIME]),
+    length: Number(r[A.LENGTH]) > 0 ? Number(r[A.LENGTH]) : 0,
     row,
     raw: r,
   }
 }
 
+/** Overtime cell → 0 (none), minutes, or 'all'. */
+function overtimeValue(v) {
+  if (String(v ?? '').trim().toLowerCase() === 'all') return 'all'
+  const n = Number(v)
+  return n > 0 ? n : 0
+}
+
 function appointmentToRow(a, created, updated) {
   return [a.id, a.date, a.month, a.employeeId, a.employeeName, a.client, a.service,
-    a.amount, a.method, a.status, a.paidOn, a.notes, created, updated]
+    a.amount, a.method, a.status, a.paidOn, a.notes, created, updated,
+    a.overtime === 'all' ? 'All' : a.overtime || '', a.overtime && a.length ? a.length : '']
 }
+
+function rowToLeave(r, row) {
+  return {
+    id: clean(r[0]), employeeId: clean(r[1]), employeeName: clean(r[2]),
+    type: LEAVE_TYPES.includes(clean(r[3])) ? clean(r[3]) : 'Annual',
+    from: dateText(r[4]), to: dateText(r[5]) || dateText(r[4]),
+    hours: Number(r[6]) || 0, notes: clean(r[7]), row, raw: r,
+  }
+}
+
+function rowToPayslip(r, row) {
+  let details = null
+  try { details = JSON.parse(r[10] || 'null') } catch { details = null }
+  return {
+    id: clean(r[0]), employeeId: clean(r[1]), employeeName: clean(r[2]), month: dateText(r[3]).slice(0, 7),
+    payDate: dateText(r[4]), gross: Number(r[5]) || 0, paye: Number(r[6]) || 0, uif: Number(r[7]) || 0,
+    deductions: Number(r[8]) || 0, net: Number(r[9]) || 0, details, updatedAt: clean(r[12]), row, raw: r,
+  }
+}
+
+const strip = ({ row, raw, ...x }) => x
+const publicLeave = () => db.leave.map(strip).sort((a, b) => (a.from < b.from ? 1 : -1))
+const publicPayslips = () => db.payslips.map(strip)
 
 /** Public copy (no sheet internals), with the employee's current name. */
 function publicAppt(a) {
@@ -159,7 +249,7 @@ function publicServices() {
   return db.services.map(({ row, raw, ...s }) => s).sort((a, b) => a.name.localeCompare(b.name))
 }
 
-const listFor = (tab) => ({ [APPOINTMENTS]: db.appts, [EMPLOYEES]: db.employees, [SERVICES]: db.services })[tab]
+const listFor = (tab) => ({ [APPOINTMENTS]: db.appts, [EMPLOYEES]: db.employees, [SERVICES]: db.services, [LEAVE]: db.leave, [PAYSLIPS]: db.payslips })[tab]
 
 function publicEmployees() {
   return db.employees
@@ -337,7 +427,7 @@ export function rollback(entryId) {
     if (!toUndo.length) throw new Error('That change has already been undone.')
 
     // Newest → oldest, so the oldest entry's "before" wins for each row.
-    const wanted = { appts: {}, emps: {}, svcs: {} }
+    const wanted = Object.fromEntries(Object.keys(KIND_TAB).map((k) => [k, {}]))
     for (const e of span) {
       let d
       try { d = JSON.parse(e.data || '{}') } catch { d = { tooBig: true } }
@@ -350,7 +440,7 @@ export function rollback(entryId) {
       const list = listFor(KIND_TAB[kind])
       now[kind] = Object.fromEntries(Object.keys(wanted[kind]).map((id) => [id, list.find((x) => x.id === id)?.raw ?? null]))
     }
-    for (const kind of ['appts', 'svcs', 'emps']) await applyState(KIND_TAB[kind], wanted[kind])
+    for (const kind of ['appts', 'svcs', 'leave', 'pays', 'emps']) await applyState(KIND_TAB[kind], wanted[kind])
     const stamp = new Date().toISOString()
     await sheetsApi(`/${db.id}/values:batchUpdate`, {
       method: 'POST',
@@ -388,24 +478,37 @@ async function ensureTabs(meta) {
 }
 
 async function load() {
+  const DATA = [EMPLOYEES, APPOINTMENTS, SERVICES, LEAVE, PAYSLIPS]
   const res = await sheetsApi(`/${db.id}/values:batchGet`, {
     query: {
-      ranges: [range(EMPLOYEES, 'A2:F'), range(APPOINTMENTS, 'A2:N'), range(SETTINGS, 'A2:B'), range(SERVICES, 'A2:G'), range(SERVICES, 'G1')],
+      ranges: [
+        ...DATA.map((t) => range(t, `A2:${LAST_COL[t]}`)),
+        range(SETTINGS, 'A2:B'),
+        ...DATA.map((t) => range(t, `A1:${LAST_COL[t]}1`)),
+      ],
       valueRenderOption: 'UNFORMATTED_VALUE',
       dateTimeRenderOption: 'SERIAL_NUMBER',
     },
   })
-  const [emps, appts, settings, services, svcHeader] = res.valueRanges.map((vr) => vr.values || [])
-  // Sheets made before per-person prices: add the column header.
-  if (!svcHeader[0]?.[0]) {
-    await sheetsApi(`/${db.id}/values/${enc(range(SERVICES, 'G1'))}`, { method: 'PUT', query: { valueInputOption: 'RAW' }, body: { values: [['Team Prices']] } })
+  const vals = res.valueRanges.map((vr) => vr.values || [])
+  const [emps, appts, services, leave, payslips, settings] = vals
+  // Sheets made by an older version: add the newer column headers.
+  const fix = DATA.filter((t, i) => (vals[6 + i][0] || []).length < HEADERS[t].length)
+  if (fix.length) {
+    await sheetsApi(`/${db.id}/values:batchUpdate`, {
+      method: 'POST', body: { valueInputOption: 'RAW', data: fix.map((t) => ({ range: range(t, 'A1'), values: [HEADERS[t]] })) },
+    })
   }
-  db.services = services.map((r, i) => (clean(r[0]) ? rowToService(r, i + 2) : null)).filter(Boolean)
-  db.employees = emps.map((r, i) => (clean(r[0]) ? rowToEmployee(r, i + 2) : null)).filter(Boolean)
-  db.appts = appts.map((r, i) => (clean(r[0]) ? rowToAppointment(r, i + 2) : null)).filter(Boolean)
-  const start = settings.find((r) => clean(r[0]).toLowerCase() === MONTH_START_SETTING.toLowerCase())
-  const day = parseInt(start?.[1], 10)
+  const rows = (list, fn) => list.map((r, i) => (clean(r[0]) ? fn(r, i + 2) : null)).filter(Boolean)
+  db.services = rows(services, rowToService)
+  db.employees = rows(emps, rowToEmployee)
+  db.appts = rows(appts, rowToAppointment)
+  db.leave = rows(leave, rowToLeave)
+  db.payslips = rows(payslips, rowToPayslip)
+  const setting = (name) => settings.find((r) => clean(r[0]).toLowerCase() === name.toLowerCase())?.[1]
+  const day = parseInt(setting(MONTH_START_SETTING), 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
+  db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(setting(label) ?? '').trim()]))
 }
 
 /** Opens a sheet by link or ID, adding missing tabs, and loads everything. */
@@ -447,7 +550,10 @@ export const reload = () => serial(load)
 /* ---------------- API used by the store ---------------- */
 
 export function getInitialData() {
-  return { employees: publicEmployees(), services: publicServices(), spreadsheetUrl: db.url, monthStartDay: db.startDay }
+  return {
+    employees: publicEmployees(), services: publicServices(), spreadsheetUrl: db.url, monthStartDay: db.startDay,
+    leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
+  }
 }
 
 /** period: 'YYYY-MM' (one business month) or 'YYYY' (a year). */
@@ -473,6 +579,8 @@ function validateAppointment(input) {
     method: input.method,
     status: input.status === 'Paid' ? 'Paid' : 'Unpaid',
     notes: clean(input.notes),
+    overtime: overtimeValue(input.overtime),
+    length: Number(input.length) > 0 ? Math.round(Number(input.length)) : 0,
   }
 }
 
@@ -589,16 +697,17 @@ export function saveEmployee(input) {
     if (input.id) {
       const emp = db.employees.find((e) => e.id === input.id)
       if (!emp) throw new StaleError('Employee not found.')
+      const pay = payCells(input.pay || emp.pay)
       await locateRows(EMPLOYEES, [emp])
       const before = [...emp.raw]
-      const values = [emp.id, name, phone, input.active !== false, emp.raw[E.CREATED] ?? now, now]
+      const values = [emp.id, name, phone, input.active !== false, emp.raw[E.CREATED] ?? now, now, ...pay]
       await writeRow(EMPLOYEES, emp.row, values)
       const renamed = emp.name !== name
-      Object.assign(emp, { name, phone, active: input.active !== false, raw: values })
+      Object.assign(emp, rowToEmployee(values, emp.row))
       const apptsBefore = renamed ? await renameInAppointments(emp.id, name) : {}
       await logChange('team', `Updated team member ${name}`, { emps: { [emp.id]: before }, appts: apptsBefore })
     } else {
-      const values = [uuid(), name, phone, true, now, now]
+      const values = [uuid(), name, phone, true, now, now, ...payCells(input.pay)]
       const row = await appendRow(EMPLOYEES, values)
       db.employees.push(rowToEmployee(values, row))
       await logChange('team', `Added team member ${name}`, { emps: { [values[0]]: null } })
@@ -777,4 +886,113 @@ export function importServices(items) {
     await logChange('services', `Added ${rows.length} past services to the list, linked to the team`, { svcs: Object.fromEntries(rows.map((r) => [r[0], null])) })
     return { services: publicServices(), added: rows.length }
   }))
+}
+
+/* ---------------- leave & payslips ---------------- */
+
+/** Adds (no id) or replaces a row in a simple tab, logging it for undo. Returns the saved record. */
+async function upsertRow(tab, kind, list, id, makeValues, toRecord, summary) {
+  const now = new Date().toISOString()
+  const existing = id ? list().find((x) => x.id === id) : null
+  if (id && !existing) throw new StaleError('That was changed on another device.')
+  if (existing) {
+    await locateRows(tab, [existing])
+    const before = [...existing.raw]
+    const values = makeValues(existing.id, existing.raw[HEADERS[tab].length - 2] || now, now)
+    await writeRow(tab, existing.row, values)
+    Object.assign(existing, toRecord(values, existing.row))
+    await logChange(kind, summary, { [kind]: { [existing.id]: before } })
+    return strip(existing)
+  }
+  const values = makeValues(uuid(), now, now)
+  const row = await appendRow(tab, values)
+  const rec = toRecord(values, row)
+  list().push(rec)
+  await logChange(kind, summary, { [kind]: { [rec.id]: null } })
+  return strip(rec)
+}
+
+async function removeRow(tab, kind, key, id, summary) {
+  const item = db[key].find((x) => x.id === id)
+  if (!item) return
+  await locateRows(tab, [item])
+  await deleteRow(tab, item.row)
+  db[key] = db[key].filter((x) => x !== item)
+  shiftRowsAfter(db[key], item.row)
+  await logChange(kind, summary(item), { [kind]: { [item.id]: [...item.raw] } })
+}
+
+const ddmm = (d) => (d ? `${d.slice(8)}/${d.slice(5, 7)}` : '')
+
+/** Books (or edits) leave: { id?, employeeId, type, from, to, hours, notes }. */
+export function saveLeave(input) {
+  return serial(() => guarded(async () => {
+    const emp = db.employees.find((e) => e.id === input.employeeId)
+    if (!emp) throw new Error('Please choose who is taking leave.')
+    const from = clean(input.from)
+    const to = clean(input.to) || from
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || to < from) throw new Error('Please choose valid dates.')
+    const hours = Math.round(parseFloat(String(input.hours).replace(',', '.')) * 100) / 100
+    if (!(hours > 0)) throw new Error('Please enter the hours of leave.')
+    const type = LEAVE_TYPES.includes(input.type) ? input.type : 'Annual'
+    const summary = `${input.id ? 'Changed' : 'Booked'} ${type.toLowerCase()} leave · ${emp.name} · ${ddmm(from)}${to !== from ? '–' + ddmm(to) : ''} · ${hours} h`
+    await upsertRow(LEAVE, 'leave', () => db.leave, input.id,
+      (id, created, now) => [id, emp.id, emp.name, type, from, to, hours, clean(input.notes), created, now], rowToLeave, summary)
+    return publicLeave()
+  }))
+}
+
+export function deleteLeave(id) {
+  return serial(() => guarded(async () => {
+    await removeRow(LEAVE, 'leave', 'leave', id, (l) => `Removed ${l.type.toLowerCase()} leave · ${l.employeeName} · ${ddmm(l.from)}`)
+    return publicLeave()
+  }))
+}
+
+/** Saves a payslip (one per employee per month; saving again replaces it). */
+export function savePayslip(slip) {
+  return serial(() => guarded(async () => {
+    const emp = db.employees.find((e) => e.id === slip.employeeId)
+    if (!emp) throw new Error('Employee not found.')
+    const existing = db.payslips.find((p) => p.employeeId === slip.employeeId && p.month === slip.month)
+    const otherDed = slip.deductions.filter((d) => d.label !== 'PAYE' && d.label !== 'UIF').reduce((s, d) => s + d.amount, 0)
+    const pick = (label) => slip.deductions.find((d) => d.label === label)?.amount || 0
+    const summary = `${existing ? 'Updated' : 'Made'} payslip · ${emp.name} · ${slip.month} · net ${fmt0(slip.net)}`
+    const saved = await upsertRow(PAYSLIPS, 'pays', () => db.payslips, existing?.id,
+      (id, created, now) => [id, emp.id, emp.name, slip.month, slip.payDate, slip.gross, pick('PAYE'), pick('UIF'), Math.round(otherDed * 100) / 100, slip.net,
+        JSON.stringify({ ...slip, id }), created, now],
+      rowToPayslip, summary)
+    return { saved, payslips: publicPayslips() }
+  }))
+}
+
+export function deletePayslip(id) {
+  return serial(() => guarded(async () => {
+    await removeRow(PAYSLIPS, 'pays', 'payslips', id, (p) => `Deleted payslip · ${p.employeeName} · ${p.month}`)
+    return publicPayslips()
+  }))
+}
+
+/** Saves the company details shown on payslips (Settings tab). */
+export function saveCompany(company) {
+  return serial(async () => {
+    const res = await sheetsApi(`/${db.id}/values/${enc(range(SETTINGS, 'A2:B'))}`)
+    const rows = res.values || []
+    const data = []
+    const appends = []
+    for (const [key, label] of COMPANY_FIELDS) {
+      const value = String(company[key] ?? '').replace(/\r/g, '').trim()
+      const i = rows.findIndex((r) => clean(r[0]).toLowerCase() === label.toLowerCase())
+      if (i >= 0) data.push({ range: range(SETTINGS, `B${i + 2}`), values: [[value]] })
+      else appends.push([label, value])
+    }
+    if (data.length) await sheetsApi(`/${db.id}/values:batchUpdate`, { method: 'POST', body: { valueInputOption: 'RAW', data } })
+    if (appends.length) {
+      await sheetsApi(`/${db.id}/values/${enc(range(SETTINGS, 'A:B'))}:append`, {
+        method: 'POST', query: { valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS' }, body: { values: appends },
+      })
+    }
+    db.company = Object.fromEntries(COMPANY_FIELDS.map(([key]) => [key, String(company[key] ?? '').trim()]))
+    return { ...db.company }
+  })
 }

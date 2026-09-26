@@ -2,12 +2,13 @@
 import { computed } from 'vue'
 import Icon from './Icon.vue'
 import { METHODS, fmt } from '../lib/format.js'
+import { overtimeLabel } from '../lib/payroll.js'
 import { state, updateMany, openAppointment, employeeColor, toastUndo } from '../store.js'
 
 const props = defineProps({ appt: { type: Object, required: true } })
 
 const meta = computed(() =>
-  [props.appt.service, props.appt.notes, props.appt.status === 'Paid' && props.appt.paidOn ? 'paid ' + props.appt.paidOn : '']
+  [overtimeLabel(props.appt) && '⏰ ' + overtimeLabel(props.appt), props.appt.service, props.appt.notes, props.appt.status === 'Paid' && props.appt.paidOn ? 'paid ' + props.appt.paidOn : '']
     .filter(Boolean)
     .join(' · '),
 )

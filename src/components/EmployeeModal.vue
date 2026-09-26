@@ -1,8 +1,9 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
+import { payDefaults, birthDateFromId } from '../lib/payroll.js'
 
 const props = defineProps({ employee: Object })
 const editing = !!props.employee
@@ -12,10 +13,24 @@ const form = reactive({
   phone: props.employee?.phone || '',
   status: props.employee?.active === false ? 'Inactive' : 'Active',
 })
+const pay = reactive(payDefaults(props.employee?.pay))
+// Open the payslip section straight away when it's still empty (after the name is in).
+const open = ref(editing && !pay.basic && !pay.idNumber ? 'pay' : '')
 const saving = ref(false)
 const nameInput = ref(null)
 
 onMounted(() => !editing && nameInput.value?.focus())
+
+const COMMISSION_ON = [
+  { value: 'all', label: 'All her takings' },
+  { value: 'aboveBasic', label: 'Takings above her basic salary' },
+  { value: 'above', label: 'Takings above a set amount' },
+]
+const birth = computed(() => {
+  const b = birthDateFromId(pay.idNumber)
+  return b ? new Date(b + 'T12:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+})
+const idWarning = computed(() => pay.idNumber && pay.idNumber.replace(/\D/g, '').length !== 13)
 
 async function submit() {
   saving.value = true
@@ -25,6 +40,7 @@ async function submit() {
       name: form.name,
       phone: form.phone,
       active: form.status === 'Active',
+      pay: { ...pay },
     })
     closeModal()
     toastUndo(editing ? 'Saved' : 'Employee added')
@@ -45,6 +61,7 @@ async function remove() {
     fail(err)
   }
 }
+const toggle = (id) => (open.value = open.value === id ? '' : id)
 </script>
 
 <template>
@@ -62,6 +79,135 @@ async function remove() {
         <label>Status</label>
         <SegmentedControl v-model="form.status" :options="['Active', 'Inactive']" />
       </div>
+
+      <button type="button" class="fold" :aria-expanded="open === 'pay'" @click="toggle('pay')">
+        <span><b>Pay</b><small>Basic salary, commission, overtime</small></span><span class="chev">{{ open === 'pay' ? '−' : '+' }}</span>
+      </button>
+      <div v-if="open === 'pay'" class="fold-body">
+        <div class="row2">
+          <div class="field">
+            <label for="p-label">Salary shown as</label>
+            <input id="p-label" v-model="pay.salaryLabel" list="salary-labels" placeholder="Basic Salary">
+            <datalist id="salary-labels"><option>Basic Salary</option><option>Salary</option><option>Cost to Company</option></datalist>
+          </div>
+          <div class="field">
+            <label for="p-basic">Amount per month (R)</label>
+            <input id="p-basic" v-model="pay.basic" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="p-comm">Commission %</label>
+            <input id="p-comm" v-model="pay.commissionPct" type="number" inputmode="decimal" step="0.1" min="0" max="100" placeholder="e.g. 20">
+          </div>
+          <div class="field">
+            <label for="p-ot">Overtime commission %</label>
+            <input id="p-ot" v-model="pay.overtimePct" type="number" inputmode="decimal" step="0.1" min="0" max="100" :placeholder="pay.commissionPct ? `same (${pay.commissionPct})` : 'e.g. 50'">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-on">Commission is paid on</label>
+          <select id="p-on" v-model="pay.commissionOn">
+            <option v-for="o in COMMISSION_ON" :key="o.value" :value="o.value">{{ o.label }}</option>
+          </select>
+        </div>
+        <div v-if="pay.commissionOn === 'above'" class="field">
+          <label for="p-thr">Commission starts above (R)</label>
+          <input id="p-thr" v-model="pay.threshold" type="number" inputmode="decimal" step="0.01" min="0">
+        </div>
+        <p class="field-hint" style="margin-top: -4px">
+          Work done in overtime earns the overtime % instead of the normal %. Mark it on each appointment.
+        </p>
+      </div>
+
+      <button type="button" class="fold" :aria-expanded="open === 'details'" @click="toggle('details')">
+        <span><b>Payslip details</b><small>ID, tax number, address, bank</small></span><span class="chev">{{ open === 'details' ? '−' : '+' }}</span>
+      </button>
+      <div v-if="open === 'details'" class="fold-body">
+        <div class="field">
+          <label for="p-full">Full name</label>
+          <input id="p-full" v-model="pay.fullName" :placeholder="form.name">
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="p-code">Employee number</label>
+            <input id="p-code" v-model="pay.code" placeholder="EMP01">
+          </div>
+          <div class="field">
+            <label for="p-engaged">Date engaged</label>
+            <input id="p-engaged" v-model="pay.engaged" type="date">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="p-id">ID number</label>
+            <input id="p-id" v-model="pay.idNumber" inputmode="numeric">
+            <div v-if="idWarning" class="field-hint orange">An SA ID number has 13 digits</div>
+            <div v-else-if="birth" class="field-hint">Born {{ birth }}</div>
+          </div>
+          <div class="field">
+            <label for="p-tax">SARS tax number</label>
+            <input id="p-tax" v-model="pay.taxNumber" inputmode="numeric">
+          </div>
+        </div>
+        <div class="field">
+          <label for="p-addr">Address</label>
+          <textarea id="p-addr" v-model="pay.address" rows="4" placeholder="Street&#10;Suburb&#10;City&#10;Postal code" />
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="p-bank">Bank</label>
+            <input id="p-bank" v-model="pay.bankName" list="banks">
+            <datalist id="banks"><option>Capitec</option><option>FNB</option><option>ABSA</option><option>Standard Bank</option><option>Nedbank</option><option>TymeBank</option><option>Discovery Bank</option><option>African Bank</option></datalist>
+          </div>
+          <div class="field">
+            <label for="p-type">Account type</label>
+            <input id="p-type" v-model="pay.accountType" list="acc-types">
+            <datalist id="acc-types"><option>Savings</option><option>Cheque</option><option>Transmission</option></datalist>
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="p-acc">Account number</label>
+            <input id="p-acc" v-model="pay.accountNumber" inputmode="numeric">
+          </div>
+          <div class="field">
+            <label for="p-branch">Branch code</label>
+            <input id="p-branch" v-model="pay.branchCode" inputmode="numeric">
+          </div>
+        </div>
+      </div>
+
+      <button type="button" class="fold" :aria-expanded="open === 'leave'" @click="toggle('leave')">
+        <span><b>Annual leave</b><small>{{ pay.leavePerMonth || 0 }} days a month · {{ pay.hoursPerDay || 8 }} h a day</small></span><span class="chev">{{ open === 'leave' ? '−' : '+' }}</span>
+      </button>
+      <div v-if="open === 'leave'" class="fold-body">
+        <div class="row2">
+          <div class="field">
+            <label for="l-month">Days earned per month</label>
+            <input id="l-month" v-model="pay.leavePerMonth" type="number" inputmode="decimal" step="0.01" min="0">
+          </div>
+          <div class="field">
+            <label for="l-hours">Hours in a work day</label>
+            <input id="l-hours" v-model="pay.hoursPerDay" type="number" inputmode="decimal" step="0.25" min="1" max="24">
+          </div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label for="l-open">Leave days she had…</label>
+            <input id="l-open" v-model="pay.leaveOpening" type="number" inputmode="decimal" step="0.01" placeholder="0">
+          </div>
+          <div class="field">
+            <label for="l-from">…on this date</label>
+            <input id="l-from" v-model="pay.leaveFrom" type="date">
+          </div>
+        </div>
+        <p class="field-hint" style="margin-top: -4px">
+          1.25 days a month = 15 days a year (the BCEA minimum for a 5-day week; 1.5 a month for a 6-day week). From this starting balance the app adds the monthly days
+          and takes off annual leave booked in the app.<template v-if="!pay.leaveFrom"> Without a date it counts from the date engaged.</template>
+        </p>
+      </div>
+
       <div class="modal-actions">
         <button v-if="editing" type="button" class="btn danger" @click="remove">Delete</button>
         <button type="button" class="btn ghost" @click="closeModal">Cancel</button>

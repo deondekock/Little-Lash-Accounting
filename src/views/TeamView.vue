@@ -3,6 +3,8 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
 import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow } from '../store.js'
+import { leaveBalance, payDefaults } from '../lib/payroll.js'
+import { todayStr } from '../lib/format.js'
 import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
 
 const showInactive = ref(false)
@@ -23,6 +25,7 @@ const members = computed(() =>
         clients,
         trend: months.value.map((m) => byMonth.get(m) || 0),
         lifetime: mine.length,
+        leave: leaveBalance({ ...e, pay: payDefaults(e.pay) }, state.leave, todayStr()),
         since: mine.length ? mine.reduce((m, a) => (a.date < m ? a.date : m), mine[0].date).slice(0, 4) : '',
       }
     })
@@ -57,6 +60,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
           <div class="grow">
             <div class="name">{{ m.name }}<span v-if="!m.active" class="tag">inactive</span></div>
             <div class="role">{{ m.lifetime.toLocaleString('en-ZA') }} appointments<template v-if="m.since"> since {{ m.since }}</template></div>
+            <button v-if="m.active && m.leave.start" class="role link-btn" style="padding: 0; font-size: 12.5px" @click="setView('payroll', { payrollTab: 'leave' })">🌴 {{ m.leave.hours }} h leave ({{ m.leave.days }} days)</button>
           </div>
           <button class="btn small ghost" @click="openEmployee(m)">Edit</button>
         </div>
@@ -80,7 +84,17 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
       </div>
     </div>
 
-    <button class="card list-row" style="margin-top: 14px; padding: 16px" @click="setView('services')">
+    <button class="card list-row" style="margin-top: 14px; padding: 16px" @click="setView('payroll', { payrollTab: 'payslips' })">
+      <div class="history-icon"><Icon name="wallet" :size="16" /></div>
+      <div class="grow"><div class="title">Payslips</div><div class="meta">Salary, commission, overtime, PAYE &amp; UIF</div></div>
+      <Icon name="right" />
+    </button>
+    <button class="card list-row" style="margin-top: 10px; padding: 16px" @click="setView('payroll', { payrollTab: 'leave' })">
+      <div class="history-icon"><Icon name="calendar" :size="16" /></div>
+      <div class="grow"><div class="title">Leave</div><div class="meta">Book leave and see who has how much left</div></div>
+      <Icon name="right" />
+    </button>
+    <button class="card list-row" style="margin-top: 10px; padding: 16px" @click="setView('services')">
       <div class="history-icon"><Icon name="sparkle" :size="16" /></div>
       <div class="grow"><div class="title">Services &amp; prices</div><div class="meta">Add, rename or merge services and set prices</div></div>
       <Icon name="right" />

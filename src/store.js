@@ -1,6 +1,6 @@
-import { reactive, computed, shallowRef } from 'vue'
+import { reactive, computed, shallowRef, nextTick } from 'vue'
 import { call } from './api.js'
-import { currentMonth, todayStr } from './lib/format.js'
+import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow } from './lib/stats.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API } from './config.js'
 import * as auth from './google/auth.js'
@@ -24,8 +24,12 @@ export const state = reactive({
   email: '',
   loadedAt: 0,
   pending: 0,
-  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services'
+  view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services' | 'payroll'
+  payrollTab: 'payslips', // Payroll view: 'payslips' | 'leave'
   employees: [],
+  leave: [], // booked leave (Leave tab)
+  payslips: [], // saved payslips (Payslips tab)
+  company: {}, // company details for payslips (Settings tab)
   services: [], // her service list (Services tab)
   spreadsheetUrl: '',
   monthStartDay: 1, // from the sheet's Settings tab; 26 → "July" = 26 Jun – 25 Jul
@@ -38,6 +42,7 @@ export const state = reactive({
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
   toast: null, // { msg, error, action }
   history: null, // History entries (loaded when the History sheet opens)
+  printing: null, // payslips being printed / saved as PDF
 })
 
 /**
@@ -156,10 +161,8 @@ export async function openSheet(idOrUrl) {
     const id = await api('openSheet', idOrUrl)
     savedSheetId(id)
     const data = await api('getInitialData')
-    state.employees = data.employees
-    state.services = data.services || []
+    applyData(data)
     state.spreadsheetUrl = data.spreadsheetUrl
-    state.monthStartDay = data.monthStartDay || 1
     state.month = currentMonth(state.monthStartDay)
     state.year = Number(state.month.slice(0, 4))
     await loadAll()
@@ -192,16 +195,22 @@ export function useDifferentSheet() {
 export async function refresh() {
   try {
     await api('reload')
-    const data = await api('getInitialData')
-    state.employees = data.employees
-    state.services = data.services || []
-    state.monthStartDay = data.monthStartDay || 1
+    applyData(await api('getInitialData'))
     await loadAll()
     state.loadedAt = Date.now()
     toast('Up to date')
   } catch (err) {
     fail(err)
   }
+}
+
+function applyData(data) {
+  state.employees = data.employees
+  state.services = data.services || []
+  state.monthStartDay = data.monthStartDay || 1
+  state.leave = data.leave || []
+  state.payslips = data.payslips || []
+  state.company = data.company || {}
 }
 
 async function loadAll() {
@@ -228,6 +237,7 @@ export function setView(view, opts = {}) {
   if (opts.status) state.status = opts.status
   if (opts.month) state.month = opts.month
   if (opts.clientFilter) state.clientFilter = opts.clientFilter
+  if (opts.payrollTab) state.payrollTab = opts.payrollTab
   if (view === 'insights') state.year = Number(state.month.slice(0, 4))
   state.selected.clear()
   window.scrollTo({ top: 0 })
@@ -339,9 +349,7 @@ export async function loadHistory() {
 export async function rollbackTo(entryId) {
   try {
     const n = await api('rollback', entryId)
-    const data = await api('getInitialData')
-    state.employees = data.employees
-    state.services = data.services || []
+    applyData(await api('getInitialData'))
     await loadAll()
     if (state.modal?.type === 'history') await loadHistory()
     toastUndo(n === 1 ? 'Undone' : `Undid ${n} changes`)
@@ -365,6 +373,50 @@ export async function saveEmployee(payload) {
 export async function deleteEmployee(id) {
   state.employees = await api('deleteEmployee', id)
   if (state.employee === id) state.employee = 'all'
+}
+
+/* ---------------- payroll & leave ---------------- */
+
+export async function saveLeave(input) {
+  state.leave = await api('saveLeave', input)
+}
+
+export async function deleteLeave(id) {
+  state.leave = await api('deleteLeave', id)
+}
+
+export async function savePayslip(slip) {
+  const res = await api('savePayslip', slip)
+  state.payslips = res.payslips
+  return res.saved
+}
+
+export async function deletePayslip(id) {
+  state.payslips = await api('deletePayslip', id)
+}
+
+export async function saveCompany(company) {
+  state.company = await api('saveCompany', company)
+}
+
+export const openLeave = (leave, prefill = null) => (state.modal = { type: 'leave', data: leave ? { ...leave } : null, prefill })
+export const openPayslip = (employeeId) => (state.modal = { type: 'payslip', data: { employeeId } })
+export const openCompany = () => (state.modal = { type: 'company', data: null })
+
+/** Prints payslips (the phone's print screen also saves them as a PDF). */
+export async function printPayslips(slips) {
+  const title = document.title
+  const first = slips[0]
+  document.title = slips.length === 1 ? `Payslip ${first.name} ${monthLabel(first.month)}` : `Payslips ${monthLabel(first.month)}`
+  state.printing = slips
+  await nextTick()
+  const done = () => {
+    state.printing = null
+    document.title = title
+    window.removeEventListener('afterprint', done)
+  }
+  window.addEventListener('afterprint', done)
+  window.print()
 }
 
 /* ---------------- modals ---------------- */

@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, setView } from '../store.js'
 
 function run(fn) {
   closeModal()
@@ -30,6 +30,14 @@ function run(fn) {
       <button class="list-row" @click="run(() => setView('services'))">
         <Icon name="sparkle" />
         <div class="grow"><div class="title">Services &amp; prices</div><div class="meta">Add, rename, merge and price your services</div></div>
+      </button>
+      <button class="list-row" @click="run(() => setView('payroll', { payrollTab: 'payslips' }))">
+        <Icon name="wallet" />
+        <div class="grow"><div class="title">Payslips &amp; leave</div><div class="meta">Pay, PAYE, UIF and leave balances</div></div>
+      </button>
+      <button class="list-row" @click="openCompany()">
+        <Icon name="receipt" />
+        <div class="grow"><div class="title">Company details</div><div class="meta">Shown on payslips</div></div>
       </button>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />

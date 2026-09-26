@@ -19,6 +19,15 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
 - **Services**: pick several services per appointment (chips, most-used first; the price is filled in for the chosen team member — each service can have a price per person).
   The **Services & prices** page (Team → Services & prices) lets her add services with prices, rename, hide,
   and merge duplicate names (e.g. "halfset lashes" / "Half set lashes") across all past appointments.
+- **Payslips** (Team → Payslips): basic salary + commission + overtime commission, PAYE (SARS tables, with the
+  age rebates from the ID number) and UIF (1%, excluding commission, capped at R177.12), extra earnings and
+  deductions, every figure can be overtyped. Save them, and print or save as PDF (one or all), laid out like the
+  old payslip template. Shows the month's PAYE + UIF for the EMP201.
+  Add a new year's tax table in `src/lib/payroll.js` after each February budget.
+- **Overtime**: mark an appointment as done in overtime (½ h, 1 h, … or all of it) and how long it took; that
+  share of the takings earns her overtime commission % instead of the normal %.
+- **Leave** (Team → Leave): book annual, sick, family or unpaid leave in hours; annual leave balance per person
+  (a starting balance + days earned per month − annual leave booked), shown on the Team page and payslips.
 - **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
 - **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
   so any change — or everything done today — can be rolled back (and the rollback undone too).
@@ -78,10 +87,12 @@ npm run dev:fake
 
 | Tab | Columns |
 | --- | --- |
-| **Employees** | ID, Name, Phone, Active, Created At, Updated At |
-| **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At |
+| **Employees** | ID, Name, Phone, Active, Created At, Updated At, then payslip details: Full Name, Employee Code, ID Number, Address, Date Engaged, Tax Number, Bank Name, Account Type, Account Number, Branch Code, Salary Label, Basic Salary, Commission %, Commission On (`all` / `aboveBasic` / `above`), Commission Above, Overtime Commission %, Leave Days / Month, Hours / Day, Leave Balance (days), Leave Balance On |
+| **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At, Overtime (minutes or `All`), Length (min) |
+| **Leave** | ID, Employee ID, Employee, Type (Annual/Sick/Family/Unpaid), From, To, Hours, Notes, Created At, Updated At |
+| **Payslips** | ID, Employee ID, Employee, Month, Pay Date, Gross, PAYE, UIF, Deductions, Net, Details (the whole payslip as JSON), Created At, Updated At |
 | **Services** | ID, Name, Price (for anyone), Active, Created At, Updated At, Team Prices (JSON: team member ID → price) |
-| **Settings** | Month starts on day |
+| **Settings** | Month starts on day; Company Name, Company Type, Registration Number, Company Address, PAYE Reference, UIF Reference |
 | **History** | ID, Time, Who, Action, Summary, Undone At, Data 1–10 (the rows before each change, as JSON) |
 
 You can filter, sort, chart or download the sheet freely. Don't rename the tabs or headers, and don't edit the
@@ -93,6 +104,7 @@ ID columns. The app uses them to find rows. After editing the sheet by hand, tap
 src/backend.js          Google Sheet as the database (load, add, edit, delete)
 src/google/auth.js      Google sign-in (OAuth redirect flow — works in an installed PWA)
 src/google/sheets.js    tiny Google Sheets API client
+src/lib/payroll.js      commission, overtime, PAYE, UIF and leave maths (tax tables live here)
 src/store.js            app state and actions
 src/views, components   Vue 3 screens
 public/sw.js            service worker (offline app shell, installable)

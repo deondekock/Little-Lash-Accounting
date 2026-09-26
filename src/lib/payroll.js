@@ -1,0 +1,316 @@
+/**
+ * Payroll maths: commission (with overtime), PAYE, UIF and annual leave.
+ *
+ * PAYE follows SARS's annualised method for a monthly-paid employee: this month's
+ * taxable pay × 12, tax from the year's table, minus the rebates for her age, ÷ 12.
+ * UIF is 1% (employee) + 1% (employer) of pay excluding commission, up to the
+ * monthly ceiling.
+ */
+import { monthRange } from './format.js'
+
+/**
+ * SARS tables per tax year (the year ending in February). Brackets are
+ * [upper limit of taxable income, rate]; base amounts are worked out below.
+ * Add a new year here after each February budget.
+ */
+const TABLES = {
+  2026: { // 1 Mar 2025 – 28 Feb 2026
+    brackets: [[237100, 0.18], [370500, 0.26], [512800, 0.31], [673000, 0.36], [857900, 0.39], [1817000, 0.41], [Infinity, 0.45]],
+    rebates: { primary: 17235, secondary: 9444, tertiary: 3145 },
+  },
+  2027: { // 1 Mar 2026 – 28 Feb 2027
+    brackets: [[245100, 0.18], [383100, 0.26], [530200, 0.31], [695800, 0.36], [887000, 0.39], [1878600, 0.41], [Infinity, 0.45]],
+    rebates: { primary: 17820, secondary: 9765, tertiary: 3249 },
+  },
+}
+export const UIF_RATE = 0.01
+export const UIF_CEILING = 17712 // monthly remuneration cap → max R177.12 each
+
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
+
+/** Tax year (year ending February) for a 'YYYY-MM-DD' date. */
+export function taxYear(date) {
+  const [y, m] = date.split('-').map(Number)
+  return m >= 3 ? y + 1 : y
+}
+
+/** The table for that tax year, or the latest one we have (with a note). */
+export function tableFor(date) {
+  const year = taxYear(date)
+  if (TABLES[year]) return { year, ...TABLES[year], exact: true }
+  const years = Object.keys(TABLES).map(Number).sort((a, b) => a - b)
+  const use = year < years[0] ? years[0] : years[years.length - 1]
+  return { year: use, ...TABLES[use], exact: false, wanted: year }
+}
+
+/** Tax on a year's taxable income before rebates. */
+export function annualTax(income, brackets) {
+  let tax = 0
+  let lower = 0
+  for (const [upper, rate] of brackets) {
+    if (income <= lower) break
+    tax += (Math.min(income, upper) - lower) * rate
+    lower = upper
+  }
+  return tax
+}
+
+/** Date of birth ('YYYY-MM-DD') from a South African ID number, or ''. */
+export function birthDateFromId(id, onDate) {
+  const digits = String(id || '').replace(/\D/g, '')
+  if (digits.length !== 13) return ''
+  const yy = Number(digits.slice(0, 2))
+  const mm = Number(digits.slice(2, 4))
+  const dd = Number(digits.slice(4, 6))
+  if (!(mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31)) return ''
+  const nowYY = Number((onDate || new Date().toISOString()).slice(2, 4))
+  const year = yy > nowYY ? 1900 + yy : 2000 + yy
+  return `${year}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
+}
+
+/** Age on a date. */
+export function ageOn(birth, date) {
+  if (!birth) return null
+  const [by, bm, bd] = birth.split('-').map(Number)
+  const [y, m, d] = date.split('-').map(Number)
+  return y - by - (m < bm || (m === bm && d < bd) ? 1 : 0)
+}
+
+/** Monthly PAYE on this month's taxable pay. `age` = age at the end of the tax year (null = under 65). */
+export function monthlyPaye(monthlyTaxable, payDate, age = null) {
+  const t = tableFor(payDate)
+  const yearly = annualTax(Math.max(0, monthlyTaxable) * 12, t.brackets)
+  let rebate = t.rebates.primary
+  if (age >= 65) rebate += t.rebates.secondary
+  if (age >= 75) rebate += t.rebates.tertiary
+  return { paye: round2(Math.max(0, yearly - rebate) / 12), table: t }
+}
+
+/** Employee UIF (the employer pays the same again). */
+export const monthlyUif = (uifPay) => round2(Math.min(Math.max(0, uifPay), UIF_CEILING) * UIF_RATE)
+
+/** Age used for rebates: on the last day of the tax year. */
+export function rebateAge(idNumber, payDate) {
+  const birth = birthDateFromId(idNumber, payDate)
+  if (!birth) return null
+  const end = `${taxYear(payDate)}-02-28`
+  return ageOn(birth, end)
+}
+
+/* ---------------- overtime ---------------- */
+
+export const OVERTIME_CHOICES = [
+  { value: 0, label: 'No' },
+  { value: 30, label: '½ h' },
+  { value: 60, label: '1 h' },
+  { value: 90, label: '1½ h' },
+  { value: 120, label: '2 h' },
+  { value: 'all', label: 'All of it' },
+]
+
+export const LENGTH_CHOICES = [30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240, 300]
+
+export function minutesLabel(min) {
+  if (!min) return ''
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  if (!h) return `${m} min`
+  if (m === 30) return `${h}½ h`
+  return m ? `${h} h ${m} min` : `${h} h`
+}
+
+/** Share (0–1) of an appointment that fell in overtime. */
+export function overtimeShare(a) {
+  if (!a.overtime) return 0
+  if (a.overtime === 'all') return 1
+  if (!a.length) return 1 // time not known: count it all
+  return Math.min(1, a.overtime / a.length)
+}
+
+/** Label for an appointment's overtime, e.g. "Overtime 1 h of 2 h". */
+export function overtimeLabel(a) {
+  if (!a.overtime) return ''
+  if (a.overtime === 'all' || overtimeShare(a) === 1) return 'Overtime'
+  return `Overtime ${minutesLabel(a.overtime)} of ${minutesLabel(a.length)}`
+}
+
+/* ---------------- commission ---------------- */
+
+/**
+ * Commission for one employee over a set of appointments.
+ * Overtime takings (the overtime share of each appointment) earn the overtime rate;
+ * the rest earns the normal rate, on takings above the threshold (if any).
+ */
+export function commission(appts, pay, { onlyPaid = false } = {}) {
+  const list = onlyPaid ? appts.filter((a) => a.status === 'Paid') : appts
+  let normal = 0
+  let overtime = 0
+  let unpaid = 0
+  let otCount = 0
+  for (const a of appts) if (a.status !== 'Paid') unpaid += a.amount
+  for (const a of list) {
+    const share = overtimeShare(a)
+    overtime += a.amount * share
+    normal += a.amount * (1 - share)
+    if (share) otCount++
+  }
+  const threshold = pay.commissionOn === 'aboveBasic' ? Number(pay.basic) || 0 : pay.commissionOn === 'above' ? Number(pay.threshold) || 0 : 0
+  const rate = (Number(pay.commissionPct) || 0) / 100
+  const otRate = pay.overtimePct === '' || pay.overtimePct == null ? rate : (Number(pay.overtimePct) || 0) / 100
+  return {
+    count: list.length,
+    takings: round2(normal + overtime),
+    normal: round2(normal),
+    overtime: round2(overtime),
+    otCount,
+    unpaid: round2(unpaid),
+    threshold,
+    rate,
+    otRate,
+    normalCommission: round2(Math.max(0, normal - threshold) * rate),
+    overtimeCommission: round2(overtime * otRate),
+  }
+}
+
+/* ---------------- leave ---------------- */
+
+/** Whole months from `from` to `to` (a month counts once its day-of-month is reached). */
+export function monthsBetween(from, to) {
+  if (!from || !to || to < from) return 0
+  const [fy, fm, fd] = from.split('-').map(Number)
+  const [ty, tm, td] = to.split('-').map(Number)
+  return (ty - fy) * 12 + (tm - fm) - (td < fd ? 1 : 0)
+}
+
+/** Weekdays (Mon–Sat, as salons work Saturdays) between two dates, inclusive. */
+export function workDays(from, to, days = [1, 2, 3, 4, 5, 6]) {
+  if (!from || !to || to < from) return 0
+  let n = 0
+  const d = new Date(from + 'T12:00:00')
+  const end = new Date(to + 'T12:00:00')
+  while (d <= end) {
+    if (days.includes(d.getDay())) n++
+    d.setDate(d.getDate() + 1)
+  }
+  return n
+}
+
+/**
+ * Annual leave for an employee on a date: opening balance (at `leaveFrom`, or the
+ * date engaged) + days accrued each month since − annual leave taken since.
+ * Returns days and hours.
+ */
+export function leaveBalance(emp, leave, onDate) {
+  const pay = emp.pay || {}
+  const perDay = Number(pay.hoursPerDay) || 8
+  const perMonth = pay.leavePerMonth === '' || pay.leavePerMonth == null ? 1.25 : Number(pay.leavePerMonth) || 0
+  const start = pay.leaveFrom || pay.engaged || ''
+  const opening = Number(pay.leaveOpening) || 0
+  const months = start ? monthsBetween(start, onDate) : 0
+  const accrued = months * perMonth
+  const mine = leave.filter((l) => l.employeeId === emp.id && l.type === 'Annual' && (!start || l.from >= start))
+  const takenHours = mine.filter((l) => l.from <= onDate).reduce((s, l) => s + l.hours, 0)
+  const bookedHours = mine.filter((l) => l.from > onDate).reduce((s, l) => s + l.hours, 0)
+  const days = opening + accrued - takenHours / perDay
+  return {
+    start,
+    perDay,
+    perMonth,
+    opening,
+    accrued: round2(accrued),
+    takenDays: round2(takenHours / perDay),
+    takenHours: round2(takenHours),
+    bookedDays: round2(bookedHours / perDay),
+    bookedHours: round2(bookedHours),
+    days: round2(days),
+    hours: round2(days * perDay),
+    afterBooked: round2(days - bookedHours / perDay),
+  }
+}
+
+/** Leave taken in a business month (for the payslip). */
+export function leaveInMonth(empId, leave, month, startDay) {
+  const r = monthRange(month, startDay)
+  return leave.filter((l) => l.employeeId === empId && l.from >= r.from && l.from <= r.to)
+}
+
+export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Unpaid']
+
+/** "12.5 days (100 h)" */
+export function leaveText(days, perDay = 8) {
+  const d = Math.round(days * 100) / 100
+  const h = Math.round(days * perDay * 10) / 10
+  return `${d} day${Math.abs(d) === 1 ? '' : 's'} (${h} h)`
+}
+
+/* ---------------- a whole payslip ---------------- */
+
+/** Default pay settings for an employee without any yet. */
+export function payDefaults(p = {}) {
+  return {
+    fullName: '', code: '', idNumber: '', address: '', engaged: '', taxNumber: '',
+    bankName: '', accountType: '', accountNumber: '', branchCode: '',
+    salaryLabel: 'Basic Salary', basic: '', commissionPct: '', commissionOn: 'all', threshold: '', overtimePct: '',
+    leavePerMonth: 1.25, hoursPerDay: 8, leaveOpening: '', leaveFrom: '',
+    ...p,
+  }
+}
+
+/**
+ * Works out a draft payslip for an employee and business month.
+ * `over` = amounts she typed over the calculated ones ({ commission, overtime, paye, uif }).
+ */
+export function draftPayslip({ emp, appts, leave, month, startDay, payDate, onlyPaid = false, extras = [], deductions = [], over = {} }) {
+  const pay = payDefaults(emp.pay)
+  const period = monthRange(month, startDay)
+  const mine = appts.filter((a) => a.employeeId === emp.id && a.month === month)
+  const c = commission(mine, pay, { onlyPaid })
+  const num = (v) => (v === '' || v == null ? null : Number(v))
+  const basic = Number(pay.basic) || 0
+  const comm = num(over.commission) ?? c.normalCommission
+  const ot = num(over.overtime) ?? c.overtimeCommission
+  const extraTotal = extras.reduce((s, x) => s + (Number(x.amount) || 0), 0)
+  const gross = round2(basic + comm + ot + extraTotal)
+  const age = rebateAge(pay.idNumber, payDate)
+  const calcPaye = monthlyPaye(gross, payDate, age)
+  const paye = num(over.paye) ?? calcPaye.paye
+  // UIF: on pay excluding commission (basic + other earnings), capped.
+  const uifPay = basic + extras.filter((x) => !x.noUif).reduce((s, x) => s + (Number(x.amount) || 0), 0)
+  const uif = num(over.uif) ?? monthlyUif(uifPay)
+  const otherDed = deductions.reduce((s, x) => s + (Number(x.amount) || 0), 0)
+  const totalDed = round2(paye + uif + otherDed)
+  const lb = leaveBalance({ ...emp, pay }, leave, period.to)
+  const taken = leaveInMonth(emp.id, leave, month, startDay)
+  return {
+    employeeId: emp.id,
+    name: pay.fullName || emp.name,
+    month,
+    period,
+    payDate,
+    pay,
+    appts: c,
+    earnings: [
+      { label: pay.salaryLabel || 'Basic Salary', amount: basic },
+      { label: 'Commission', amount: comm, calc: c.normalCommission },
+      { label: 'Overtime Commission', amount: ot, calc: c.overtimeCommission },
+      ...extras.map((x) => ({ label: x.label || 'Other', amount: Number(x.amount) || 0 })),
+    ].filter((x, i) => i === 0 || x.amount),
+    deductions: [
+      { label: 'PAYE', amount: paye, calc: calcPaye.paye },
+      { label: 'UIF', amount: uif },
+      ...deductions.map((x) => ({ label: x.label || 'Other', amount: Number(x.amount) || 0 })),
+    ],
+    gross,
+    totalDeductions: totalDed,
+    net: round2(gross - totalDed),
+    employerUif: monthlyUif(uifPay),
+    age,
+    table: calcPaye.table,
+    leave: {
+      ...lb,
+      accruedThisMonth: lb.perMonth,
+      takenThisMonth: taken.reduce((s, l) => s + l.hours, 0),
+      taken,
+    },
+  }
+}

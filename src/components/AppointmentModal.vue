@@ -5,7 +5,8 @@ import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { watch } from 'vue'
-import { serviceCatalog } from '../store.js'
+import { all, serviceCatalog } from '../store.js'
+import { OVERTIME_CHOICES, LENGTH_CHOICES, minutesLabel, overtimeShare } from '../lib/payroll.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
 import { METHODS, businessMonth, monthRange, todayStr } from '../lib/format.js'
@@ -25,6 +26,8 @@ function blank() {
     method: 'Card',
     status: 'Unpaid',
     notes: '',
+    overtime: 0,
+    length: 0,
   }
 }
 
@@ -43,6 +46,21 @@ watch(() => [form.service, form.employeeId], ([svc, emp]) => {
   if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
   else if (!prices.length) form.amount = ''
 })
+
+/* Overtime: how much of the appointment was after hours, and how long it took in total. */
+const partial = computed(() => typeof form.overtime === 'number' && form.overtime > 0)
+/** How long this service usually takes (from earlier appointments where it was noted). */
+function usualLength() {
+  const key = serviceKey(form.service || '')
+  const seen = all.value.filter((a) => a.length && serviceKey(a.service) === key).map((a) => a.length).sort((a, b) => a - b)
+  return seen.length ? seen[Math.floor(seen.length / 2)] : 0
+}
+function setOvertime(v) {
+  form.overtime = v
+  if (typeof v === 'number' && v > 0 && !(form.length >= v)) form.length = Math.max(usualLength(), v, 60)
+}
+const lengthOptions = computed(() => [...new Set([...LENGTH_CHOICES, Number(form.length) || 0])].filter((m) => m && m >= (partial.value ? form.overtime : 0)).sort((a, b) => a - b))
+const otPct = computed(() => Math.round(overtimeShare({ overtime: form.overtime, length: Number(form.length) }) * 100))
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
@@ -124,6 +142,25 @@ async function remove() {
             id="f-amount" ref="amountInput" v-model="form.amount" type="number" inputmode="decimal"
             step="0.01" min="0" placeholder="0.00" required @input="autoAmount = false"
           >
+        </div>
+      </div>
+      <div class="field">
+        <label>Done in overtime?</label>
+        <div class="chips inline" role="group" aria-label="Done in overtime">
+          <button
+            v-for="o in OVERTIME_CHOICES" :key="o.value" type="button" class="chip small"
+            :class="{ active: form.overtime === o.value || (!form.overtime && !o.value) }" :aria-pressed="form.overtime === o.value"
+            @click="setOvertime(o.value)"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+        <div v-if="partial" class="ot-length">
+          <label for="f-length">of an appointment that took</label>
+          <select id="f-length" v-model.number="form.length">
+            <option v-for="m in lengthOptions" :key="m" :value="m">{{ minutesLabel(m) }}</option>
+          </select>
+          <span class="field-hint" style="margin: 0">→ {{ otPct }}% counts as overtime</span>
         </div>
       </div>
       <div class="field">
