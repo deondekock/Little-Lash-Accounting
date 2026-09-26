@@ -45,9 +45,12 @@ const PAY_FIELDS = [
   ['accountType', 'Account Type'], ['accountNumber', 'Account Number'], ['branchCode', 'Branch Code'],
   ['salaryLabel', 'Salary Label'], ['basic', 'Basic Salary', 'num'], ['commissionPct', 'Commission %', 'num'],
   ['commissionOn', 'Commission On'], ['threshold', 'Commission Above', 'num'], ['overtimePct', 'Overtime Commission %', 'num'],
-  ['leavePerMonth', 'Leave Days / Month', 'num'], ['hoursPerDay', 'Hours / Day', 'num'],
+  ['leavePerYear', 'Annual Leave Hours / Year', 'num'], ['hoursPerDay', 'Hours / Day', 'num'],
   ['leaveOpening', 'Leave Balance (days)', 'num'], ['leaveFrom', 'Leave Balance On', 'date'],
+  ['daysPerWeek', 'Days / Week', 'num'], ['sickUsed', 'Sick Hours Used Before', 'num'],
 ]
+/** Older sheets kept annual leave as days per month in this column (converted to hours per year on load). */
+const OLD_LEAVE_HEADER = 'Leave Days / Month'
 const EMPLOYEE_HEADERS = ['ID', 'Name', 'Phone', 'Active', 'Created At', 'Updated At', ...PAY_FIELDS.map((f) => f[1])]
 const APPOINTMENT_HEADERS = [
   'ID', 'Date', 'Month', 'Employee ID', 'Employee', 'Client', 'Service',
@@ -55,7 +58,7 @@ const APPOINTMENT_HEADERS = [
 ]
 const LEAVE_HEADERS = ['ID', 'Employee ID', 'Employee', 'Type', 'From', 'To', 'Hours', 'Notes', 'Created At', 'Updated At']
 const PAYSLIP_HEADERS = ['ID', 'Employee ID', 'Employee', 'Month', 'Pay Date', 'Gross', 'PAYE', 'UIF', 'Deductions', 'Net', 'Details', 'Created At', 'Updated At']
-export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Unpaid']
+export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Maternity', 'Unpaid']
 /** Company details for payslips (rows in the Settings tab). */
 const COMPANY_FIELDS = [
   ['name', 'Company Name'], ['type', 'Company Type'], ['registration', 'Registration Number'],
@@ -117,7 +120,7 @@ function rowToEmployee(r, row) {
     pay[key] = kind === 'date' ? dateText(v) : kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v)) : clean(v)
   })
   // A leave balance saved without its date: it was her balance when it was saved.
-  if (pay.leaveOpening !== '' && !pay.leaveFrom) pay.leaveFrom = dateText(r[E.UPDATED]).slice(0, 10)
+  if ((pay.leaveOpening !== '' || pay.sickUsed !== '') && !pay.leaveFrom) pay.leaveFrom = dateText(r[E.UPDATED]).slice(0, 10)
   return {
     id: clean(r[E.ID]),
     name: clean(r[E.NAME]),
@@ -132,7 +135,8 @@ function rowToEmployee(r, row) {
 /** Payslip details from the form → cells (numbers as numbers, blanks stay blank). */
 function payCells(pay = {}) {
   // A leave balance without a date is her balance today.
-  if (pay.leaveOpening !== '' && pay.leaveOpening != null && !pay.leaveFrom) pay = { ...pay, leaveFrom: todayStr() }
+  const given = (v) => v !== '' && v != null
+  if ((given(pay.leaveOpening) || given(pay.sickUsed)) && !pay.leaveFrom) pay = { ...pay, leaveFrom: todayStr() }
   return PAY_FIELDS.map(([key, label, kind]) => {
     const v = pay[key]
     if (kind === 'num') {
@@ -496,6 +500,7 @@ async function load() {
   })
   const vals = res.valueRanges.map((vr) => vr.values || [])
   const [emps, appts, services, leave, payslips, settings] = vals
+  await migrateLeaveColumn(vals[6][0] || [], emps)
   // Sheets made by an older version: add the newer column headers.
   const fix = DATA.filter((t, i) => (vals[6 + i][0] || []).length < HEADERS[t].length)
   if (fix.length) {
@@ -513,6 +518,33 @@ async function load() {
   const day = parseInt(setting(MONTH_START_SETTING), 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(setting(label) ?? '').trim()]))
+}
+
+/**
+ * Sheets from before annual leave was set in hours per year: turn "days per month" into hours per year
+ * (days × 12 × hours a day) and rename the column. Runs once.
+ */
+async function migrateLeaveColumn(header, emps) {
+  const col = 6 + PAY_FIELDS.findIndex((f) => f[0] === 'leavePerYear')
+  if (clean(header[col]) !== OLD_LEAVE_HEADER) return
+  const perDayCol = 6 + PAY_FIELDS.findIndex((f) => f[0] === 'hoursPerDay')
+  const values = emps.map((r) => {
+    const v = r[col]
+    if (v === '' || v == null || !Number.isFinite(Number(v))) return ['']
+    return [Math.round(Number(v) * 12 * (Number(r[perDayCol]) || 8) * 100) / 100]
+  })
+  emps.forEach((r, i) => { if (r.length > col) r[col] = values[i][0] })
+  const letter = colLetter(col + 1)
+  await sheetsApi(`/${db.id}/values:batchUpdate`, {
+    method: 'POST',
+    body: {
+      valueInputOption: 'RAW',
+      data: [
+        { range: range(EMPLOYEES, 'A1'), values: [EMPLOYEE_HEADERS] },
+        ...(values.length ? [{ range: range(EMPLOYEES, `${letter}2:${letter}${values.length + 1}`), values }] : []),
+      ],
+    },
+  })
 }
 
 /** Opens a sheet by link or ID, adding missing tabs, and loads everything. */

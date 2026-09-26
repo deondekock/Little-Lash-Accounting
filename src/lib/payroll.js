@@ -196,8 +196,14 @@ export function monthsBetween(from, to) {
   return (ty - fy) * 12 + (tm - fm) - (td < fd ? 1 : 0)
 }
 
-/** Weekdays (Mon–Sat, as salons work Saturdays) between two dates, inclusive. */
-export function workDays(from, to, days = [1, 2, 3, 4, 5, 6]) {
+/** Days of the week she works (0 = Sunday): 5 → Mon–Fri, 6 → Mon–Sat, 7 → every day. */
+export function weekDays(perWeek = 5) {
+  const n = Math.min(7, Math.max(1, Math.round(Number(perWeek) || 5)))
+  return [1, 2, 3, 4, 5, 6, 0].slice(0, n)
+}
+
+/** Her work days between two dates, inclusive. */
+export function workDays(from, to, days = weekDays(5)) {
   if (!from || !to || to < from) return 0
   let n = 0
   const d = new Date(from + 'T12:00:00')
@@ -209,19 +215,53 @@ export function workDays(from, to, days = [1, 2, 3, 4, 5, 6]) {
   return n
 }
 
+/** 'YYYY-MM-DD' + n months (the day is kept, or the month's last day). */
+export function addMonths(date, n) {
+  const [y, m, d] = date.split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1 + n, 1))
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()
+  first.setUTCDate(Math.min(d, last))
+  return first.toISOString().slice(0, 10)
+}
+const dayBefore = (date) => {
+  const d = new Date(date + 'T12:00:00Z')
+  d.setUTCDate(d.getUTCDate() - 1)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Her working week and leave settings, with the legal minimums (Basic Conditions of Employment Act):
+ * annual leave 3 weeks a year; sick leave 6 weeks per 3-year cycle; family responsibility 3 days a year.
+ */
+export function leaveSettings(pay = {}) {
+  const perDay = Number(pay.hoursPerDay) || 8
+  const perWeek = Math.min(7, Math.max(1, Number(pay.daysPerWeek) || 5))
+  const weekHours = perDay * perWeek
+  const minYear = 3 * weekHours
+  const perYear = pay.leavePerYear === '' || pay.leavePerYear == null ? minYear : Number(pay.leavePerYear) || 0
+  return {
+    perDay,
+    perWeek,
+    minYear,
+    perYear,
+    perMonth: round2(perYear / 12 / perDay), // days of annual leave earned each month
+    sickCycle: 6 * weekHours,
+    family: 3 * perDay,
+  }
+}
+
 /**
  * Annual leave for an employee on a date: opening balance (at `leaveFrom`; with no balance, from the
- * date engaged) + days accrued each month since − annual leave taken since.
+ * date engaged) + leave earned each month since (hours per year ÷ 12) − annual leave taken since.
  * Returns days and hours.
  */
 export function leaveBalance(emp, leave, onDate) {
   const pay = emp.pay || {}
-  const perDay = Number(pay.hoursPerDay) || 8
-  const perMonth = pay.leavePerMonth === '' || pay.leavePerMonth == null ? 1.25 : Number(pay.leavePerMonth) || 0
+  const { perDay, perMonth, perYear } = leaveSettings(pay)
   const start = pay.leaveFrom || pay.engaged || ''
   const opening = Number(pay.leaveOpening) || 0
   const months = start ? monthsBetween(start, onDate) : 0
-  const accrued = months * perMonth
+  const accrued = (months * perYear) / 12 / perDay
   const mine = leave.filter((l) => l.employeeId === emp.id && l.type === 'Annual' && (!start || l.from >= start))
   const takenHours = mine.filter((l) => l.from <= onDate).reduce((s, l) => s + l.hours, 0)
   const bookedHours = mine.filter((l) => l.from > onDate).reduce((s, l) => s + l.hours, 0)
@@ -230,6 +270,7 @@ export function leaveBalance(emp, leave, onDate) {
     start,
     perDay,
     perMonth,
+    perYear,
     opening,
     accrued: round2(accrued),
     takenDays: round2(takenHours / perDay),
@@ -242,13 +283,61 @@ export function leaveBalance(emp, leave, onDate) {
   }
 }
 
+/** The cycle (from the date engaged, every `months`) that `onDate` falls in. */
+function cycleOf(engaged, onDate, months) {
+  const i = Math.floor(monthsBetween(engaged, onDate) / months)
+  const from = addMonths(engaged, i * months)
+  return { from, to: dayBefore(addMonths(engaged, (i + 1) * months)) }
+}
+
+const hoursOf = (leave, empId, type, from, to) =>
+  leave.filter((l) => l.employeeId === empId && l.type === type && l.from >= from && l.from <= to).reduce((s, l) => s + l.hours, 0)
+
+/**
+ * Sick leave (BCEA s22): 6 weeks of her normal working time per 3-year cycle from the date engaged.
+ * In the first 6 months: 1 day for every 26 days worked (and that counts towards the cycle).
+ * `sickUsed` = hours already taken in the current cycle before the app (dated `leaveFrom`).
+ */
+export function sickBalance(emp, leave, onDate) {
+  const pay = emp.pay || {}
+  if (!pay.engaged || onDate < pay.engaged) return null
+  const set = leaveSettings(pay)
+  const cycle = cycleOf(pay.engaged, onDate, 36)
+  const firstSix = monthsBetween(pay.engaged, onDate) < 6
+  const entitled = firstSix
+    ? Math.floor(workDays(pay.engaged, onDate, weekDays(set.perWeek)) / 26) * set.perDay
+    : set.sickCycle
+  const before = Number(pay.sickUsed) || 0
+  const usedBefore = before && (!pay.leaveFrom || (pay.leaveFrom >= cycle.from && pay.leaveFrom <= cycle.to)) ? before : 0
+  const taken = usedBefore + hoursOf(leave, emp.id, 'Sick', cycle.from, onDate)
+  const booked = leave.filter((l) => l.employeeId === emp.id && l.type === 'Sick' && l.from > onDate && l.from <= cycle.to).reduce((s, l) => s + l.hours, 0)
+  return { ...cycle, firstSix, entitled, taken: round2(taken), booked: round2(booked), hours: round2(entitled - taken), perDay: set.perDay }
+}
+
+/**
+ * Family responsibility leave (BCEA s27): 3 days per 12-month cycle from the date engaged, once she has
+ * worked there longer than 4 months and works at least 4 days a week. Unused days don't carry over.
+ */
+export function familyBalance(emp, leave, onDate) {
+  const pay = emp.pay || {}
+  if (!pay.engaged || onDate < pay.engaged) return null
+  const set = leaveSettings(pay)
+  const cycle = cycleOf(pay.engaged, onDate, 12)
+  const eligible = monthsBetween(pay.engaged, onDate) >= 4 && set.perWeek >= 4
+  const taken = hoursOf(leave, emp.id, 'Family', cycle.from, cycle.to)
+  const entitled = eligible ? set.family : 0
+  return { ...cycle, eligible, entitled, taken: round2(taken), hours: round2(entitled - taken), perDay: set.perDay }
+}
+
 /** Leave taken in a business month (for the payslip). */
 export function leaveInMonth(empId, leave, month, startDay) {
   const r = monthRange(month, startDay)
   return leave.filter((l) => l.employeeId === empId && l.from >= r.from && l.from <= r.to)
 }
 
-export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Unpaid']
+export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Maternity', 'Unpaid']
+/** Maternity leave (BCEA s25): 4 consecutive months, not paid by the employer (she claims from UIF). */
+export const MATERNITY_MONTHS = 4
 
 /** "12.5 days (100 h)" */
 export function leaveText(days, perDay = 8) {
@@ -265,7 +354,7 @@ export function payDefaults(p = {}) {
     fullName: '', code: '', idNumber: '', address: '', engaged: '', taxNumber: '',
     bankName: '', accountType: '', accountNumber: '', branchCode: '',
     salaryLabel: 'Basic Salary', basic: '', commissionPct: '', commissionOn: 'all', threshold: '', overtimePct: '',
-    leavePerMonth: 1.25, hoursPerDay: 8, leaveOpening: '', leaveFrom: '',
+    leavePerYear: '', hoursPerDay: 8, daysPerWeek: 5, leaveOpening: '', leaveFrom: '', sickUsed: '',
     ...p,
   }
 }
@@ -323,8 +412,10 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
     leave: {
       ...lb,
       accruedThisMonth: lb.perMonth,
-      takenThisMonth: taken.reduce((s, l) => s + l.hours, 0),
+      takenThisMonth: taken.filter((l) => l.type === 'Annual').reduce((s, l) => s + l.hours, 0),
       taken,
+      sick: sickBalance({ ...emp, pay }, leave, period.to),
+      family: familyBalance({ ...emp, pay }, leave, period.to),
     },
   }
 }

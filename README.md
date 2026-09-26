@@ -26,8 +26,12 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
   Add a new year's tax table in `src/lib/payroll.js` after each February budget.
 - **Overtime**: mark an appointment as done in overtime (½ h, 1 h, … or all of it) and how long it took; that
   share of the takings earns her overtime commission % instead of the normal %.
-- **Leave** (Team → Leave): book annual, sick, family or unpaid leave in hours; annual leave balance per person
-  (a starting balance + days earned per month − annual leave booked), shown on the Team page and payslips.
+- **Leave** (Team → Leave): book annual, sick, family, maternity or unpaid leave in hours.
+  - Annual: set in hours per year per person (default and minimum 3 weeks); balance = starting balance +
+    hours per year ÷ 12 each month − annual leave booked. Shown on the Team page and payslips.
+  - Sick: 6 weeks of her working time per 3-year cycle from the date engaged (1 day per 26 worked in the
+    first 6 months). Family responsibility: 3 days per 12-month cycle after 4 months (4+ days a week).
+    Maternity: 4 consecutive months, unpaid (UIF). These follow the BCEA minimums and her days/hours a week.
 - **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
 - **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
   so any change — or everything done today — can be rolled back (and the rollback undone too).
@@ -87,9 +91,9 @@ npm run dev:fake
 
 | Tab | Columns |
 | --- | --- |
-| **Employees** | ID, Name, Phone, Active, Created At, Updated At, then payslip details: Full Name, Employee Code, ID Number, Address, Date Engaged, Tax Number, Bank Name, Account Type, Account Number, Branch Code, Salary Label, Basic Salary, Commission %, Commission On (`all` / `aboveBasic` / `above`), Commission Above, Overtime Commission %, Leave Days / Month, Hours / Day, Leave Balance (days), Leave Balance On |
+| **Employees** | ID, Name, Phone, Active, Created At, Updated At, then payslip details: Full Name, Employee Code, ID Number, Address, Date Engaged, Tax Number, Bank Name, Account Type, Account Number, Branch Code, Salary Label, Basic Salary, Commission %, Commission On (`all` / `aboveBasic` / `above`), Commission Above, Overtime Commission %, Annual Leave Hours / Year, Hours / Day, Leave Balance (days), Leave Balance On, Days / Week, Sick Hours Used Before |
 | **Appointments** | ID, Date, Month, Employee ID, Employee, Client, Service, Amount, Method, Status, Paid On, Notes, Created At, Updated At, Overtime (minutes or `All`), Length (min) |
-| **Leave** | ID, Employee ID, Employee, Type (Annual/Sick/Family/Unpaid), From, To, Hours, Notes, Created At, Updated At |
+| **Leave** | ID, Employee ID, Employee, Type (Annual/Sick/Family/Maternity/Unpaid), From, To, Hours, Notes, Created At, Updated At |
 | **Payslips** | ID, Employee ID, Employee, Month, Pay Date, Gross, PAYE, UIF, Deductions, Net, Details (the whole payslip as JSON), Created At, Updated At |
 | **Services** | ID, Name, Price (for anyone), Active, Created At, Updated At, Team Prices (JSON: team member ID → price) |
 | **Settings** | Month starts on day; Company Name, Company Type, Registration Number, Company Address, PAYE Reference, UIF Reference |

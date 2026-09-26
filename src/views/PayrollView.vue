@@ -5,7 +5,7 @@ import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
 import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
-import { draftPayslip, leaveBalance, leaveText, payDefaults } from '../lib/payroll.js'
+import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
 
 const tab = computed({
   get: () => (state.payrollTab === 'leave' ? 'Leave' : 'Payslips'),
@@ -56,14 +56,17 @@ const today = todayStr()
 const balances = computed(() =>
   state.employees
     .filter((e) => e.active)
-    .map((e) => ({ e, b: leaveBalance({ ...e, pay: payDefaults(e.pay) }, state.leave, today) }))
+    .map((e) => {
+      const withPay = { ...e, pay: payDefaults(e.pay) }
+      return { e, b: leaveBalance(withPay, state.leave, today), sick: sickBalance(withPay, state.leave, today), family: familyBalance(withPay, state.leave, today) }
+    })
     .sort((a, b) => a.e.name.localeCompare(b.e.name)),
 )
 const upcoming = computed(() => state.leave.filter((l) => l.to >= today).sort((a, b) => (a.from < b.from ? -1 : 1)))
 const past = computed(() => state.leave.filter((l) => l.to < today).slice(0, 30))
 const nameOf = (id) => state.employees.find((e) => e.id === id)?.name || '—'
 const range = (l) => (l.to && l.to !== l.from ? `${shortDate(l.from)} – ${shortDate(l.to)}` : shortDate(l.from))
-const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧', Unpaid: '⏸️' }
+const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧', Maternity: '🤱', Unpaid: '⏸️' }
 </script>
 
 <template>
@@ -129,7 +132,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
 
     <template v-else>
       <div class="team-grid">
-        <div v-for="{ e, b } in balances" :key="e.id" class="card leave-card">
+        <div v-for="{ e, b, sick, family } in balances" :key="e.id" class="card leave-card">
           <div class="head">
             <div class="avatar sm" :style="{ background: employeeColor(e.id) }">{{ initials(e.name) }}</div>
             <div class="grow"><div class="name">{{ e.name }}</div></div>
@@ -140,11 +143,16 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
               <b>{{ b.hours }}</b> h <span>available ({{ b.days }} days)</span>
             </div>
             <div class="meta">
-              {{ b.perMonth }} days/month · {{ b.takenDays }} days taken since {{ shortDate(b.start) }} {{ b.start.slice(0, 4) }}
+              {{ b.perYear }} h a year ({{ b.perMonth }} days/month) · {{ b.takenDays }} days taken since {{ shortDate(b.start) }} {{ b.start.slice(0, 4) }}
               <template v-if="b.bookedHours"> · {{ leaveText(b.bookedDays, b.perDay) }} booked ahead</template>
             </div>
           </template>
           <button v-else class="link-btn" style="margin-top: 8px" @click="openEmployee(e)">Add her leave balance →</button>
+          <div v-if="sick" class="leave-others">
+            <div><span>🤒 Sick</span><b>{{ sick.hours }} h</b><small>of {{ sick.entitled }} h · until {{ shortDate(sick.to) }} {{ sick.to.slice(0, 4) }}<template v-if="sick.booked"> · {{ sick.booked }} h booked</template></small></div>
+            <div><span>👨‍👩‍👧 Family</span><b>{{ family.hours }} h</b><small>{{ family.eligible ? `of ${family.entitled} h · until ${shortDate(family.to)} ${family.to.slice(0, 4)}` : 'after 4 months' }}</small></div>
+          </div>
+          <button v-else class="link-btn" style="margin-top: 8px; display: block" @click="openEmployee(e)">Add her date engaged for sick &amp; family leave →</button>
         </div>
       </div>
 

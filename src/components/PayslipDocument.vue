@@ -62,6 +62,8 @@ const rows = computed(() => {
             <dt>Leave accrued</dt><dd>{{ days(s.leave.accruedThisMonth) }}</dd>
             <dt>Leave taken</dt><dd>{{ s.leave.takenThisMonth || 0 }} hours</dd>
             <dt>Total leave</dt><dd>{{ days(s.leave.days) }} · {{ s.leave.hours }} h</dd>
+            <template v-if="s.leave.sick"><dt>Sick leave left</dt><dd>{{ s.leave.sick.hours }} h (cycle to {{ date(s.leave.sick.to) }})</dd></template>
+            <template v-if="s.leave.family?.eligible"><dt>Family leave left</dt><dd>{{ s.leave.family.hours }} h</dd></template>
           </dl>
         </template>
       </section>

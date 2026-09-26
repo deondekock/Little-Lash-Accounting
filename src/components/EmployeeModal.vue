@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
-import { payDefaults, birthDateFromId } from '../lib/payroll.js'
+import { payDefaults, birthDateFromId, leaveSettings } from '../lib/payroll.js'
 import { todayStr } from '../lib/format.js'
 
 const props = defineProps({ employee: Object })
@@ -19,9 +19,12 @@ const pay = reactive(payDefaults(props.employee?.pay))
 const open = ref(editing && !pay.basic && !pay.idNumber ? 'pay' : '')
 const saving = ref(false)
 // Typing a leave balance: it's her balance today unless she picks another date.
-watch(() => pay.leaveOpening, (v) => {
-  if (v !== '' && v != null && !pay.leaveFrom) pay.leaveFrom = todayStr()
+const hasBefore = computed(() => [pay.leaveOpening, pay.sickUsed].some((v) => v !== '' && v != null))
+watch(hasBefore, (v) => {
+  if (v && !pay.leaveFrom) pay.leaveFrom = todayStr()
 })
+const set = computed(() => leaveSettings(pay))
+const round = (n) => Math.round(n * 100) / 100
 const nameInput = ref(null)
 
 onMounted(() => !editing && nameInput.value?.focus())
@@ -184,32 +187,47 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
       </div>
 
       <button type="button" class="fold" :aria-expanded="open === 'leave'" @click="toggle('leave')">
-        <span><b>Annual leave</b><small>{{ pay.leavePerMonth || 0 }} days a month · {{ pay.hoursPerDay || 8 }} h a day</small></span><span class="chev">{{ open === 'leave' ? '−' : '+' }}</span>
+        <span><b>Leave</b><small>{{ set.perYear }} h annual leave a year · {{ set.perWeek }} days × {{ set.perDay }} h a week</small></span><span class="chev">{{ open === 'leave' ? '−' : '+' }}</span>
       </button>
       <div v-if="open === 'leave'" class="fold-body">
         <div class="row2">
           <div class="field">
-            <label for="l-month">Days earned per month</label>
-            <input id="l-month" v-model="pay.leavePerMonth" type="number" inputmode="decimal" step="0.01" min="0">
-          </div>
-          <div class="field">
             <label for="l-hours">Hours in a work day</label>
             <input id="l-hours" v-model="pay.hoursPerDay" type="number" inputmode="decimal" step="0.25" min="1" max="24">
+          </div>
+          <div class="field">
+            <label for="l-week">Work days a week</label>
+            <input id="l-week" v-model="pay.daysPerWeek" type="number" inputmode="numeric" step="1" min="1" max="7">
+          </div>
+        </div>
+        <div class="field">
+          <label for="l-year">Annual leave hours per year</label>
+          <input id="l-year" v-model="pay.leavePerYear" type="number" inputmode="decimal" step="0.5" min="0" :placeholder="`${set.minYear} (legal minimum)`">
+          <div class="field-hint" :class="{ orange: set.perYear < set.minYear }">
+            = {{ round(set.perYear / set.perDay) }} days a year · she earns <b>{{ round(set.perYear / 12) }} h ({{ set.perMonth }} days) a month</b>
+            <template v-if="set.perYear < set.minYear"> · below the legal minimum of {{ set.minYear }} h (3 weeks)</template>
           </div>
         </div>
         <div class="row2">
           <div class="field">
-            <label for="l-open">Leave days she had…</label>
+            <label for="l-open">Annual leave days she had…</label>
             <input id="l-open" v-model="pay.leaveOpening" type="number" inputmode="decimal" step="0.01" placeholder="0">
           </div>
           <div class="field">
             <label for="l-from">…on this date</label>
-            <input id="l-from" v-model="pay.leaveFrom" type="date" :required="pay.leaveOpening !== '' && pay.leaveOpening != null">
+            <input id="l-from" v-model="pay.leaveFrom" type="date" :required="hasBefore">
           </div>
         </div>
+        <div class="field">
+          <label for="l-sick">Sick leave hours already used this 3-year cycle (before the app)</label>
+          <input id="l-sick" v-model="pay.sickUsed" type="number" inputmode="decimal" step="0.5" min="0" placeholder="0">
+        </div>
         <p class="field-hint" style="margin-top: -4px">
-          1.25 days a month = 15 days a year (the BCEA minimum for a 5-day week; 1.5 a month for a 6-day week). From this starting balance the app adds the monthly days
-          and takes off annual leave booked in the app after that date.<template v-if="!pay.leaveFrom"> With no balance it counts from the date engaged.</template>
+          Legal minimums, worked out from her week:
+          <b>sick leave {{ set.sickCycle }} h</b> every 3 years from the date engaged (6 weeks; in her first 6 months 1 day per 26 days worked),
+          <b>family responsibility {{ set.family }} h</b> a year (3 days, after 4 months, if she works 4+ days a week) and
+          <b>maternity</b> 4 months (unpaid — she claims from UIF).
+          <template v-if="!pay.engaged"> Add her date engaged under Payslip details so the app knows when her cycles start.</template>
         </p>
       </div>
 
