@@ -27,9 +27,11 @@ const range = computed(() => {
   const r = monthRange(state.month, state.monthStartDay)
   return `${shortDate(r.from)} – ${shortDate(r.to)}`
 })
+// A month that has only just started, with nothing recorded yet.
+const freshMonth = computed(() => mtd.value.inProgress && mtd.value.curTotal === 0)
 const change = computed(() => {
   const c = mtd.value.change
-  if (c === null || !isFinite(c)) return null
+  if (c === null || !isFinite(c) || freshMonth.value) return null
   return { pct: Math.round(c * 100), dir: c > 0.005 ? 'up' : c < -0.005 ? 'down' : 'flat' }
 })
 const prevName = computed(() => monthLabel(mtd.value.prevMonth).split(' ')[0])
@@ -88,6 +90,10 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
             {{ change.pct > 0 ? '+' : '' }}{{ change.pct }}%
           </span>
           <span v-if="change">vs {{ prevName }}{{ mtd.inProgress ? ' at this point' : '' }} ({{ fmt0(mtd.prevSame) }})</span>
+          <template v-if="freshMonth">
+            <span>✨ A new month started {{ shortDate(monthRange(state.month, state.monthStartDay).from) }} — nothing recorded yet.</span>
+            <button class="today-btn" style="margin: 0" @click="changeMonth(mtd.prevMonth)">See {{ prevName }} →</button>
+          </template>
         </div>
         <div style="margin-top: 14px">
           <AreaCompare :current="mtd.current" :previous="mtd.previous" :current-label="monthName" :previous-label="prevName" />
