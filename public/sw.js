@@ -5,7 +5,7 @@
  * - Google (sign-in) and the data (Cloudflare) are never cached.
  * - Push notifications: shown here; tapping one opens (or focuses) the app on the right page.
  */
-const CACHE = 'llp-v2'
+const CACHE = 'llp-v3'
 // Paths are relative to where the app is served from (e.g. /Little-Lash-Accounting/ on GitHub Pages).
 const BASE = new URL('./', self.location).pathname
 const SHELL = [BASE, BASE + 'manifest.webmanifest', BASE + 'icons/icon.svg', BASE + 'icons/icon-192.png']
@@ -28,14 +28,16 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET' || url.origin !== self.location.origin) return
 
   if (req.mode === 'navigate') {
+    // Each page (the salon app, the booking page) is kept under its own address.
+    const page = url.pathname.startsWith(BASE + 'book') ? BASE + 'book/' : BASE
     event.respondWith(
       fetch(req)
         .then((res) => {
           const copy = res.clone()
-          caches.open(CACHE).then((c) => c.put(BASE, copy))
+          caches.open(CACHE).then((c) => c.put(page, copy))
           return res
         })
-        .catch(() => caches.match(BASE)),
+        .catch(() => caches.match(page)),
     )
     return
   }

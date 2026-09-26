@@ -41,7 +41,8 @@
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING } from '../../src/lib/schema.js'
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
-import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
+import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url, sendEmail } from './notify.js'
+import { bookingSettings, openTimes, nextOpening, planFor, salonNow, toMin, addDays, dayName, lengthLabel } from '../../src/lib/booking.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
 const MAX_HISTORY = 400
@@ -57,6 +58,11 @@ export default {
         const email = await authenticate(request, env, ctx, { googleOnly: true })
         await identify(env.DB, email, env) // only people with access get a session
         return json(JSON.stringify(await issueSession(env.DB, email)), cors)
+      }
+      // Clients (the booking page): public info and times, email-code sign-in, and their own bookings.
+      if (url.pathname.startsWith('/api/public/') || url.pathname.startsWith('/api/client/')
+        || (url.pathname.startsWith('/api/notify') && (request.headers.get('Authorization') || '').includes('llc1.'))) {
+        return json(await clientRoute(env, ctx, request, url), cors)
       }
       const url0 = new URL(request.url)
       // Notification settings always belong to the real person, even while viewing as someone else.
@@ -158,19 +164,20 @@ async function sessionKey(db) {
   return crypto.subtle.importKey('raw', unb64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
 }
 
-async function issueSession(db, email) {
-  const exp = Date.now() + SESSION_DAYS * 864e5
-  const body = b64url(new TextEncoder().encode(JSON.stringify({ e: email, exp })))
+/** kind 'u' = owner/staff (llp1.…), 'c' = a client of the booking page (llc1.…, a year). */
+async function issueSession(db, email, kind = 'u') {
+  const exp = Date.now() + (kind === 'c' ? 365 : SESSION_DAYS) * 864e5
+  const body = b64url(new TextEncoder().encode(JSON.stringify({ e: email, exp, k: kind })))
   const sig = await crypto.subtle.sign('HMAC', await sessionKey(db), new TextEncoder().encode(body))
-  return { session: `llp1.${body}.${b64url(sig)}`, exp, email }
+  return { session: `${kind === 'c' ? 'llc1' : 'llp1'}.${body}.${b64url(sig)}`, exp, email }
 }
 
-async function verifySession(db, token) {
+async function verifySession(db, token, kind = 'u') {
   const [, body, sig] = token.split('.')
   const ok = body && sig && await crypto.subtle.verify('HMAC', await sessionKey(db), unb64url(sig), new TextEncoder().encode(body)).catch(() => false)
   if (!ok) throw new HttpError(401, 'Please sign in again.')
-  const { e, exp } = JSON.parse(new TextDecoder().decode(unb64url(body)))
-  if (!e || !(exp > Date.now())) throw new HttpError(401, 'Your sign-in expired. Please sign in again.')
+  const { e, exp, k = 'u' } = JSON.parse(new TextDecoder().decode(unb64url(body)))
+  if (!e || !(exp > Date.now()) || k !== kind) throw new HttpError(401, 'Your sign-in expired. Please sign in again.')
   return String(e).toLowerCase()
 }
 
@@ -620,4 +627,255 @@ async function staffBookingStatus(db, me, b) {
     logEntry(db, me, 'booking', `${me.name} ${word} ${existing.client_name} · ${ddmm(existing.date)} ${existing.start}`, { books: { [existing.id]: existing } }),
   ])
   return JSON.stringify(staffBookingOut({ ...existing, status, updated_at: now }))
+}
+
+/* ---------------- clients: the booking page ---------------- */
+
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/
+const parseJ = (s, d) => { try { return s ? JSON.parse(s) : d } catch { return d } }
+const settingsMap = async (db) => Object.fromEntries((await db.prepare('SELECT key, value FROM settings').all()).results.map((r) => [r.key, r.value]))
+const firstName = (n) => String(n || '').trim().split(/\s+/)[0]
+
+/** Services that can be booked online, with prices and lengths per person. */
+async function onlineServices(db) {
+  const { results } = await db.prepare('SELECT * FROM services WHERE active = 1 AND online = 1').all()
+  return results.map((r) => ({
+    id: r.id, name: r.name, category: r.category || '', description: r.description || '', price: r.price, minutes: r.minutes,
+    prices: parseJ(r.prices, {}), durations: parseJ(r.durations, {}), staff: parseJ(r.staff, []),
+  })).filter((s) => s.staff.length)
+}
+
+/** Everything the booking rules need between two dates. */
+async function bookingContext(db, from, to) {
+  const [emps, bookings, leave, settings, services] = await Promise.all([
+    db.prepare('SELECT id, name, active, schedule FROM employees WHERE active = 1').all(),
+    db.prepare(`SELECT id, employee_id, date, start, minutes, status FROM bookings WHERE date >= ?1 AND date <= ?2 AND status IN ('booked', 'done')`).bind(from, to).all(),
+    db.prepare(`SELECT employee_id, from_date, to_date, status FROM leave WHERE to_date >= ?1 AND from_date <= ?2`).bind(from, to).all(),
+    settingsMap(db),
+    onlineServices(db),
+  ])
+  return {
+    employees: emps.results.map((e) => ({ id: e.id, name: e.name, active: !!e.active, schedule: parseJ(e.schedule, null) })),
+    bookings: bookings.results.map((b) => ({ id: b.id, employeeId: b.employee_id, date: b.date, start: b.start, minutes: b.minutes, status: b.status })),
+    leave: leave.results.map((l) => ({ employeeId: l.employee_id, from: l.from_date, to: l.to_date, status: l.status })),
+    settings: bookingSettings(settings),
+    raw: settings,
+    services,
+  }
+}
+
+function pickServices(all, ids) {
+  const list = (Array.isArray(ids) ? ids : String(ids || '').split(',')).map((id) => all.find((s) => s.id === id)).filter(Boolean)
+  if (!list.length) throw new HttpError(400, 'Please choose a treatment.')
+  return list.slice(0, 6)
+}
+
+async function clientRoute(env, ctx, request, url) {
+  const db = env.DB
+  const route = `${request.method} ${url.pathname}`
+  const now = salonNow()
+
+  /* public */
+  if (route === 'GET /api/public/info') {
+    const ctxb = await bookingContext(db, now.date, now.date)
+    const team = ctxb.employees.filter((e) => ctxb.services.some((s) => s.staff.includes(e.id)))
+    return JSON.stringify({
+      salon: ctxb.raw['Company Name'] || 'Little Lash Lounge', phone: ctxb.settings.phone, message: ctxb.settings.message,
+      online: ctxb.settings.online, cancelHours: ctxb.settings.cancelHours, emailReady: !!(await getConfig(db, 'email_relay_url')),
+      team: team.map((e) => ({ id: e.id, name: firstName(e.name) })),
+      services: ctxb.services.map((s) => {
+        const per = s.staff.filter((id) => team.some((e) => e.id === id)).map((id) => ({ id, ...planFor([s], id) }))
+        const prices = per.map((p) => p.price).filter((p) => p != null)
+        const mins = per.map((p) => p.minutes)
+        return {
+          id: s.id, name: s.name, category: s.category, description: s.description, staff: per.map((p) => p.id),
+          priceFrom: prices.length ? Math.min(...prices) : null, priceTo: prices.length ? Math.max(...prices) : null,
+          minutesFrom: Math.min(...mins), minutesTo: Math.max(...mins),
+        }
+      }).filter((s) => s.staff.length),
+    })
+  }
+  if (route === 'GET /api/public/times') {
+    const from = DATE.test(url.searchParams.get('from') || '') ? url.searchParams.get('from') : now.date
+    const days = Math.min(21, Math.max(1, Number(url.searchParams.get('days')) || 14))
+    const c = await bookingContext(db, now.date, addDays(now.date, 200))
+    if (!c.settings.online) return JSON.stringify({ closed: true, days: [], next: null })
+    const services = pickServices(c.services, url.searchParams.get('services'))
+    const who = url.searchParams.get('who') || 'any'
+    const args = { services, employees: c.employees, bookings: c.bookings, leave: c.leave, settings: c.settings, who, now }
+    const found = openTimes({ ...args, from, days })
+    const next = url.searchParams.get('next') ? nextOpening(args) : undefined
+    const name = (id) => firstName(c.employees.find((e) => e.id === id)?.name)
+    const out = (t) => ({ time: t.time, with: name(t.employeeId), employeeId: t.employeeId, minutes: t.minutes, price: t.price })
+    return JSON.stringify({ days: found.map((d) => ({ date: d.date, times: d.times.map(out) })), next: next ? { date: next.date, ...out(next) } : next, until: addDays(now.date, c.settings.daysAhead) })
+  }
+
+  /* sign in with an emailed code */
+  if (route === 'POST /api/client/code') {
+    const { email: raw } = await request.json()
+    const email = String(raw || '').trim().toLowerCase()
+    if (!EMAIL.test(email)) throw new HttpError(400, 'Please check your email address.')
+    const row = await db.prepare('SELECT * FROM login_codes WHERE email = ?1').bind(email).first()
+    const hour = Date.now() - 3600e3
+    const sends = row && row.window_start > hour ? row.sends : 0
+    if (sends >= 5) throw new HttpError(429, 'Too many codes asked for. Please wait an hour, or phone the salon.')
+    const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000))
+    await db.prepare(`INSERT INTO login_codes (email, code_hash, expires, attempts, sends, window_start) VALUES (?1, ?2, ?3, 0, ?4, ?5)
+      ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires = excluded.expires, attempts = 0, sends = excluded.sends, window_start = excluded.window_start`)
+      .bind(email, await sha256(email + ':' + code), Date.now() + 15 * 60e3, sends + 1, sends ? row.window_start : Date.now()).run()
+    const sent = await sendEmail(db, email, `Your Little Lash Lounge code: ${code}`,
+      `Your code is ${code}\n\nType it on the booking page to sign in. It works for 15 minutes.\nIf you didn't ask for it, you can ignore this email.`,
+      `<div style="font-family:system-ui,sans-serif;color:#2b1d25;font-size:16px"><p>Your code for Little Lash Lounge:</p>
+       <p style="font-size:34px;font-weight:700;letter-spacing:6px;margin:8px 0 16px">${code}</p>
+       <p>Type it on the booking page to sign in. It works for 15 minutes.</p><p style="color:#9a8791;font-size:13px">If you didn't ask for it, you can ignore this email.</p></div>`)
+    if (sent === 'off') throw new HttpError(503, 'Signing in by email isn\'t set up yet. Please phone the salon to book.')
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/client/verify') {
+    const { email: raw, code } = await request.json()
+    const email = String(raw || '').trim().toLowerCase()
+    const row = await db.prepare('SELECT * FROM login_codes WHERE email = ?1').bind(email).first()
+    if (!row || row.expires < Date.now()) throw new HttpError(400, 'That code has expired. Please ask for a new one.')
+    if (row.attempts >= 5) throw new HttpError(429, 'Too many tries. Please ask for a new code.')
+    if (row.code_hash !== await sha256(email + ':' + String(code || '').replace(/\D/g, ''))) {
+      await db.prepare('UPDATE login_codes SET attempts = attempts + 1 WHERE email = ?1').bind(email).run()
+      throw new HttpError(400, 'That code isn\'t right. Please check the email and try again.')
+    }
+    await db.prepare('DELETE FROM login_codes WHERE email = ?1').bind(email).run()
+    const nowIso = new Date().toISOString()
+    let client = await db.prepare('SELECT * FROM clients WHERE email = ?1').bind(email).first()
+    if (!client) {
+      client = { id: crypto.randomUUID(), name: '', email, phone: '', notes: '', client_key: null, created_at: nowIso, updated_at: nowIso, last_login_at: nowIso }
+      await db.prepare(`INSERT INTO clients (${TABLES.clients.join(', ')}) VALUES (${TABLES.clients.map((_, i) => `?${i + 1}`).join(', ')})`).bind(...TABLES.clients.map((c) => client[c] ?? null)).run()
+    } else await db.prepare('UPDATE clients SET last_login_at = ?1 WHERE id = ?2').bind(nowIso, client.id).run()
+    return JSON.stringify({ ...(await issueSession(db, email, 'c')), client: publicClient(client) })
+  }
+
+  /* signed-in client */
+  const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!token.startsWith('llc1.')) throw new HttpError(401, 'Please sign in.')
+  const email = await verifySession(db, token, 'c')
+  const client = await db.prepare('SELECT * FROM clients WHERE email = ?1').bind(email).first()
+  if (!client) throw new HttpError(401, 'Please sign in again.')
+  const me = { role: 'client', email, clientId: client.id, name: client.name || email }
+  if (url.pathname.startsWith('/api/notify')) return notifyRoute(env, me, route, request)
+
+  if (route === 'GET /api/client/me') return JSON.stringify(await clientOverview(db, client, now))
+  if (route === 'POST /api/client/profile') {
+    const b = await request.json()
+    const name = String(b.name || '').trim().slice(0, 80)
+    const phone = String(b.phone || '').trim().slice(0, 40)
+    if (name.length < 2) throw new HttpError(400, 'Please enter your name.')
+    if (phone.replace(/\D/g, '').length < 9) throw new HttpError(400, 'Please enter your cellphone number.')
+    await db.prepare('UPDATE clients SET name = ?1, phone = ?2, updated_at = ?3 WHERE id = ?4').bind(name, phone, new Date().toISOString(), client.id).run()
+    return JSON.stringify(await clientOverview(db, { ...client, name, phone }, now))
+  }
+  if (route === 'POST /api/client/book') return JSON.stringify(await clientBook(env, ctx, client, await request.json(), now))
+  if (route === 'POST /api/client/cancel') return JSON.stringify(await clientCancel(env, ctx, client, await request.json(), now))
+  if (route === 'POST /api/client/move') return JSON.stringify(await clientBook(env, ctx, client, await request.json(), now, true))
+  throw new HttpError(404, 'Not found')
+}
+
+const publicClient = (c) => ({ id: c.id, name: c.name || '', email: c.email, phone: c.phone || '' })
+
+/** Her profile, her bookings (coming up and past) and her visits (with amounts and paid / unpaid). */
+async function clientOverview(db, client, now) {
+  const [bookings, visits, emps, settings] = await Promise.all([
+    db.prepare('SELECT * FROM bookings WHERE client_id = ?1 ORDER BY date DESC, start DESC LIMIT 100').bind(client.id).all(),
+    db.prepare('SELECT id, date, service, amount, method, status, paid_on, employee_id FROM appointments WHERE client_id = ?1 ORDER BY date DESC LIMIT 200').bind(client.id).all(),
+    db.prepare('SELECT id, name FROM employees').all(),
+    settingsMap(db),
+  ])
+  const name = (id) => firstName(emps.results.find((e) => e.id === id)?.name)
+  const s = bookingSettings(settings)
+  const nowMin = now.date + ' ' + String(Math.floor(now.minutes / 60)).padStart(2, '0') + ':' + String(now.minutes % 60).padStart(2, '0')
+  const out = bookings.results.map((b) => {
+    const at = `${b.date} ${b.start}`
+    const hoursLeft = (Date.parse(`${b.date}T${b.start}:00+02:00`) - Date.now()) / 3600e3
+    return {
+      id: b.id, date: b.date, start: b.start, minutes: b.minutes, with: name(b.employee_id), employeeId: b.employee_id, status: b.status,
+      services: parseJ(b.services, []).map((x) => ({ id: x.id, name: x.name, price: x.price })), notes: b.notes || '',
+      upcoming: b.status === 'booked' && at >= nowMin, canChange: b.status === 'booked' && hoursLeft >= s.cancelHours,
+    }
+  })
+  const vis = visits.results.map((v) => ({ id: v.id, date: v.date, service: v.service, amount: v.amount, method: v.method, status: v.status, paidOn: v.paid_on, with: name(v.employee_id) }))
+  return {
+    client: publicClient(client), cancelHours: s.cancelHours, phone: s.phone,
+    upcoming: out.filter((b) => b.upcoming).reverse(), past: out.filter((b) => !b.upcoming),
+    visits: vis, unpaid: Math.round(vis.filter((v) => v.status !== 'Paid').reduce((t, v) => t + v.amount, 0) * 100) / 100,
+    company: Object.fromEntries(['Company Name', 'Company Address', 'Registration Number'].map((k) => [k, settings[k] || ''])),
+  }
+}
+
+/** Books (or, with move, changes the time of) a booking — only a time that is really free right now. */
+async function clientBook(env, ctx, client, b, now, move = false) {
+  const db = env.DB
+  if (!client.name || !client.phone) throw new HttpError(400, 'Please add your name and cellphone number first.')
+  const date = String(b.date || '')
+  const start = String(b.start || '')
+  if (!DATE.test(date) || !/^\d{2}:\d{2}$/.test(start)) throw new HttpError(400, 'Please choose a time.')
+  let existing = null
+  if (move) {
+    existing = await db.prepare('SELECT * FROM bookings WHERE id = ?1 AND client_id = ?2').bind(String(b.id || ''), client.id).first()
+    if (!existing || existing.status !== 'booked') throw new HttpError(404, 'That booking was not found.')
+  }
+  const c = await bookingContext(db, now.date, addDays(now.date, 200))
+  if (!c.settings.online) throw new HttpError(403, 'Online booking is closed at the moment. Please phone the salon.')
+  if (existing) {
+    const hoursLeft = (Date.parse(`${existing.date}T${existing.start}:00+02:00`) - Date.now()) / 3600e3
+    if (hoursLeft < c.settings.cancelHours) throw new HttpError(403, `Changes can only be made up to ${c.settings.cancelHours} hours before. Please phone the salon.`)
+    c.bookings = c.bookings.filter((x) => x.id !== existing.id) // her own old time doesn't block the new one
+  }
+  const services = existing ? pickServices(c.services.concat(parseJ(existing.services, []).filter((x) => x.id && !c.services.some((s) => s.id === x.id)).map((x) => ({ ...x, staff: [existing.employee_id], prices: {}, durations: {} }))), parseJ(existing.services, []).map((x) => x.id)) : pickServices(c.services, b.services)
+  const who = existing ? existing.employee_id : b.who || 'any'
+  const day = openTimes({ services, employees: c.employees, bookings: c.bookings, leave: c.leave, settings: c.settings, who, from: date, days: 1, now })
+  const slot = day[0]?.times.find((t) => t.time === start)
+  if (!slot) throw new HttpError(409, 'Sorry, that time was just taken. Please choose another time.')
+  const plan = planFor(services, slot.employeeId)
+  const nowIso = new Date().toISOString()
+  const rec = existing
+    ? { ...existing, date, start, reminded_at: null, updated_by: client.email, updated_at: nowIso }
+    : {
+      id: crypto.randomUUID(), date, start, minutes: plan.minutes, employee_id: slot.employeeId, client_id: client.id, client_name: client.name,
+      client_phone: client.phone, services: JSON.stringify(plan.items.map((i) => ({ id: i.id, name: i.name, price: i.price, minutes: i.minutes }))),
+      status: 'booked', kind: 'booking', notes: String(b.notes || '').trim().slice(0, 300), source: 'online', appointment_id: null, reminded_at: null,
+      created_by: client.email, updated_by: client.email, created_at: nowIso, updated_at: nowIso,
+    }
+  const cols = TABLES.bookings
+  await db.batch([
+    db.prepare(`INSERT INTO bookings (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
+      ON CONFLICT(id) DO UPDATE SET ${cols.filter((x) => x !== 'id').map((x) => `${x} = excluded.${x}`).join(', ')}`).bind(...cols.map((x) => rec[x] ?? null)),
+    db.prepare('INSERT INTO history (id, time, who, action, summary, undone_at, data) VALUES (?1, ?2, ?3, ?4, ?5, \'\', ?6)')
+      .bind(crypto.randomUUID(), nowIso, client.email, 'booking', `${client.name} ${existing ? 'moved her booking to' : 'booked online:'} ${ddmm(date)} ${start} · ${firstName(c.employees.find((e) => e.id === rec.employee_id)?.name)}`,
+        JSON.stringify({ books: { [rec.id]: existing || null } })),
+  ])
+  ctx.waitUntil(tellTeamAboutBooking(env, rec, existing ? 'moved' : 'new'))
+  return { booking: { id: rec.id, date, start, minutes: rec.minutes, with: firstName(c.employees.find((e) => e.id === rec.employee_id)?.name), services: parseJ(rec.services, []), price: plan.price }, overview: await clientOverview(db, client, now) }
+}
+
+async function clientCancel(env, ctx, client, b, now) {
+  const db = env.DB
+  const existing = await db.prepare('SELECT * FROM bookings WHERE id = ?1 AND client_id = ?2').bind(String(b.id || ''), client.id).first()
+  if (!existing || existing.status !== 'booked') throw new HttpError(404, 'That booking was not found.')
+  const s = bookingSettings(await settingsMap(db))
+  const hoursLeft = (Date.parse(`${existing.date}T${existing.start}:00+02:00`) - Date.now()) / 3600e3
+  if (hoursLeft < s.cancelHours) throw new HttpError(403, `Bookings can only be cancelled up to ${s.cancelHours} hours before. Please phone the salon.`)
+  const nowIso = new Date().toISOString()
+  await db.batch([
+    db.prepare("UPDATE bookings SET status = 'cancelled', updated_by = ?1, updated_at = ?2 WHERE id = ?3").bind(client.email, nowIso, existing.id),
+    db.prepare('INSERT INTO history (id, time, who, action, summary, undone_at, data) VALUES (?1, ?2, ?3, ?4, ?5, \'\', ?6)')
+      .bind(crypto.randomUUID(), nowIso, client.email, 'booking', `${client.name} cancelled her booking · ${ddmm(existing.date)} ${existing.start}`, JSON.stringify({ books: { [existing.id]: existing } })),
+  ])
+  ctx.waitUntil(tellTeamAboutBooking(env, existing, 'cancelled'))
+  return { overview: await clientOverview(db, client, now) }
+}
+
+/** The team member (and the owners) hear about online bookings, changes and cancellations. Filled in fully in notifications. */
+async function tellTeamAboutBooking(env, rec, what) {
+  const emp = await env.DB.prepare(`SELECT name, lower(trim(json_extract(pay, '$.loginEmail'))) AS email FROM employees WHERE id = ?1`).bind(rec.employee_id).first()
+  const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
+  const svc = parseJ(rec.services, []).map((s) => s.name).join(' + ')
+  const title = { new: `🌐 New online booking: ${rec.client_name}`, moved: `🔁 ${rec.client_name} changed her booking`, cancelled: `❌ ${rec.client_name} cancelled` }[what]
+  const body = `${dayName(rec.date, true)} at ${rec.start} · ${firstName(emp?.name)}${svc ? ' · ' + svc : ''}`
+  await notify(env, [emp?.email, ...owners].filter(Boolean), { title, body, hash: 'calendar', tag: `booking-${rec.id}` })
 }
