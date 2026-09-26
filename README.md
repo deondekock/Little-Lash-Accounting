@@ -83,8 +83,8 @@ GitHub Actions deploys it on every push once the repo secrets `CLOUDFLARE_API_TO
 
 1. With the app still on the Google Sheet: **Settings → Move data to Cloudflare** copies everything across and shows
    both side by side (it can be run again; it replaces what's in Cloudflare).
-2. Switch the app over with `VITE_BACKEND=cloudflare` (in `src/config.js` or the build). The Google Sheet stays as it
-   was, as an archive.
+2. Switch the app over with `VITE_BACKEND=cloudflare` (the default in `src/config.js` since the move on 26 Sept 2026).
+   The Google Sheet stays as it was, as an archive; `VITE_BACKEND=sheets` switches back.
 
 **Settings → Download data** saves appointments, team, services, leave and payslips as CSV files (Excel / Sheets).
 
