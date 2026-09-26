@@ -32,6 +32,9 @@ export const state = reactive({
   leave: [], // booked leave (Leave tab)
   payslips: [], // saved payslips (Payslips tab)
   company: {}, // company details for payslips (Settings tab)
+  bookings: [], // calendar bookings and blocked time
+  clients: [], // client accounts (online booking)
+  booking: {}, // online booking settings
   services: [], // her service list (Services tab)
   spreadsheetUrl: '',
   monthStartDay: 1, // from the sheet's Settings tab; 26 → "July" = 26 Jun – 25 Jul
@@ -332,6 +335,9 @@ function applyData(data) {
   state.leave = data.leave || []
   state.payslips = data.payslips || []
   state.company = data.company || {}
+  state.bookings = data.bookings || []
+  state.clients = data.clients || []
+  state.booking = data.booking || {}
 }
 
 async function loadAll() {
@@ -505,6 +511,17 @@ export async function savePayslip(slip) {
 export async function deletePayslip(id) {
   state.payslips = await api('deletePayslip', id)
 }
+
+export async function saveBooking(input) {
+  state.bookings = await api('saveBooking', input)
+}
+export async function setBookingStatus(id, status) {
+  state.bookings = await api('setBookingStatus', id, status)
+}
+export async function saveBookingSettings(values) {
+  state.booking = await api('saveBookingSettings', values)
+}
+export const openBookingSettings = () => (state.modal = { type: 'bookingSettings', data: null })
 
 export async function saveCompany(company) {
   state.company = await api('saveCompany', company)

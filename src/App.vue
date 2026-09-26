@@ -16,6 +16,7 @@ import MyAppointmentsView from './views/staff/MyAppointmentsView.vue'
 import MyClientsView from './views/staff/MyClientsView.vue'
 import NotificationsModal from './components/NotificationsModal.vue'
 import ViewAsModal from './components/ViewAsModal.vue'
+import BookingSettingsModal from './components/BookingSettingsModal.vue'
 import PayslipViewModal from './components/PayslipViewModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
@@ -135,6 +136,7 @@ const retry = () => location.reload()
   <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />
   <NotificationsModal v-if="state.modal?.type === 'notifications'" />
   <ViewAsModal v-if="state.modal?.type === 'viewAs'" />
+  <BookingSettingsModal v-if="state.modal?.type === 'bookingSettings'" />
   <PayslipViewModal v-if="state.modal?.type === 'payslipView'" :slip="state.modal.data" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />

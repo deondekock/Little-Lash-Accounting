@@ -3,17 +3,20 @@
  * Each record travels as an object with these column names.
  */
 export const TABLES = {
-  employees: ['id', 'name', 'phone', 'active', 'pay', 'created_at', 'updated_at'],
+  employees: ['id', 'name', 'phone', 'active', 'pay', 'created_at', 'updated_at', 'schedule'],
   appointments: ['id', 'date', 'month', 'employee_id', 'employee_name', 'client', 'service', 'amount', 'method', 'status',
-    'paid_on', 'notes', 'overtime', 'length', 'created_at', 'updated_at', 'created_by', 'updated_by'],
-  services: ['id', 'name', 'price', 'active', 'prices', 'created_at', 'updated_at'],
+    'paid_on', 'notes', 'overtime', 'length', 'created_at', 'updated_at', 'created_by', 'updated_by', 'client_id', 'booking_id'],
+  services: ['id', 'name', 'price', 'active', 'prices', 'created_at', 'updated_at', 'minutes', 'durations', 'staff', 'online', 'category', 'description'],
   leave: ['id', 'employee_id', 'employee_name', 'type', 'from_date', 'to_date', 'hours', 'notes', 'created_at', 'updated_at', 'status'],
+  bookings: ['id', 'date', 'start', 'minutes', 'employee_id', 'client_id', 'client_name', 'client_phone', 'services', 'status', 'kind',
+    'notes', 'source', 'appointment_id', 'reminded_at', 'created_by', 'updated_by', 'created_at', 'updated_at'],
+  clients: ['id', 'name', 'email', 'phone', 'notes', 'client_key', 'created_at', 'updated_at', 'last_login_at'],
   payslips: ['id', 'employee_id', 'employee_name', 'month', 'pay_date', 'gross', 'paye', 'uif', 'deductions', 'net', 'details',
     'created_at', 'updated_at'],
 }
 
 /** History entries keep the records as they were before each change, by kind. */
-export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips' }
+export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', books: 'bookings', clients: 'clients' }
 
 /** Payslip details kept per employee: [key, label, kind]. */
 export const PAY_FIELDS = [

@@ -212,7 +212,7 @@ const arraysOf = (table, where = '') =>
 async function loadAll(db, { withHistory = false } = {}) {
   // Appointments come per year so no single result gets too big.
   const years = (await db.prepare('SELECT DISTINCT substr(month, 1, 4) AS y FROM appointments ORDER BY y').all()).results.map((r) => r.y)
-  const small = ['employees', 'services', 'leave', 'payslips']
+  const small = ['employees', 'services', 'leave', 'payslips', 'bookings', 'clients']
   const stmts = [
     ...small.map((t) => db.prepare(arraysOf(t))),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
@@ -305,6 +305,13 @@ const recordOf = (db, table, where, ...args) => db.prepare(`SELECT ${cols(table)
 /** Her appointments, amount left out (NULL) so it never reaches her phone. */
 const STAFF_APPT_COLS = TABLES.appointments.map((c) => (c === 'amount' ? 'NULL' : c)).join(', ')
 
+/** Services for staff: no prices. */
+const STAFF_SERVICE_COLS = TABLES.services.map((c) => (c === 'price' || c === 'prices' ? 'NULL' : c)).join(', ')
+/** Her bookings: the services without their prices. */
+const STAFF_BOOKING_COLS = TABLES.bookings.map((c) => (c === 'services'
+  ? "(SELECT json_group_array(json_remove(value, '$.price')) FROM json_each(CASE WHEN json_valid(bookings.services) THEN bookings.services ELSE '[]' END))"
+  : c)).join(', ')
+
 const STAFF_PAYSLIP_COLS = TABLES.payslips.map((c) => (c === 'details' ? "json_remove(details, '$.appts', '$.inputs')" : c)).join(', ')
 
 async function staffLoad(db, me) {
@@ -315,11 +322,14 @@ async function staffLoad(db, me) {
     db.prepare(`SELECT json_group_array(json_array(${STAFF_PAYSLIP_COLS})) AS j FROM payslips WHERE employee_id = ?1`).bind(me.employeeId),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
     db.prepare(`SELECT json_group_array(json_array(${STAFF_APPT_COLS})) AS j FROM appointments WHERE employee_id = ?1`).bind(me.employeeId),
-    // Service names only (no prices).
-    db.prepare(`SELECT json_group_array(json_array(id, name, NULL, active, NULL, created_at, updated_at)) AS j FROM services`),
+    // Services without prices.
+    db.prepare(`SELECT json_group_array(json_array(${STAFF_SERVICE_COLS})) AS j FROM services`),
+    // Her bookings (from 60 days ago), services without prices.
+    db.prepare(`SELECT json_group_array(json_array(${STAFF_BOOKING_COLS})) AS j FROM bookings WHERE employee_id = ?1 AND date >= ?2`)
+      .bind(me.employeeId, new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10)),
   ])
-  const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
-  return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts}}`
+  const [emps, leave, payslips, settings, appts, services, bookings] = res.map((r) => r.results[0]?.j || '[]')
+  return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts},"bookings":${bookings},"clients":[]}`
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/

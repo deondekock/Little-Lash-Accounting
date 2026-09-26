@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import WorkingHours from './WorkingHours.vue'
 import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
 import { payDefaults, birthDateFromId, leaveSettings, salaryLabel, SALARY_LABELS } from '../lib/payroll.js'
 import { todayStr } from '../lib/format.js'
@@ -24,6 +25,7 @@ if (salaryLabel(pay.salaryLabel) !== pay.salaryLabel) {
 const labelOptions = [...new Set([...SALARY_LABELS, pay.salaryLabel])]
 // Open the payslip section straight away when it's still empty (after the name is in).
 const open = ref(editing && !pay.basic && !pay.idNumber ? 'pay' : '')
+const schedule = ref(props.employee?.schedule || null)
 const saving = ref(false)
 // Typing a leave balance: it's her balance today unless she picks another date.
 const hasBefore = computed(() => [pay.leaveOpening, pay.sickUsed].some((v) => v !== '' && v != null))
@@ -56,6 +58,7 @@ async function submit() {
       phone: form.phone,
       active: form.status === 'Active',
       pay: { ...pay },
+      schedule: schedule.value,
     })
     closeModal()
     toastUndo(editing ? 'Saved' : 'Employee added')
@@ -139,6 +142,14 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
         <p class="field-hint" style="margin-top: -4px">
           Work done in overtime earns the overtime % instead of the normal %. Mark it on each appointment.
         </p>
+      </div>
+
+      <button type="button" class="fold" :aria-expanded="open === 'hours'" @click="toggle('hours')">
+        <span><b>Working hours</b><small>{{ schedule ? 'For the calendar and online booking' : 'Not set yet: Mon–Fri 8–5, Sat 8–1' }}</small></span><span class="chev">{{ open === 'hours' ? '−' : '+' }}</span>
+      </button>
+      <div v-if="open === 'hours'" class="fold-body">
+        <WorkingHours v-model="schedule" />
+        <p class="field-hint">Clients can only book inside these hours (and not on approved leave).</p>
       </div>
 
       <button type="button" class="fold" :aria-expanded="open === 'details'" @click="toggle('details')">
