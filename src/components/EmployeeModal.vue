@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { saveEmployee, deleteEmployee, closeModal, toastUndo, fail } from '../store.js'
-import { payDefaults, birthDateFromId, leaveSettings } from '../lib/payroll.js'
+import { payDefaults, birthDateFromId, leaveSettings, salaryLabel, SALARY_LABELS } from '../lib/payroll.js'
 import { todayStr } from '../lib/format.js'
 
 const props = defineProps({ employee: Object })
@@ -15,6 +15,13 @@ const form = reactive({
   status: props.employee?.active === false ? 'Inactive' : 'Active',
 })
 const pay = reactive(payDefaults(props.employee?.pay))
+// A number typed in the old free-text label box was meant as the amount.
+if (salaryLabel(pay.salaryLabel) !== pay.salaryLabel) {
+  const n = parseFloat(String(pay.salaryLabel).replace(/[R\s,]/gi, ''))
+  if (pay.basic === '' && Number.isFinite(n)) pay.basic = n
+  pay.salaryLabel = 'Basic Salary'
+}
+const labelOptions = [...new Set([...SALARY_LABELS, pay.salaryLabel])]
 // Open the payslip section straight away when it's still empty (after the name is in).
 const open = ref(editing && !pay.basic && !pay.idNumber ? 'pay' : '')
 const saving = ref(false)
@@ -99,13 +106,14 @@ const toggle = (id) => (open.value = open.value === id ? '' : id)
       <div v-if="open === 'pay'" class="fold-body">
         <div class="row2">
           <div class="field">
-            <label for="p-label">Salary shown as</label>
-            <input id="p-label" v-model="pay.salaryLabel" list="salary-labels" placeholder="Basic Salary">
-            <datalist id="salary-labels"><option>Basic Salary</option><option>Salary</option><option>Cost to Company</option></datalist>
+            <label for="p-basic">Salary per month (R)</label>
+            <input id="p-basic" v-model="pay.basic" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
           </div>
           <div class="field">
-            <label for="p-basic">Amount per month (R)</label>
-            <input id="p-basic" v-model="pay.basic" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+            <label for="p-label">Shown on payslip as</label>
+            <select id="p-label" v-model="pay.salaryLabel">
+              <option v-for="l in labelOptions" :key="l" :value="l">{{ l }}</option>
+            </select>
           </div>
         </div>
         <div class="row2">

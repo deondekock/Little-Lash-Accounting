@@ -135,6 +135,11 @@ function cleanPay(pay = {}, selfId = null) {
     } else if (kind === 'bool') out[key] = !!v
     else out[key] = String(v ?? '').replace(/\r/g, '').trim()
   }
+  if (/^[R\s]*[\d\s.,]+$/i.test(out.salaryLabel)) {
+    const n = parseFloat(out.salaryLabel.replace(/[R\s,]/gi, ''))
+    if (out.basic === '' && Number.isFinite(n)) out.basic = n
+    out.salaryLabel = 'Basic Salary'
+  }
   out.loginEmail = out.loginEmail.toLowerCase()
   if (out.loginEmail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(out.loginEmail)) throw new Error('Please check her Google email.')
   const taken = out.loginEmail && db.employees.find((e) => e.pay.loginEmail === out.loginEmail && e.id !== selfId)

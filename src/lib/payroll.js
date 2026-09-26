@@ -365,6 +365,13 @@ export function leaveText(days, perDay = 8) {
 
 /* ---------------- a whole payslip ---------------- */
 
+export const SALARY_LABELS = ['Basic Salary', 'Salary', 'Cost to Company']
+/** The payslip wording for the salary line: never a number (a typed amount in the wrong box). */
+export function salaryLabel(label) {
+  const s = String(label ?? '').trim()
+  return !s || /^[R\s]*[\d\s.,]+$/i.test(s) ? 'Basic Salary' : s
+}
+
 /** Default pay settings for an employee without any yet. */
 export function payDefaults(p = {}) {
   return {
@@ -410,7 +417,7 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
     pay,
     appts: c,
     earnings: [
-      { label: pay.salaryLabel || 'Basic Salary', amount: basic },
+      { label: salaryLabel(pay.salaryLabel), amount: basic },
       { label: 'Commission', amount: comm, calc: c.normalCommission },
       { label: 'Overtime Commission', amount: ot, calc: c.overtimeCommission },
       ...extras.map((x) => ({ label: x.label || 'Other', amount: Number(x.amount) || 0 })),
