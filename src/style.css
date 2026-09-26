@@ -697,3 +697,14 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .payslip .ps-totals b { font-variant-numeric: tabular-nums; }
 .payslip .ps-totals .net { background: #2b1d25; color: #fff; font-size: 15px; margin-top: 4px; }
 .payslip .ps-foot { color: #777; font-size: 11px; margin-top: 14px; }
+
+.tax-notice {
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px; margin-bottom: 14px;
+  border-radius: var(--radius-sm); font-size: 13.5px; line-height: 1.45; color: var(--ink-2);
+  background: var(--brand-soft); border: 1px solid var(--line);
+}
+.tax-notice.due { background: var(--unpaid-soft); border-color: var(--unpaid); }
+.tax-notice .grow { flex: 1; }
+.tax-notice > .grow > b:first-child { display: block; color: var(--ink); font-size: 14.5px; margin-bottom: 2px; }
+.tax-notice .tn-icon { font-size: 20px; line-height: 1.2; }
+.tax-notice .icon-btn { margin: -6px -8px 0 0; }

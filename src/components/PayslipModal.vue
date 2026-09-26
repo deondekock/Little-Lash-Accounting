@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import { all, state, closeModal, savePayslip, deletePayslip, printPayslips, openEmployee, toastUndo, fail } from '../store.js'
 import { fmt, monthLabel, monthRange, shortDate } from '../lib/format.js'
-import { draftPayslip, leaveText } from '../lib/payroll.js'
+import { draftPayslip, leaveText, taxYearLabel } from '../lib/payroll.js'
 
 const props = defineProps({ employeeId: { type: String, required: true } })
 const emp = computed(() => state.employees.find((e) => e.id === props.employeeId))
@@ -136,7 +136,7 @@ const editPay = () => openEmployee(emp.value)
     </div>
 
     <div class="net-box"><span>Nett pay</span><b>{{ fmt(slip.net) }}</b></div>
-    <p v-if="!slip.table.exact" class="field-hint orange">The app doesn't have the {{ slip.table.wanted }} tax tables yet, so PAYE uses {{ slip.table.year }}'s. Check it before paying.</p>
+    <p v-if="!slip.table.exact" class="field-hint orange">The app doesn't have the {{ taxYearLabel(slip.table.wanted) }} tax tables yet, so PAYE uses {{ taxYearLabel(slip.table.year) }}'s. <b>Tell Deon to update the tax tables</b>, and check PAYE before paying.</p>
     <p class="muted-note">
       🌴 Leave: {{ leaveText(slip.leave.days, slip.leave.perDay) }} available on {{ shortDate(period.to) }}
       <template v-if="slip.leave.takenThisMonth"> · {{ slip.leave.takenThisMonth }} h taken this month</template>

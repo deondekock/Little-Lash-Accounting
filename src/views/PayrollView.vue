@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
+import TaxNotice from '../components/TaxNotice.vue'
 import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips } from '../store.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, leaveText, payDefaults } from '../lib/payroll.js'
@@ -80,6 +81,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
     <SegmentedControl v-model="tab" :options="['Payslips', 'Leave']" style="margin-bottom: 14px" />
 
     <template v-if="tab === 'Payslips'">
+      <TaxNotice />
       <button v-if="!state.company.name" class="card list-row" style="padding: 16px; margin-bottom: 14px" @click="openCompany">
         <div class="history-icon"><Icon name="receipt" :size="16" /></div>
         <div class="grow"><div class="title">Add your company details</div><div class="meta">Name, registration number and address for the payslips</div></div>

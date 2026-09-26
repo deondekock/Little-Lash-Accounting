@@ -43,6 +43,20 @@ export function tableFor(date) {
   return { year: use, ...TABLES[use], exact: false, wanted: year }
 }
 
+/** "2027/28" for the tax year ending February 2028. */
+export const taxYearLabel = (year) => `${year - 1}/${String(year).slice(2)}`
+
+/**
+ * Reminder that the tax tables need updating (they're in this file, so Deon has to do it):
+ * 'due' once the new tax year has started without its table, 'soon' from mid-February.
+ */
+export function taxTableNotice(today) {
+  const year = taxYear(today)
+  if (!TABLES[year]) return { level: 'due', year }
+  if (today.slice(5) >= '02-15' && today.slice(5, 7) === '02' && !TABLES[year + 1]) return { level: 'soon', year: year + 1 }
+  return null
+}
+
 /** Tax on a year's taxable income before rebates. */
 export function annualTax(income, brackets) {
   let tax = 0
