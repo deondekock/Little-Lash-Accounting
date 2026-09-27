@@ -3,9 +3,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { state, closeModal, saveService, openServiceMerge, toastUndo, fail, employeeColor, serviceCatalog } from '../store.js'
+import { state, closeModal, saveService, openServiceMerge, toastUndo, fail, employeeColor } from '../store.js'
 import { fmt0 } from '../lib/format.js'
-import { lengthLabel } from '../lib/booking.js'
 
 const props = defineProps({ service: Object })
 const s = props.service
@@ -16,19 +15,7 @@ const form = reactive({
   price: s?.price ?? (adopting && s.typical != null ? s.typical : ''),
   status: s && !s.active ? 'Hidden' : 'Shown',
   prices: { ...(s?.prices || {}) },
-  // Booking
-  minutes: s?.minutes ?? '',
-  durations: { ...(s?.durations || {}) },
-  category: s?.category || '',
-  description: s?.description || '',
-  online: !!s?.online,
 })
-// Who does it: saved list; else whoever did it before; else (new service) everyone active.
-const doesIt = reactive(Object.fromEntries(state.employees.map((e) => [e.id,
-  s?.staff?.length ? s.staff.includes(e.id) : s?.countBy ? !!s.countBy[e.id] && e.active : e.active])))
-const categories = computed(() => [...new Set(serviceCatalog.value.map((x) => x.category).filter(Boolean))].sort())
-const LENGTHS = [15, 30, 45, 60, 75, 90, 105, 120, 150, 180, 210, 240]
-const lengthOptions = computed(() => [...new Set([...LENGTHS, Number(form.minutes) || 0])].filter(Boolean).sort((a, b) => a - b))
 // Everyone active, plus anyone who has a price for this service or has done it before.
 const team = computed(() => state.employees.filter((e) => e.active || form.prices[e.id] != null || s?.countBy?.[e.id]))
 const isSet = (v) => v !== '' && v != null
@@ -69,13 +56,6 @@ async function save() {
       // Only keep prices that differ from the price for anyone, so they follow it later.
       prices: Object.fromEntries(Object.entries(form.prices).filter(([, v]) => isSet(v) && !same(v, form.price))),
       active: form.status === 'Shown',
-      minutes: form.minutes,
-      // Only lengths that differ from the usual one.
-      durations: Object.fromEntries(Object.entries(form.durations).filter(([, v]) => isSet(v) && Number(v) !== Number(form.minutes))),
-      staff: Object.keys(doesIt).filter((id) => doesIt[id]),
-      online: form.online,
-      category: form.category,
-      description: form.description,
       fromNames: adopting ? s.spellings : undefined,
     })
     toastUndo(inList ? 'Service saved' : 'Service added')
@@ -104,42 +84,15 @@ async function save() {
         <input id="svc-price" v-model="form.price" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Optional">
       </div>
       <div v-if="team.length" class="field">
-        <label>Who does it, her price and how long it takes her</label>
+        <label>Price per team member <span style="font-weight: 500; color: var(--muted)">— change only whoever charges differently</span></label>
         <div class="team-prices">
-          <div v-for="e in team" :key="e.id" class="team-price team-row" :class="{ off: !doesIt[e.id] }">
-            <label class="who"><input v-model="doesIt[e.id]" type="checkbox" :aria-label="`${e.name} does this`"><i class="swatch-dot" :style="{ background: employeeColor(e.id) }" /><span>{{ e.name }}<small v-if="s?.countBy?.[e.id]">{{ s.countBy[e.id] }}× done</small></span></label>
-            <input v-model="form.prices[e.id]" type="number" inputmode="decimal" step="0.01" min="0" :placeholder="hint(e)" :aria-label="`Price for ${e.name}`" :class="{ differs: differs(e) }" :disabled="!doesIt[e.id]">
-            <input v-model="form.durations[e.id]" class="mins" type="number" inputmode="numeric" step="5" min="5" max="720" :placeholder="form.minutes ? `${form.minutes}` : 'min'" :aria-label="`Minutes for ${e.name}`" :disabled="!doesIt[e.id]">
+          <div v-for="e in team" :key="e.id" class="team-price">
+            <span class="who"><i class="swatch-dot" :style="{ background: employeeColor(e.id) }" /><span>{{ e.name }}<small v-if="s?.countBy?.[e.id]">{{ s.countBy[e.id] }}× done</small></span></span>
+            <input v-model="form.prices[e.id]" type="number" inputmode="decimal" step="0.01" min="0" :placeholder="hint(e)" :aria-label="`Price for ${e.name}`" :class="{ differs: differs(e) }">
             <span v-if="differs(e)" class="own-price">own price</span>
           </div>
         </div>
-        <div class="field-hint">Price in rand, time in minutes. Leave them empty to use the price for anyone and the usual length.</div>
       </div>
-
-      <h4 class="section-label">Booking</h4>
-      <div class="row2">
-        <div class="field">
-          <label for="svc-min">Usual length</label>
-          <select id="svc-min" v-model.number="form.minutes">
-            <option value="">Not set</option>
-            <option v-for="m in lengthOptions" :key="m" :value="m">{{ lengthLabel(m) }}</option>
-          </select>
-        </div>
-        <div class="field">
-          <label for="svc-cat">Category</label>
-          <input id="svc-cat" v-model="form.category" list="svc-cats" placeholder="e.g. Lashes">
-          <datalist id="svc-cats"><option v-for="c in categories" :key="c">{{ c }}</option><option>Lashes</option><option>Brows</option><option>Waxing</option><option>Nails</option><option>Facials</option></datalist>
-        </div>
-      </div>
-      <div class="field">
-        <label for="svc-desc">Short description for clients (optional)</label>
-        <input id="svc-desc" v-model="form.description" maxlength="300" placeholder="e.g. Refill every 2–3 weeks">
-      </div>
-      <div class="toggle-row" style="border: 0; padding-top: 0">
-        <div class="grow"><div class="title">Clients can book this online</div><div class="meta">{{ form.online ? 'Shown on the booking page' : 'Only you and the team can book it' }}</div></div>
-        <button type="button" class="switch" role="switch" :aria-checked="form.online" @click="form.online = !form.online"><span /></button>
-      </div>
-      <p v-if="form.online && !form.minutes" class="field-hint orange">Set the usual length so clients get the right times.</p>
       <div v-if="inList" class="field">
         <label>In the appointment form</label>
         <SegmentedControl v-model="form.status" :options="['Shown', 'Hidden']" />

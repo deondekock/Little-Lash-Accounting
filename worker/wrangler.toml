@@ -23,6 +23,6 @@ migrations_dir = "migrations"
 binding = "BACKUPS"
 id = "__KV_ID__"
 
-# Every hour: booking reminders; at 03:00 South African time also the nightly backup.
+# Nightly backup at 03:00 South African time.
 [triggers]
-crons = ["0 1 * * *", "0 * * * *"]
+crons = ["0 1 * * *"]

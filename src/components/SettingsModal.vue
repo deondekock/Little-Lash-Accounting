@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, openViewAsPicker, exitViewAs, openBookingSettings, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 
 function run(fn) {
@@ -36,10 +36,6 @@ function run(fn) {
       <button class="list-row" @click="run(() => setView('payroll', { payrollTab: 'payslips' }))">
         <Icon name="wallet" />
         <div class="grow"><div class="title">Payslips &amp; leave</div><div class="meta">Pay, PAYE, UIF and leave balances</div></div>
-      </button>
-      <button v-if="BACKEND === 'cloudflare'" class="list-row" @click="openBookingSettings()">
-        <Icon name="calendar" />
-        <div class="grow"><div class="title">Online booking</div><div class="meta">{{ state.booking.online ? 'On · ' : 'Off · ' }}booking page link and rules</div></div>
       </button>
       <button class="list-row" @click="openCompany()">
         <Icon name="receipt" />

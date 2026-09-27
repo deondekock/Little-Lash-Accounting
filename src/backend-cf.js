@@ -11,10 +11,7 @@ import { FAKE_API } from './config.js'
 import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
-import { clientKey } from './lib/stats.js'
-import { dayName } from './lib/booking.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES } from './lib/schema.js'
-import { BOOKING_FIELDS, bookingSettings, planFor, toMin } from './lib/booking.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const MAX_HISTORY_DATA = 1_900_000 // a database row holds up to 2 MB
@@ -27,10 +24,7 @@ const db = {
   appts: [],
   leave: [],
   payslips: [],
-  bookings: [],
-  clients: [],
   company: {},
-  booking: bookingSettings(),
   settings: {},
 }
 
@@ -100,8 +94,7 @@ function toAppt(r) {
     client: clean(r.client), service: clean(r.service), amount: Number(r.amount) || 0, method: clean(r.method),
     status: r.status === 'Paid' ? 'Paid' : 'Unpaid', paidOn: clean(r.paid_on), notes: clean(r.notes),
     overtime: overtimeValue(r.overtime), length: Number(r.length) > 0 ? Number(r.length) : 0,
-    createdBy: clean(r.created_by), updatedBy: clean(r.updated_by), createdAt: clean(r.created_at),
-    clientId: clean(r.client_id), bookingId: clean(r.booking_id), rec: r,
+    createdBy: clean(r.created_by), updatedBy: clean(r.updated_by), createdAt: clean(r.created_at), rec: r,
   }
 }
 function apptRec(a, created, updated, by = user) {
@@ -110,7 +103,6 @@ function apptRec(a, created, updated, by = user) {
     service: a.service, amount: a.amount, method: a.method, status: a.status, paid_on: a.paidOn || '', notes: a.notes || '',
     overtime: a.overtime === 'all' ? 'All' : a.overtime ? String(a.overtime) : '', length: a.overtime && a.length ? a.length : null,
     created_at: created, updated_at: updated, created_by: a.rec ? a.rec.created_by ?? null : by || null, updated_by: by || a.rec?.updated_by || null,
-    client_id: a.clientId || a.rec?.client_id || null, booking_id: a.bookingId || a.rec?.booking_id || null,
   }
 }
 
@@ -121,7 +113,7 @@ function toEmployee(r) {
     const v = raw[key]
     pay[key] = kind === 'num' ? (v === '' || v == null || !Number.isFinite(Number(v)) ? '' : Number(v)) : kind === 'bool' ? !!v : clean(v)
   }
-  return { id: r.id, name: clean(r.name), phone: clean(r.phone), active: !!r.active, pay, schedule: parse(r.schedule, null), rec: r }
+  return { id: r.id, name: clean(r.name), phone: clean(r.phone), active: !!r.active, pay, rec: r }
 }
 
 /** Payslip details from the form, checked (numbers as numbers, blanks stay blank). */
@@ -162,33 +154,9 @@ function toService(r) {
   return {
     id: r.id, name: clean(r.name), price: r.price === null || r.price === '' ? null : Number(r.price),
     prices: Object.fromEntries(Object.entries(prices).filter(([, v]) => Number.isFinite(Number(v))).map(([k, v]) => [k, Number(v)])),
-    active: r.active !== 0 && r.active !== false,
-    minutes: Number(r.minutes) > 0 ? Number(r.minutes) : null,
-    durations: Object.fromEntries(Object.entries(parse(r.durations, {})).filter(([, v]) => Number(v) > 0).map(([k, v]) => [k, Number(v)])),
-    staff: Array.isArray(parse(r.staff, [])) ? parse(r.staff, []) : [],
-    online: !!r.online, category: clean(r.category), description: clean(r.description), rec: r,
+    active: r.active !== 0 && r.active !== false, rec: r,
   }
 }
-
-/** Minutes per team member → JSON ('' when none). */
-function durationsJson(d) {
-  const out = {}
-  for (const [k, v] of Object.entries(d || {})) if (Number(v) > 0 && Number(v) <= 720) out[k] = Math.round(Number(v))
-  return Object.keys(out).length ? JSON.stringify(out) : ''
-}
-
-/* Bookings and client accounts */
-const toBooking = (r) => ({
-  id: r.id, date: clean(r.date), start: clean(r.start), minutes: Number(r.minutes) || 0, employeeId: clean(r.employee_id),
-  clientId: clean(r.client_id), clientName: clean(r.client_name), clientPhone: clean(r.client_phone),
-  services: (Array.isArray(parse(r.services, [])) ? parse(r.services, []) : []), status: r.status || 'booked', kind: r.kind || 'booking',
-  notes: clean(r.notes), source: clean(r.source), appointmentId: clean(r.appointment_id), createdBy: clean(r.created_by),
-  updatedBy: clean(r.updated_by), createdAt: clean(r.created_at), rec: r,
-})
-const toClient = (r) => ({
-  id: r.id, name: clean(r.name), email: clean(r.email), phone: clean(r.phone), notes: clean(r.notes), clientKey: clean(r.client_key),
-  createdAt: clean(r.created_at), lastLoginAt: clean(r.last_login_at), rec: r,
-})
 const cleanPrice = (v) => (v === '' || v == null ? '' : Math.round(parseFloat(String(v).replace(',', '.')) * 100) / 100)
 function pricesJson(prices) {
   const out = {}
@@ -217,11 +185,9 @@ const publicEmployees = () => db.employees.map(strip).sort((a, b) => a.name.loca
 const publicServices = () => db.services.map(strip).sort((a, b) => a.name.localeCompare(b.name))
 const publicLeave = () => db.leave.map(strip).sort((a, b) => (a.from < b.from ? 1 : -1))
 const publicPayslips = () => db.payslips.map(strip)
-const publicBookings = () => db.bookings.map(strip)
-const publicClients = () => db.clients.map(strip).sort((a, b) => a.name.localeCompare(b.name))
 
-const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', bookings: 'bookings', clients: 'clients' }
-const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, bookings: toBooking, clients: toClient }
+const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips' }
+const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip }
 
 /** Updates the in-memory lists after a successful write. */
 function applyLocal(put = {}, del = {}) {
@@ -322,13 +288,10 @@ async function load() {
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
-  db.bookings = (data.bookings || []).map((a) => toBooking(fromArray('bookings', a)))
-  db.clients = (data.clients || []).map((a) => toClient(fromArray('clients', a)))
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(db.settings[label] ?? '').trim()]))
-  db.booking = bookingSettings(db.settings)
 }
 
 /** Opens the salon's data (there's only one database, so the argument is ignored). */
@@ -345,7 +308,6 @@ export function getInitialData() {
   return {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
-    bookings: publicBookings(), clients: publicClients(), booking: { ...db.booking },
   }
 }
 
@@ -382,19 +344,11 @@ export async function saveAppointment(input) {
     paidOn: v.status === 'Paid' ? (existing?.status === 'Paid' && existing.paidOn) || todayStr() : '',
   }
   const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
-  // Completing a booking: link them, and mark the booking done.
-  const booking = !existing && input.bookingId ? db.bookings.find((b) => b.id === input.bookingId) : null
-  if (booking) Object.assign(appt, { bookingId: booking.id, clientId: booking.clientId || null })
-  else if (!existing?.clientId) appt.clientId = accountFor(appt.client)?.id || null
   const rec = apptRec(appt, existing?.rec.created_at || now, now)
-  const put = { appointments: [rec] }
-  const before = { appts: { [appt.id]: existing ? existing.rec : null } }
-  if (booking) {
-    put.bookings = [{ ...booking.rec, status: 'done', appointment_id: appt.id, updated_by: user || null, updated_at: now }]
-    before.books = { [booking.id]: booking.rec }
-  }
-  await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : booking ? 'Done & paid' : 'Added'} ${label}`, {
-    put, before, expect: existing ? expectOf('appointments', [existing]) : undefined,
+  await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : 'Added'} ${label}`, {
+    put: { appointments: [rec] },
+    before: { appts: { [appt.id]: existing ? existing.rec : null } },
+    expect: existing ? expectOf('appointments', [existing]) : undefined,
   })
   return publicAppt(db.appts.find((a) => a.id === appt.id))
 }
@@ -459,7 +413,6 @@ export async function saveEmployee(input) {
   const rec = {
     id: existing?.id || uuid(), name, phone: clean(input.phone), active: existing ? (input.active !== false ? 1 : 0) : 1,
     pay: JSON.stringify(pay), created_at: existing?.rec.created_at || now, updated_at: now,
-    schedule: input.schedule !== undefined ? (input.schedule ? JSON.stringify(input.schedule) : null) : existing?.rec.schedule ?? null,
   }
   await commit('team', `${existing ? 'Updated' : 'Added'} team member ${name}`, {
     put: { employees: [rec] }, before: { emps: { [rec.id]: existing ? existing.rec : null } },
@@ -508,13 +461,6 @@ export async function saveService(input) {
   const rec = {
     id: existing?.id || input.newId || uuid(), name, price: price === '' ? null : price, active: input.active !== false ? 1 : 0,
     prices: pricesJson(input.prices), created_at: existing?.rec.created_at || now, updated_at: now,
-    // Booking: usual length, per-person lengths, who does it, bookable online, category and description.
-    minutes: input.minutes !== undefined ? (Number(input.minutes) > 0 ? Math.round(Number(input.minutes)) : null) : existing?.rec.minutes ?? null,
-    durations: input.durations !== undefined ? durationsJson(input.durations) : existing?.rec.durations ?? '',
-    staff: input.staff !== undefined ? JSON.stringify(input.staff.filter(Boolean)) : existing?.rec.staff ?? '[]',
-    online: input.online !== undefined ? (input.online ? 1 : 0) : existing?.rec.online ?? 0,
-    category: input.category !== undefined ? clean(input.category) : existing?.rec.category ?? '',
-    description: input.description !== undefined ? String(input.description || '').trim().slice(0, 300) : existing?.rec.description ?? '',
   }
   const from = existing ? (existing.name !== name ? [existing.name] : []) : input.fromNames || []
   const appts = from.length ? renameInAppts(from, name, now) : { put: [], before: {} }
@@ -635,114 +581,6 @@ export async function saveCompany(company) {
   return { ...db.company }
 }
 
-/* ---------------- bookings (owner) ---------------- */
-
-const STATUS_WORD = { booked: 'Booked', done: 'Done', cancelled: 'Cancelled', noshow: 'No-show' }
-
-/** Checks and tidies a booking from the calendar form. */
-function bookingFromInput(input, existing, now) {
-  const date = clean(input.date)
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Please choose a date.')
-  if (!/^\d{2}:\d{2}$/.test(clean(input.start))) throw new Error('Please choose a time.')
-  const emp = db.employees.find((e) => e.id === input.employeeId)
-  if (!emp) throw new Error('Please choose who it\'s with.')
-  const kind = input.kind === 'block' ? 'block' : 'booking'
-  const minutes = Math.round(Number(input.minutes))
-  if (!(minutes >= 5 && minutes <= 720)) throw new Error('Please check how long it\'s booked for.')
-  if (toMin(input.start) + minutes > 24 * 60) throw new Error('That runs past midnight.')
-  if (kind === 'booking' && !clean(input.clientName)) throw new Error('Please enter the client\'s name.')
-  const services = (input.services || []).map((x) => ({ id: x.id || null, name: clean(x.name), price: x.price == null || x.price === '' ? null : Number(x.price), minutes: Number(x.minutes) || 0 }))
-  return {
-    id: existing?.id || uuid(), date, start: clean(input.start), minutes, employee_id: emp.id,
-    client_id: input.clientId || existing?.rec.client_id || null, client_name: kind === 'block' ? clean(input.clientName) || 'Blocked' : clean(input.clientName),
-    client_phone: clean(input.clientPhone), services: JSON.stringify(kind === 'block' ? [] : services),
-    status: input.status || existing?.status || 'booked', kind, notes: String(input.notes || '').trim().slice(0, 500),
-    source: existing?.rec.source || 'salon', appointment_id: existing?.rec.appointment_id || null,
-    // A booking moved to another day/time gets its reminder again.
-    reminded_at: existing && existing.date === date && existing.start === clean(input.start) ? existing.rec.reminded_at : null,
-    created_by: existing ? existing.rec.created_by : user || null, updated_by: user || null,
-    created_at: existing?.rec.created_at || now, updated_at: now,
-  }
-}
-
-const bookingLabel = (b) => `${b.client_name || 'Booking'} · ${b.date.slice(8)}/${b.date.slice(5, 7)} ${b.start} · ${nameOf(b.employee_id) || ''}`
-
-export async function saveBooking(input) {
-  const now = new Date().toISOString()
-  const existing = input.id ? db.bookings.find((b) => b.id === input.id) : null
-  if (input.id && !existing) throw new Error('This booking was removed on another phone.')
-  const rec = bookingFromInput(input, existing, now)
-  const moved = existing && (existing.date !== rec.date || existing.start !== rec.start || existing.employeeId !== rec.employee_id)
-  // A booking for someone with an online account links to it (by the name she's linked under).
-  if (!rec.client_id && rec.kind === 'booking') rec.client_id = accountFor(rec.client_name)?.id || null
-  const who = (nameOf(rec.employee_id) || '').split(' ')[0]
-  const tell = rec.client_id && (moved || !existing)
-    ? [{ clientId: rec.client_id, tag: `booking-${rec.id}`, title: existing ? '🔁 Your appointment time has changed' : '✅ Your booking is confirmed',
-      body: `${existing ? 'Now ' : ''}${dayName(rec.date, true)} at ${rec.start} with ${who}. You'll get a reminder the day before.` }]
-    : undefined
-  await commit('booking', `${existing ? (moved ? 'Moved' : 'Changed') : rec.kind === 'block' ? 'Blocked time' : 'Booked'} ${bookingLabel(rec)}`, {
-    put: { bookings: [rec] }, before: { books: { [rec.id]: existing ? existing.rec : null } },
-    expect: existing ? expectOf('bookings', [existing]) : undefined, notify: tell,
-  })
-  return publicBookings()
-}
-
-/** Cancel / no-show / back to booked; a block is simply removed. */
-export async function setBookingStatus(id, status) {
-  const b = db.bookings.find((x) => x.id === id)
-  if (!b) throw new Error('That booking was not found.')
-  if (b.kind === 'block' && status === 'cancelled') {
-    await commit('booking', `Removed blocked time · ${bookingLabel(b.rec)}`, { del: { bookings: [id] }, before: { books: { [id]: b.rec } } })
-    return publicBookings()
-  }
-  const rec = { ...b.rec, status, updated_by: user || null, updated_at: new Date().toISOString() }
-  await commit('booking', `${STATUS_WORD[status] || status}: ${bookingLabel(b.rec)}`, {
-    put: { bookings: [rec] }, before: { books: { [id]: b.rec } }, expect: expectOf('bookings', [b]),
-    notify: status === 'cancelled' && b.clientId
-      ? [{ clientId: b.clientId, tag: `booking-${id}`, title: 'Your appointment was cancelled', body: `${dayName(b.date, true)} at ${b.start}. Please phone the salon or book a new time.` }]
-      : undefined,
-  })
-  return publicBookings()
-}
-
-/** The online account linked to this client name (the owner links them once). */
-function accountFor(name) {
-  const k = clientKey(name || '')
-  return k ? db.clients.find((c) => c.clientKey === k) : null
-}
-
-/**
- * Links a client's online account to the name her past visits are under: her visits, amounts and
- * paid / unpaid then show on her booking page, and new ones link by themselves. key = '' unlinks.
- */
-export async function linkClient(clientId, name) {
-  const c = db.clients.find((x) => x.id === clientId)
-  if (!c) throw new Error('That client account was not found.')
-  const key = name ? clientKey(name) : ''
-  const taken = key && db.clients.find((x) => x.clientKey === key && x.id !== clientId)
-  if (taken) throw new Error(`"${name}" is already linked to ${taken.email}.`)
-  const now = new Date().toISOString()
-  const oldKey = c.clientKey
-  const appts = db.appts.filter((a) => (key && clientKey(a.client) === key && a.clientId !== clientId) || (!key && oldKey && a.clientId === clientId && !a.bookingId))
-  const put = {
-    clients: [{ ...c.rec, client_key: key || null, updated_at: now }],
-    appointments: appts.map((a) => ({ ...a.rec, client_id: key ? clientId : null, updated_at: now })),
-  }
-  await commit('clients', key ? `Linked ${c.email} to ${name} (${appts.length} visits)` : `Unlinked ${c.email}`, {
-    put, before: { clients: { [c.id]: c.rec }, appts: Object.fromEntries(appts.map((a) => [a.id, a.rec])) },
-  })
-  return { clients: publicClients(), appts: appts.map((a) => publicAppt(db.appts.find((x) => x.id === a.id))) }
-}
-
-/** Online booking settings (Settings → Online booking). */
-export async function saveBookingSettings(values) {
-  const settings = BOOKING_FIELDS.map(([key, label]) => [label, key === 'online' ? (values.online ? 'on' : 'off') : String(values[key] ?? '').trim()])
-  await send({ settings })
-  for (const [label, value] of settings) db.settings[label] = value
-  db.booking = bookingSettings(db.settings)
-  return { ...db.booking }
-}
-
 /* ---------------- signed-in person, and staff (her own data only) ---------------- */
 
 /** { role: 'admin' | 'staff', email, employeeId?, name? } */
@@ -772,17 +610,14 @@ export async function ensureSession() {
 export async function staffLoad() {
   const data = await request('/api/staff/load')
   db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
-  db.services = data.services.map((a) => toService(fromArray('services', a))) // no prices
+  db.services = []
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
-  db.bookings = (data.bookings || []).map((a) => toBooking(fromArray('bookings', a)))
-  db.clients = (data.clients || []).map((a) => toClient(fromArray('clients', a)))
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(db.settings[label] ?? '').trim()]))
-  db.booking = bookingSettings(db.settings)
   return getInitialData()
 }
 
@@ -806,27 +641,8 @@ export async function saveMyAppointment(input) {
   if (body.amount === '' || body.amount == null) delete body.amount
   const rec = await request('/api/staff/appointment', { method: 'POST', body })
   applyLocal({ appointments: [rec] })
-  const booking = input.bookingId && db.bookings.find((x) => x.id === input.bookingId)
-  if (booking) applyLocal({ bookings: [{ ...booking.rec, status: 'done', appointment_id: rec.id }] })
   return publicAppt(db.appts.find((a) => a.id === rec.id))
 }
-
-/** Staff: add / change / move one of her bookings (the Worker fills in prices). */
-export async function saveMyBooking(input) {
-  const rec = await request('/api/staff/booking', { method: 'POST', body: input })
-  applyLocal({ bookings: [rec] })
-  return publicBookings()
-}
-
-/** Staff: cancel, no-show or restore one of her bookings. */
-export async function setMyBookingStatus(id, status) {
-  const res = await request('/api/staff/booking/status', { method: 'POST', body: { id, status } })
-  if (res.deleted) applyLocal({}, { bookings: [res.deleted] })
-  else applyLocal({ bookings: [res] })
-  return publicBookings()
-}
-
-export const getBookings = () => publicBookings()
 
 /** Staff: delete an appointment she added herself (within 24 hours). */
 export async function deleteMyAppointment(id) {

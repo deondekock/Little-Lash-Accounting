@@ -100,25 +100,6 @@ it sends them. They can add/change appointments in the current and previous busi
 it is saved, and delete ones they added within 24 hours. Every change is kept with who made it; the owner sees
 "added/changed by …" in Payments and a Changes list (with the amount before each change) on each appointment.
 
-## Online booking (like Booksy)
-
-- **Setup (owner):** Team → Services & prices: per service the usual length, who does it, each person's price and
-  length, category, a short description, and "clients can book this online". Team → Edit → Working hours (with
-  breaks). Settings → Online booking: on/off, the booking link to share, and rules (days ahead, minimum notice,
-  cancelling, time grid, salon phone, a message for clients) with a checklist of anything missing.
-- **Calendar** (owner: everyone; staff: their own): tap to book, hold & drag to move, override how long it's
-  booked for (e.g. a brow tint during a lash fill), block time, cancel / no-show, and "Done & payment" records the
-  payment linked to the booking. Clients never see calendars — only open times that fit.
-- **Booking page for clients** (`…/book/`, installable): treatment(s) → who (or anyone) → time ("next open time"
-  first) → confirm. Sign in with any email address + a 6-digit code (no password), name and cellphone once.
-  Her appointments (change time / cancel up to the limit), her visits with paid / not paid, invoices, and reminder
-  switches. The rules live in `src/lib/booking.js`, shared by the app and the Worker; every booking is re-checked
-  on the server when it's made.
-- **Notifications:** clients get a confirmation, a reminder the day before (hourly check), and a message if the
-  salon moves or cancels; the team member and owners hear about online bookings, changes and cancellations.
-- **Online clients** (Clients → Online clients): link a new account to her name in your client list so her past
-  visits show on her page; payments for her link automatically after that.
-
 **Staff stats** (Me → My stats, and a "so far" strip on the day view): her month so far vs the same point last
 month, days worked, busiest day, unpaid count, overtime hours; her new / 2nd–3rd visit / regular clients, last month's
 new clients who came back, rebooking %, clients due for a fill; her top services; milestones (appointment totals, best

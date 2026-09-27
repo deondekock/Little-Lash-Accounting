@@ -222,13 +222,6 @@ export function buildServices(all, list) {
     active: e.tab ? e.tab.active : true,
     price: e.tab?.price ?? null,
     prices: e.tab?.prices || {},
-    // Online booking
-    minutes: e.tab?.minutes ?? null,
-    durations: e.tab?.durations || {},
-    staff: e.tab?.staff || [],
-    online: !!e.tab?.online,
-    category: e.tab?.category || '',
-    description: e.tab?.description || '',
     typical: median(e.solo.slice(-30)),
     typicalBy: Object.fromEntries(Object.entries(e.soloBy).map(([id, xs]) => [id, median(xs.slice(-20))])),
     countBy: e.countBy, // how often each team member did it

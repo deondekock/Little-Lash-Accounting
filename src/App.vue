@@ -7,9 +7,6 @@ import TeamView from './views/TeamView.vue'
 import InsightsView from './views/InsightsView.vue'
 import ServicesView from './views/ServicesView.vue'
 import PayrollView from './views/PayrollView.vue'
-import CalendarView from './views/CalendarView.vue'
-import BookingModal from './components/BookingModal.vue'
-import ClientAccountsModal from './components/ClientAccountsModal.vue'
 import MyLeaveView from './views/staff/MyLeaveView.vue'
 import MyPayslipsView from './views/staff/MyPayslipsView.vue'
 import MyMeView from './views/staff/MyMeView.vue'
@@ -19,7 +16,6 @@ import MyAppointmentsView from './views/staff/MyAppointmentsView.vue'
 import MyClientsView from './views/staff/MyClientsView.vue'
 import NotificationsModal from './components/NotificationsModal.vue'
 import ViewAsModal from './components/ViewAsModal.vue'
-import BookingSettingsModal from './components/BookingSettingsModal.vue'
 import PayslipViewModal from './components/PayslipViewModal.vue'
 import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
@@ -44,14 +40,14 @@ import Icon from './components/Icon.vue'
 import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut, exitViewAs } from './store.js'
 import { BACKEND } from './config.js'
 
-const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView, calendar: CalendarView,
+const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
   'my-appointments': MyAppointmentsView, 'my-clients': MyClientsView, 'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyMeView }
 const ownerTabs = [
   { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar' },
   { id: 'payments', label: 'Payments', icon: 'receipt' },
   { id: 'clients', label: 'Clients', icon: 'heart' },
   { id: 'team', label: 'Team', icon: 'users' },
+  { id: 'insights', label: 'Insights', icon: 'chart' },
 ]
 const staffTabs = [
   { id: 'my-appointments', label: 'Appointments', icon: 'sparkle' },
@@ -139,9 +135,6 @@ const retry = () => location.reload()
   <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />
   <NotificationsModal v-if="state.modal?.type === 'notifications'" />
   <ViewAsModal v-if="state.modal?.type === 'viewAs'" />
-  <BookingSettingsModal v-if="state.modal?.type === 'bookingSettings'" />
-  <ClientAccountsModal v-if="state.modal?.type === 'accounts'" />
-  <BookingModal v-if="state.modal?.type === 'booking'" :booking="state.modal.data" :prefill="state.modal.prefill" />
   <PayslipViewModal v-if="state.modal?.type === 'payslipView'" :slip="state.modal.data" />
   <MonthPicker v-if="state.modal?.type === 'picker'" :mode="state.modal.data.mode" />
   <MergeModal v-if="state.modal?.type === 'merge'" :key="state.modal.data.client.key" :client="state.modal.data.client" :with="state.modal.data.with" :mode="state.modal.data.mode" />

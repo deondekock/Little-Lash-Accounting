@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { all, state, clients, employeeColor, openClient, openAppointment, openMerge, openAccounts } from '../store.js'
+import { all, state, clients, employeeColor, openClient, openAppointment, openMerge } from '../store.js'
 import { findDuplicates } from '../lib/stats.js'
 import { fmt, fmt0, initials, shortDate } from '../lib/format.js'
 
@@ -35,7 +35,6 @@ const counts = computed(() => ({
 }))
 
 const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yesterday' : d < 14 ? `${d} days ago` : d < 60 ? `${Math.round(d / 7)} weeks ago` : `${Math.round(d / 30)} months ago`)
-const unlinked = computed(() => state.clients.filter((c) => !c.clientKey).length)
 </script>
 
 <template>
@@ -44,14 +43,6 @@ const unlinked = computed(() => state.clients.filter((c) => !c.clientKey).length
       <div class="hello">Your <em>clients</em></div>
       <div class="sub">{{ counts.all.toLocaleString('en-ZA') }} clients · {{ counts.regulars }} regulars</div>
     </div>
-    <button v-if="state.clients.length" class="card list-row" style="padding: 14px 16px; margin-bottom: 12px; width: 100%" @click="openAccounts">
-      <div class="history-icon">🌐</div>
-      <div class="grow">
-        <div class="title">{{ unlinked ? `${unlinked} new online client${unlinked === 1 ? '' : 's'} to link` : 'Online clients' }}</div>
-        <div class="meta">{{ state.clients.length }} signed up on the booking page{{ unlinked ? ' · link them to their past visits' : '' }}</div>
-      </div>
-      <Icon name="right" />
-    </button>
 
     <label class="search">
       <Icon name="search" />
