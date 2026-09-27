@@ -47,6 +47,7 @@ export const state = reactive({
   error: '', // why the data couldn't be opened
   history: null, // History entries (loaded when the History sheet opens)
   printing: null, // payslips being printed / saved as PDF
+  printingReport: null, // a report being printed / saved as PDF
   clientPhones: {}, // { clientKey: cell number }
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
 })
@@ -574,6 +575,23 @@ export async function printPayslips(slips) {
   window.addEventListener('afterprint', done)
   window.print()
 }
+
+/** Prints a report (month-end pack, tax year) — the phone's print screen also saves it as a PDF. */
+export async function printReport(report) {
+  const title = document.title
+  document.title = report.fileName || report.title
+  state.printingReport = report
+  await nextTick()
+  const done = () => {
+    state.printingReport = null
+    document.title = title
+    window.removeEventListener('afterprint', done)
+  }
+  window.addEventListener('afterprint', done)
+  window.print()
+}
+export const openMonthEnd = () => (state.modal = { type: 'monthEnd', data: null })
+export const openTaxYear = () => (state.modal = { type: 'taxYear', data: null })
 
 /* ---------------- modals ---------------- */
 

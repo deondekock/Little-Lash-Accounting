@@ -925,3 +925,24 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 }
 :root[data-theme="dark"] .wa-btn, :root[data-theme="dark"] .btn.wa { color: #5fd38f; border-color: #28503a; }
 :root[data-theme="dark"] .wa-btn:hover { background: #173022; }
+/* Reports (month-end pack, tax year): on screen in a sheet, and printed / saved as PDF */
+.report-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-screen { border: 1px solid var(--line); border-radius: var(--radius-sm); background: #fff; padding: 14px; overflow: hidden; }
+.report { color: #222; background: #fff; font-family: var(--font-sans); font-size: 12.5px; max-width: 900px; margin: 0 auto; }
+.report header { border-bottom: 3px solid #a0555c; padding-bottom: 10px; margin-bottom: 14px; }
+.report h1 { font-family: var(--font-serif); font-weight: 400; font-size: 22px; margin: 4px 0 2px; color: #33292b; }
+.report .rp-sub { color: #6b5f60; }
+.report h2 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; background: #f7e6e5; color: #7a4644; padding: 5px 8px; margin: 16px 0 6px; font-weight: 600; }
+.report .rp-note { color: #6b5f60; margin: 4px 0 6px; }
+.report .rp-scroll { overflow-x: auto; }
+.report table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.report th, .report td { text-align: left; padding: 5px 6px; border-bottom: 1px solid #eee; white-space: nowrap; font-size: 12px; background: none; color: #222; letter-spacing: 0; text-transform: none; }
+.report th { color: #6b5f60; font-weight: 600; font-size: 11px; }
+.report .n { text-align: right; }
+.report tfoot td { font-weight: 700; border-top: 1.5px solid #33292b; border-bottom: 0; }
+.report footer { margin-top: 16px; color: #777; font-size: 11px; }
+.report footer p { margin: 2px 0; }
+@media print {
+  .report { font-size: 11px; }
+  .report th, .report td { white-space: normal; }
+}

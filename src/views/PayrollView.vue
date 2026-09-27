@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
-import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips, decideLeave, toastUndo, fail } from '../store.js'
+import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips, decideLeave, toastUndo, fail, openMonthEnd, openTaxYear } from '../store.js'
 import { LEAVE_STATUS } from '../lib/schema.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
@@ -140,6 +140,8 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
 
       <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px">
         <button v-if="savedSlips.length" class="btn soft" @click="printPayslips(savedSlips)"><Icon name="receipt" :size="16" /> Print / PDF all saved ({{ savedSlips.length }})</button>
+        <button class="btn ghost" @click="openMonthEnd">Month-end pack</button>
+        <button class="btn ghost" @click="openTaxYear">Tax year (IRP5)</button>
         <button class="btn ghost" @click="openCompany">Company details</button>
       </div>
     </template>

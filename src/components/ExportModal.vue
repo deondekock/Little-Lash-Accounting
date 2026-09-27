@@ -1,25 +1,12 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import { all, state, closeModal, toast } from '../store.js'
-import { todayStr } from '../lib/format.js'
+import { downloadCsv } from '../lib/csv.js'
 import { PAY_FIELDS } from '../lib/schema.js'
 
 /** Downloads the salon's data as CSV files (open in Excel or Google Sheets). */
-function csv(rows) {
-  const cell = (v) => {
-    const s = v === null || v === undefined ? '' : String(v)
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-  }
-  // The BOM makes Excel read it as UTF-8 (names like "Irené").
-  return '﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n')
-}
 function download(name, rows) {
-  const url = URL.createObjectURL(new Blob([csv(rows)], { type: 'text/csv;charset=utf-8' }))
-  const a = Object.assign(document.createElement('a'), { href: url, download: `${name} ${todayStr()}.csv` })
-  document.body.append(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 5000)
+  downloadCsv(name, rows)
   toast(`${name} downloaded`)
 }
 const nameOf = (id) => state.employees.find((e) => e.id === id)?.name || ''

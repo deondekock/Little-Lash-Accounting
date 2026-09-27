@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openMonthEnd, openTaxYear, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 import { theme, setTheme } from '../lib/theme.js'
 
@@ -43,6 +43,14 @@ function run(fn) {
       <button class="list-row" @click="openCompany()">
         <Icon name="receipt" />
         <div class="grow"><div class="title">Company details</div><div class="meta">Shown on payslips</div></div>
+      </button>
+      <button class="list-row" @click="openMonthEnd()">
+        <Icon name="receipt" />
+        <div class="grow"><div class="title">Month-end pack</div><div class="meta">Takings, unpaid, payroll and EMP201 for your accountant</div></div>
+      </button>
+      <button class="list-row" @click="openTaxYear()">
+        <Icon name="calendar" />
+        <div class="grow"><div class="title">Tax year (IRP5 / EMP501)</div><div class="meta">Each person's yearly totals for SARS</div></div>
       </button>
       <button class="list-row" @click="openExport()">
         <Icon name="external" />
