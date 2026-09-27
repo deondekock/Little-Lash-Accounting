@@ -1,4 +1,5 @@
 import { reactive, computed, shallowRef, nextTick } from 'vue'
+import { newVersionAvailable, updateApp } from './lib/update.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow } from './lib/stats.js'
@@ -309,6 +310,11 @@ export async function updateMyDetails(details) {
 }
 
 export async function refresh() {
+  // A newer version of the app itself (new look, fixes): load that instead.
+  if (await newVersionAvailable()) {
+    toast('Updating the app…')
+    return updateApp()
+  }
   if (state.role === 'staff') {
     await openStaff()
     if (state.phase === 'ready') toast('Up to date')

@@ -39,6 +39,7 @@ import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
 import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut, exitViewAs } from './store.js'
 import { BACKEND } from './config.js'
+import { newVersionAvailable, updateApp } from './lib/update.js'
 
 const views = { home: HomeView, payments: PaymentsView, clients: ClientsView, team: TeamView, insights: InsightsView, services: ServicesView, payroll: PayrollView,
   'my-appointments': MyAppointmentsView, 'my-clients': MyClientsView, 'my-leave': MyLeaveView, 'my-payslips': MyPayslipsView, 'my-details': MyMeView }
@@ -59,8 +60,11 @@ const staffTabs = [
 const tabs = computed(() => (state.role === 'staff' ? staffTabs : ownerTabs))
 
 // Coming back to the app after a while: pick up changes made on another device.
-function onVisible() {
-  if (document.visibilityState === 'visible' && state.phase === 'ready' && Date.now() - state.loadedAt > 2 * 60_000) refresh()
+// A newer version of the app is picked up too, unless a form is open (so nothing typed is lost).
+async function onVisible() {
+  if (document.visibilityState !== 'visible') return
+  if (!state.modal && (await newVersionAvailable())) return updateApp()
+  if (state.phase === 'ready' && Date.now() - state.loadedAt > 2 * 60_000) refresh()
 }
 onMounted(() => {
   init()

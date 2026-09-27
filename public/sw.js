@@ -26,6 +26,8 @@ self.addEventListener('fetch', (event) => {
   const req = event.request
   const url = new URL(req.url)
   if (req.method !== 'GET' || url.origin !== self.location.origin) return
+  // Always ask the server which version is current (never from the cache).
+  if (url.pathname.endsWith('/version.json')) return
 
   if (req.mode === 'navigate') {
     event.respondWith(
