@@ -14,7 +14,7 @@ const adopting = !!s && !inList
 const form = reactive({
   name: s?.name || '',
   price: s?.price ?? (adopting && s.typical != null ? s.typical : ''),
-  status: s && !s.active ? 'Hidden' : 'Shown',
+  status: s && !s.active ? 'No longer' : 'Yes',
   prices: { ...(s?.prices || {}) },
 })
 // Everyone active, plus anyone who has a price for this service or has done it before.
@@ -56,7 +56,7 @@ async function save() {
       price: form.price,
       // Only keep prices that differ from the price for anyone, so they follow it later.
       prices: Object.fromEntries(Object.entries(form.prices).filter(([, v]) => isSet(v) && !same(v, form.price))),
-      active: form.status === 'Shown',
+      active: form.status === 'Yes',
       fromNames: adopting ? s.spellings : undefined,
     })
     toastUndo(inList ? 'Service saved' : 'Service added')
@@ -94,9 +94,10 @@ async function save() {
           </div>
         </div>
       </div>
-      <div v-if="inList" class="field">
-        <label>In the appointment form</label>
-        <SegmentedControl v-model="form.status" :options="['Shown', 'Hidden']" />
+      <div v-if="s" class="field">
+        <label>We offer this</label>
+        <SegmentedControl v-model="form.status" :options="['Yes', 'No longer']" />
+        <div class="field-hint">{{ form.status === 'Yes' ? 'Shown when adding appointments.' : 'Not shown when adding appointments any more. Past appointments keep it, and it stays in reports and history.' }}</div>
       </div>
       <button v-if="s?.count" type="button" class="link-btn" style="margin-top: 4px" @click="openPriceCalc(serviceKey(s.name))">🧮 What would a price change bring in?</button>
       <div class="modal-actions">

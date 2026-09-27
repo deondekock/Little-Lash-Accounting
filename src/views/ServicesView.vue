@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor, openPriceCalc } from '../store.js'
+import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor, openPriceCalc, saveService, toastUndo, fail } from '../store.js'
 import { fmt0, shortDate } from '../lib/format.js'
 import { looseKey, findServiceDuplicates, priceRange, servicePrice } from '../lib/stats.js'
 
@@ -47,6 +47,23 @@ function priceLabel(s) {
   if (s.typical != null) return { value: fmt0(s.typical), note: 'usually' }
   return { value: '—', note: '' }
 }
+/** Offer a service or not (not offered: gone from the appointment form; history stays). */
+const busy = ref('')
+async function toggle(s) {
+  busy.value = s.key
+  try {
+    await saveService({
+      id: s.inList ? s.id : undefined, name: s.name, price: s.price ?? '', prices: s.prices || {}, active: !s.active,
+      fromNames: s.inList ? undefined : s.spellings,
+    })
+    toastUndo(s.active ? `${s.name}: no longer offered` : `${s.name}: offered again`)
+  } catch (err) {
+    fail(err)
+  } finally {
+    busy.value = ''
+  }
+}
+
 function meta(s) {
   const id = person.value?.id
   const n = id ? s.countBy?.[id] || 0 : s.count
@@ -89,12 +106,17 @@ function meta(s) {
         <i class="swatch-dot" :style="{ background: employeeColor(e.id) }" />{{ e.name }} · {{ e.n }}
       </button>
       <button class="chip" :class="{ active: filter === 'dupes' }" @click="filter = 'dupes'">Possible duplicates · {{ dupes.length }}</button>
-      <button v-if="hidden.length" class="chip" :class="{ active: filter === 'hidden' }" @click="filter = 'hidden'">Hidden · {{ hidden.length }}</button>
+      <button v-if="hidden.length" class="chip" :class="{ active: filter === 'hidden' }" @click="filter = 'hidden'">No longer offered · {{ hidden.length }}</button>
     </div>
 
     <p v-if="person && !list.length" class="sub" style="color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px">
       No services recorded for {{ person.name }} yet. They'll appear here as her appointments are added with services — or open a service and give her a price.
     </p>
+
+    <p v-if="filter === 'hidden'" class="sub" style="color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px">
+      Services you don't offer any more. They're not in the appointment form, but their history stays. Switch one on to offer it again.
+    </p>
+    <p v-else-if="filter === 'all' && !query" class="muted-note" style="margin: 0 0 10px !important">Switch a service off when you stop offering it — its history stays.</p>
 
     <template v-if="filter === 'dupes'">
       <p class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
@@ -116,19 +138,25 @@ function meta(s) {
 
     <div v-else-if="list.length" class="card" style="padding: 4px 16px">
       <div class="list">
-        <button v-for="s in list.slice(0, shown)" :key="s.key" class="list-row" @click="openService(s)">
+        <div v-for="s in list.slice(0, shown)" :key="s.key" class="list-row with-action">
+          <button class="row-main" @click="openService(s)">
           <div class="history-icon" :style="person ? { background: employeeColor(person.id), color: '#fff' } : s.inList ? '' : 'background: var(--line); color: var(--ink-2)'">
             <Icon :name="s.inList ? 'sparkle' : 'clock'" :size="16" />
           </div>
           <div class="grow">
-            <div class="title">{{ s.name }}<span v-if="!s.active" class="tag">hidden</span></div>
+            <div class="title">{{ s.name }}<span v-if="!s.active" class="tag">no longer offered</span></div>
             <div class="meta">{{ meta(s) }}</div>
           </div>
           <div class="right">
             <div class="big">{{ priceLabel(s).value }}</div>
             <div class="meta">{{ priceLabel(s).note }}</div>
           </div>
-        </button>
+          </button>
+          <button
+            type="button" class="switch" role="switch" :aria-checked="s.active" :disabled="busy === s.key"
+            :aria-label="`${s.name}: ${s.active ? 'offered' : 'no longer offered'}`" :title="s.active ? 'Offered — tap to stop offering it' : 'Not offered — tap to offer it again'" @click="toggle(s)"
+          ><span /></button>
+        </div>
       </div>
     </div>
     <p v-if="filter !== 'dupes' && list.length > shown" style="text-align: center; margin-top: 14px">
