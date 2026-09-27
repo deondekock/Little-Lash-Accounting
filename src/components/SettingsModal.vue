@@ -3,6 +3,9 @@ import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
 import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
+import { theme, setTheme } from '../lib/theme.js'
+
+const THEMES = [['auto', 'Automatic'], ['light', 'Light'], ['dark', 'Dark']]
 
 function run(fn) {
   closeModal()
@@ -62,6 +65,13 @@ function run(fn) {
         <Icon name="bell" />
         <div class="grow"><div class="title">Notifications</div><div class="meta">On this phone and by email</div></div>
       </button>
+      <div class="list-row appearance-row">
+        <Icon name="moon" />
+        <div class="grow"><div class="title">Appearance</div><div class="meta">{{ theme === 'auto' ? 'Follows your phone' : 'On this phone' }}</div></div>
+        <div class="segmented" role="radiogroup" aria-label="Appearance">
+          <button v-for="[v, label] in THEMES" :key="v" role="radio" :aria-checked="theme === v" :class="{ active: theme === v }" @click="setTheme(v)">{{ label }}</button>
+        </div>
+      </div>
       <button class="list-row" @click="run(refresh)">
         <Icon name="refresh" />
         <div class="grow"><div class="title">Refresh</div><div class="meta">Load changes made on another phone</div></div>

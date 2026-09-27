@@ -21,6 +21,7 @@ const PATHS = {
   swap: 'M7 7h13l-4-4M17 17H4l4 4',
   trendUp: 'M4 16l6-6 4 4 6-7M15 7h5v5',
   trendDown: 'M4 8l6 6 4-4 6 7M15 17h5v-5',
+  moon: 'M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5z',
   bell: 'M6 16V11a6 6 0 1 1 12 0v5l2 2H4zM10 21h4',
   down: 'M6 9l6 6 6-6',
   history: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5M12 7v5l3 2',

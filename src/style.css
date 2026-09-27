@@ -55,8 +55,9 @@
   --nav-h: 66px;
 }
 
+/* Dark mode: follows the phone ("Automatic"), unless Settings → Appearance picks Light or Dark. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #111512;
     --bg-glow: #1b2620;
@@ -97,6 +98,47 @@
     --flow-2: #c9668f;
     --flow-3: #8a3a5e;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111512;
+  --bg-glow: #1b2620;
+  --card: #1b211d;
+  --card-2: #171c19;
+  --ink: #efe8e4;
+  --ink-2: #c7bdb8;
+  --muted: #8f8a85;
+  --line: rgba(255, 255, 255, .08);
+  --grid: rgba(255, 255, 255, .06);
+  --baseline: rgba(255, 255, 255, .16);
+  --brand: #a3c088;
+  --brand-ink: #15200f;
+  --brand-soft: #25301f;
+  --rose: #e6bebe;
+  --rose-soft: #35262a;
+  --rose-ink: #eab3b1;
+  --forest: #0c100e;
+  --forest-2: #161d19;
+  --gold: #d2a86f;
+  --paid: #72c28f;
+  --paid-soft: #183123;
+  --unpaid: #ef9868;
+  --unpaid-soft: #3a2419;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, .55);
+
+  /* Same hues, stepped for the dark card surface (validated separately) */
+  --series-1: #c9668f;
+  --series-2: #72a043;
+  --series-3: #8a74cf;
+  --series-4: #b98a30;
+  --series-5: #12a89c;
+  --series-6: #dc7350;
+  --series-other: #6d6863;
+  --series-ghost: #3f4540;
+  --flow-1: #eeaac4;
+  --flow-2: #c9668f;
+  --flow-3: #8a3a5e;
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -843,3 +885,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .month-strip { width: 100%; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px 14px; margin: 0 0 12px; font: inherit; font-size: 13px; color: var(--ink-2); cursor: pointer; }
 .month-strip .green { color: var(--paid); font-weight: 600; } .month-strip .orange { color: var(--unpaid); font-weight: 600; }
 .month-strip .more { margin-left: auto; color: var(--brand); font-weight: 500; }
+/* Settings → Appearance */
+.appearance-row { flex-wrap: wrap; }
+.appearance-row .segmented button { padding: 7px 11px; }
+@media (max-width: 380px) { .appearance-row .segmented { width: 100%; } .appearance-row .segmented button { flex: 1; } }
