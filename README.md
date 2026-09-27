@@ -36,7 +36,27 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
 - **Merge / rename clients**, with a "Possible duplicates" finder (e.g. "Irene" / "Irené").
 - **History & undo**: every change is logged in the sheet's *History* tab with the rows as they were before,
   so any change — or everything done today — can be rolled back (and the rollback undone too).
-- Light and dark mode; works on phone and laptop; **Add to Home Screen** to use it like an app.
+- **Client cell numbers & WhatsApp nudges**: save a client's number (owner: anyone; staff: their own clients)
+  and send ready-written WhatsApp messages — refill reminder, "we miss you", payment reminder (owner only).
+  Nothing is sent automatically; without a number WhatsApp asks who to send it to.
+- **Gone quiet** (Home and Clients): regulars who haven't been back in over twice their usual time (last year).
+  **Who owes** (Home) and an "Owe money" filter, each with a WhatsApp button.
+- **Loyalty milestones** (10th, 25th, 50th, 75th, 100th… visit): the team member who saw a client is notified
+  when her *next* visit will be a milestone, so she can plan a treat. Badges and a staff filter too.
+- **Month-end pack** (Settings or Pay & leave): takings by method and team member, every unpaid visit, the payroll
+  and the EMP201 figures — on screen, as a PDF, or as a spreadsheet for the accountant.
+- **Tax year (IRP5 / EMP501)**: each person's March–February totals split by IRP5 code (3601, 3606, 4102, 4141)
+  and the month-by-month EMP201 totals.
+- **Price change calculator** (Services & prices): R more per visit or a % → extra per month/year, per team member,
+  and per service when services are recorded.
+- **Year in review** (Insights, staff: Me → My stats; Home in Dec/Jan): busiest month/day, loyal clients, milestones,
+  new faces, clients who came back… Staff get theirs without rands. Shareable summary without names or money.
+- **Team leave calendar** and **South African public holidays** (incl. Easter and the Sunday rule): holidays aren't
+  counted as leave days, work on a public holiday is flagged on the payslip, and booking leave warns who else is off.
+- **Morning summary** (Settings → Notifications, owners): daily at 7:00 (yesterday's takings, unpaid, who's off,
+  leave waiting) or Mondays (last week vs the week before), by push and/or email.
+- Light and dark mode (Settings → Appearance); works on phone and laptop; **Add to Home Screen** to use it like an app.
+  The ↻ button also loads a newer version of the app when there is one.
 
 No server is needed. It's a static website that talks to Google Sheets directly, so free hosting works.
 

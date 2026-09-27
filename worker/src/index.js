@@ -38,6 +38,9 @@
  * Loyalty milestones: when an appointment brings a client to one visit short of a milestone (10th, 25th…),
  * the team member who saw her is told, so she can plan a treat for the milestone visit itself.
  *
+ * Owners can choose a morning summary (Settings → Notifications): daily (yesterday's takings, unpaid, who
+ * is off today, leave waiting) or weekly on Mondays (last week against the week before), at 07:00.
+ *
  * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
@@ -100,8 +103,9 @@ export default {
     }
   },
 
-  /** Nightly backup of everything into KV. */
+  /** 03:00: nightly backup of everything into KV. 07:00: the owners' morning summaries. */
   async scheduled(event, env) {
+    if (event.cron === SUMMARY_CRON) return sendSummaries(env)
     const day = new Date().toISOString().slice(0, 10)
     const body = await loadAll(env.DB, { withHistory: true })
     await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
@@ -503,13 +507,21 @@ async function notifyRoute(env, me, route, request) {
   const db = env.DB
   const relayReady = async () => !!((await getConfig(db, 'email_relay_url')) && (await getConfig(db, 'email_relay_secret')))
   if (route === 'GET /api/notify') {
-    const pref = await db.prepare('SELECT email_on FROM notify_prefs WHERE email = ?1').bind(me.email).first()
-    return JSON.stringify({ emailOn: pref ? !!pref.email_on : true, emailReady: await relayReady(), vapidKey: (await vapid(db)).publicKey })
+    const pref = await db.prepare('SELECT email_on, summary FROM notify_prefs WHERE email = ?1').bind(me.email).first()
+    return JSON.stringify({ emailOn: pref ? !!pref.email_on : true, summary: me.role === 'admin' ? pref?.summary || '' : null, emailReady: await relayReady(), vapidKey: (await vapid(db)).publicKey })
   }
   if (route === 'POST /api/notify/prefs') {
     const body = await request.json()
-    await db.prepare('INSERT INTO notify_prefs (email, email_on, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO UPDATE SET email_on = excluded.email_on, updated_at = excluded.updated_at')
-      .bind(me.email, body.emailOn ? 1 : 0, new Date().toISOString()).run()
+    const now = new Date().toISOString()
+    if (body.emailOn !== undefined) {
+      await db.prepare('INSERT INTO notify_prefs (email, email_on, updated_at) VALUES (?1, ?2, ?3) ON CONFLICT(email) DO UPDATE SET email_on = excluded.email_on, updated_at = excluded.updated_at')
+        .bind(me.email, body.emailOn ? 1 : 0, now).run()
+    }
+    if (body.summary !== undefined && me.role === 'admin') {
+      const summary = ['daily', 'weekly'].includes(body.summary) ? body.summary : ''
+      await db.prepare('INSERT INTO notify_prefs (email, email_on, summary, updated_at) VALUES (?1, 1, ?2, ?3) ON CONFLICT(email) DO UPDATE SET summary = excluded.summary, updated_at = excluded.updated_at')
+        .bind(me.email, summary, now).run()
+    }
     return JSON.stringify({ ok: true })
   }
   if (route === 'POST /api/notify/subscribe') {
@@ -548,6 +560,73 @@ async function notifyRoute(env, me, route, request) {
     return JSON.stringify({ ok: true })
   }
   throw new HttpError(404, 'Not found')
+}
+
+/* ---------------- owners' morning summary ---------------- */
+
+const SUMMARY_CRON = '0 5 * * *' // 07:00 in South Africa
+const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10)
+
+async function takingsBetween(db, from, to) {
+  const { results } = await db.prepare(`SELECT a.employee_id AS id, COALESCE(e.name, a.employee_name) AS name, COUNT(*) AS n, SUM(a.amount) AS total,
+      SUM(CASE WHEN a.status = 'Paid' THEN 0 ELSE 1 END) AS unpaidN, SUM(CASE WHEN a.status = 'Paid' THEN 0 ELSE a.amount END) AS unpaid
+    FROM appointments a LEFT JOIN employees e ON e.id = a.employee_id WHERE a.date BETWEEN ?1 AND ?2 GROUP BY a.employee_id ORDER BY total DESC`).bind(from, to).all()
+  const sum = (k) => results.reduce((s, r) => s + (Number(r[k]) || 0), 0)
+  return { people: results, n: sum('n'), total: sum('total'), unpaidN: sum('unpaidN'), unpaid: sum('unpaid') }
+}
+
+/** The text of an owner's summary ({ title, body } or null when there's nothing to say). */
+export async function buildSummary(db, kind, today = saToday()) {
+  const waiting = (await db.prepare(`SELECT COUNT(*) AS n FROM leave WHERE status = 'requested'`).first())?.n || 0
+  const { results: off } = await db.prepare(`SELECT COALESCE(e.name, l.employee_name) AS name, l.type FROM leave l LEFT JOIN employees e ON e.id = l.employee_id
+    WHERE (l.status IS NULL OR l.status = '' OR l.status = 'approved') AND l.from_date <= ?1 AND COALESCE(NULLIF(l.to_date, ''), l.from_date) >= ?1`).bind(today).all()
+  const extras = [
+    off.length && `Off today: ${off.map((o) => o.name).join(', ')}`,
+    waiting && `${waiting} leave request${waiting === 1 ? '' : 's'} waiting`,
+  ].filter(Boolean)
+  if (kind === 'weekly') {
+    const from = addDays(today, -7)
+    const to = addDays(today, -1)
+    const week = await takingsBetween(db, from, to)
+    const before = await takingsBetween(db, addDays(from, -7), addDays(to, -7))
+    const owed = await db.prepare(`SELECT COUNT(*) AS n, SUM(amount) AS total FROM appointments WHERE status != 'Paid'`).first()
+    const change = before.total ? Math.round(((week.total - before.total) / before.total) * 100) : null
+    return {
+      title: `📊 Last week: ${fmt0(week.total)} from ${week.n} appointment${week.n === 1 ? '' : 's'}`,
+      body: [
+        change != null && `${change >= 0 ? '↑' : '↓'} ${Math.abs(change)}% on the week before (${fmt0(before.total)})`,
+        week.people.map((p) => `${p.name} ${p.n} · ${fmt0(p.total)}`).join(', '),
+        owed?.n && `Owed in total: ${fmt0(owed.total)} (${owed.n} unpaid)`,
+        ...extras,
+      ].filter(Boolean).join(' · '),
+      hash: '', tag: `summary-week-${today}`,
+    }
+  }
+  const day = await takingsBetween(db, addDays(today, -1), addDays(today, -1))
+  if (!day.n && !extras.length) return null // a closed day with nothing to report
+  return {
+    title: day.n ? `☀️ Yesterday: ${fmt0(day.total)} from ${day.n} appointment${day.n === 1 ? '' : 's'}` : '☀️ Good morning',
+    body: [
+      day.n && day.people.map((p) => `${p.name} ${p.n}`).join(', '),
+      day.unpaidN && `${day.unpaidN} unpaid (${fmt0(day.unpaid)})`,
+      ...extras,
+    ].filter(Boolean).join(' · '),
+    hash: '', tag: `summary-${today}`,
+  }
+}
+
+async function sendSummaries(env) {
+  const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
+  if (!owners.length) return
+  const { results } = await env.DB.prepare(`SELECT email, summary FROM notify_prefs WHERE summary IN ('daily', 'weekly')`).all()
+  const monday = new Date(Date.now() + 2 * 3600e3).getUTCDay() === 1
+  const cache = {}
+  for (const p of results) {
+    if (!owners.includes(p.email)) continue
+    if (p.summary === 'weekly' && !monday) continue
+    cache[p.summary] ??= await buildSummary(env.DB, p.summary)
+    if (cache[p.summary]) await notify(env, [p.email], cache[p.summary])
+  }
 }
 
 /* ---------------- staff: her own appointments ---------------- */

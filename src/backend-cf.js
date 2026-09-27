@@ -761,6 +761,8 @@ export function summarize(src = db) {
 /** { emailOn, emailReady, vapidKey } for the signed-in person. */
 export const getNotify = () => request('/api/notify')
 export const setEmailNotify = (emailOn) => request('/api/notify/prefs', { method: 'POST', body: { emailOn } })
+/** Owner: morning summary '' (off) | 'daily' | 'weekly'. */
+export const setSummaryNotify = (summary) => request('/api/notify/prefs', { method: 'POST', body: { summary } })
 export const addPushSubscription = (sub) => request('/api/notify/subscribe', { method: 'POST', body: sub })
 export const removePushSubscription = (endpoint) => request('/api/notify/unsubscribe', { method: 'POST', body: { endpoint } })
 export const testNotify = () => request('/api/notify/test', { method: 'POST', body: {} })

@@ -997,3 +997,6 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .lc-detail { margin-top: 12px; display: grid; gap: 6px; font-size: 14px; }
 .lc-hol { color: var(--rose-ink); }
 .lc-person { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
+.toggle-row.stack { flex-wrap: wrap; }
+.toggle-row.stack .grow { flex-basis: 100%; }
+.toggle-row.stack .seg { width: 100%; }

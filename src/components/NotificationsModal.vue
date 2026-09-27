@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
+import SegmentedControl from './SegmentedControl.vue'
 import { state, closeModal, toast, fail } from '../store.js'
 import { cloudflare as api } from '../api.js'
 import { pushSupported, isIos, isInstalled, currentSubscription, subscribePush, unsubscribePush } from '../lib/push.js'
@@ -52,6 +53,23 @@ async function togglePush() {
     busy.value = ''
   }
 }
+
+// Owner: a morning summary (07:00) by push/email.
+const SUMMARY = { Off: '', Daily: 'daily', 'Mondays': 'weekly' }
+const summary = computed({
+  get: () => Object.keys(SUMMARY).find((k) => SUMMARY[k] === (info.value?.summary || '')) || 'Off',
+  set: async (label) => {
+    const before = info.value.summary
+    info.value.summary = SUMMARY[label]
+    try {
+      await api.setSummaryNotify(SUMMARY[label])
+      toast(label === 'Off' ? 'Morning summary off' : label === 'Daily' ? 'You\'ll get a summary every morning at 7' : 'You\'ll get last week\'s summary on Mondays at 7')
+    } catch (err) {
+      info.value.summary = before
+      fail(err)
+    }
+  },
+})
 
 async function toggleEmail() {
   busy.value = 'email'
@@ -111,8 +129,8 @@ async function saveRelay() {
     <div v-if="!info" class="muted-note" style="margin-top: -6px">Loading…</div>
     <template v-else>
       <p class="muted-note" style="margin-top: -6px">
-        <template v-if="owner">You'll hear when someone asks for, changes or withdraws leave, or changes her details.</template>
-        <template v-else>You'll hear when your leave is approved or declined, and when a new payslip is ready.</template>
+        <template v-if="owner">You'll hear when someone asks for, changes or withdraws leave, or changes her details, and when one of your clients' next visit is a milestone 🎉</template>
+        <template v-else>You'll hear when your leave is approved or declined, when a new payslip is ready, and when a client's next visit is a milestone 🎉</template>
       </p>
 
       <div class="toggle-row">
@@ -129,6 +147,14 @@ async function saveRelay() {
           <div class="meta">{{ info.emailReady ? `To ${state.email}` : owner ? 'Set up the email sender below first.' : 'The salon hasn\'t set up email yet.' }}</div>
         </div>
         <button type="button" class="switch" role="switch" :aria-checked="info.emailOn && info.emailReady" :disabled="!info.emailReady || busy === 'email'" @click="toggleEmail"><span /></button>
+      </div>
+
+      <div v-if="owner" class="toggle-row stack">
+        <div class="grow">
+          <div class="title">Morning summary</div>
+          <div class="meta">At 7:00 — daily: yesterday's takings, unpaid, who's off today. Mondays: last week against the week before.</div>
+        </div>
+        <SegmentedControl v-model="summary" :options="Object.keys(SUMMARY)" />
       </div>
 
       <button type="button" class="btn soft wide" style="margin-top: 12px" :disabled="busy === 'test'" @click="test">{{ busy === 'test' ? 'Sending…' : 'Send a test' }}</button>
