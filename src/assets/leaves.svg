@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" preserveAspectRatio="xMidYMid slice">
+  <!-- Dark tropical leaves, a nod to the salon website's header. -->
+  <defs>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f5c49"/><stop offset="1" stop-color="#22322a"/></linearGradient>
+    <linearGradient id="b" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#35503f"/><stop offset="1" stop-color="#1f2c25"/></linearGradient>
+    <symbol id="leaf" viewBox="-60 -200 120 220">
+      <path d="M0 20 C -70 -40 -60 -150 0 -200 C 60 -150 70 -40 0 20 Z"/>
+      <path d="M0 18 L0 -190" stroke="#1a241e" stroke-width="3" fill="none" opacity=".55"/>
+      <path d="M0 -30 L-38 -70 M0 -60 L-44 -104 M0 -92 L-40 -134 M0 -124 L-30 -160 M0 -30 L38 -70 M0 -60 L44 -104 M0 -92 L40 -134 M0 -124 L30 -160" stroke="#1a241e" stroke-width="2" fill="none" opacity=".35"/>
+    </symbol>
+  </defs>
+  <g opacity=".9">
+    <use href="#leaf" fill="url(#a)" width="200" height="370" transform="translate(470 -60) rotate(38 100 185)"/>
+    <use href="#leaf" fill="url(#b)" width="170" height="310" transform="translate(360 150) rotate(-24 85 155)"/>
+    <use href="#leaf" fill="url(#a)" width="150" height="280" transform="translate(-30 -40) rotate(-52 75 140)" opacity=".75"/>
+    <use href="#leaf" fill="url(#b)" width="190" height="350" transform="translate(150 230) rotate(64 95 175)" opacity=".7"/>
+    <use href="#leaf" fill="url(#a)" width="120" height="220" transform="translate(250 -70) rotate(168 60 110)" opacity=".55"/>
+  </g>
+</svg>

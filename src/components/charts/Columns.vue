@@ -67,7 +67,7 @@ const tip = computed(() => {
       <g v-for="(d, i) in items" :key="d.label">
         <path v-if="d.ghost != null" :d="col(ghostX(i), d.ghost)" fill="var(--series-ghost)" />
         <path :d="col(mainX(i), d.value)" :fill="color" :opacity="hover !== null && hover !== i ? 0.55 : 1" />
-        <text v-if="labelMax && i === maxIdx && d.value > 0" :x="mainX(i)" :y="y(d.value) - 6" text-anchor="middle" style="fill: var(--ink); font-weight: 700">{{ format(d.value) }}</text>
+        <text v-if="labelMax && i === maxIdx && d.value > 0" :x="mainX(i)" :y="y(d.value) - 6" text-anchor="middle" style="fill: var(--ink); font-weight: 600">{{ format(d.value) }}</text>
         <text :x="center(i)" :y="height - 6" text-anchor="middle">{{ d.label }}</text>
         <!-- hit target: the whole band, taller than the mark -->
         <rect :x="center(i) - band / 2" :y="pad.top" :width="band" :height="base - pad.top + 20" fill="transparent"

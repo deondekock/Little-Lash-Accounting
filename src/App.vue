@@ -68,12 +68,13 @@ onMounted(() => {
 })
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
 const retry = () => location.reload()
+const logo = import.meta.env.BASE_URL + 'brand/logo.png'
 </script>
 
 <template>
   <div v-if="state.pending" class="loading" />
 
-  <header class="top">
+  <header v-if="state.phase !== 'signedOut'" class="top">
     <div v-if="state.viewAs" class="viewas-banner" role="status">
       <div class="wrap">
         <span>👀 Viewing as <b>{{ state.viewAs.name }}</b></span>
@@ -81,7 +82,7 @@ const retry = () => location.reload()
       </div>
     </div>
     <div class="wrap top-row">
-      <div class="wordmark">Little Lash <em>Lounge</em></div>
+      <h1 class="wordmark"><img :src="logo" alt="Little Lash Lounge" width="160" height="46"></h1>
       <div v-if="state.phase === 'ready'" class="top-actions">
         <button v-if="state.role !== 'staff'" class="icon-btn" aria-label="History and undo" title="History & undo" @click="openHistory"><Icon name="history" /></button>
         <button class="icon-btn" aria-label="Refresh" title="Refresh" @click="refresh"><Icon name="refresh" /></button>

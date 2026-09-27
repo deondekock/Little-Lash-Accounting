@@ -41,7 +41,7 @@ function book() {
     </div>
     <div v-if="c.unpaid" class="delta down" style="margin-bottom: 12px">Owes {{ fmt(c.unpaid) }}</div>
 
-    <div style="font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px">History</div>
+    <div style="font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px">History</div>
     <div class="list">
       <button v-for="v in c.history.slice(0, 40)" :key="v.id" class="list-row" @click="closeModal(); openAppointment(v)">
         <i class="swatch-dot" :style="{ background: employeeColor(v.employeeId) }" />

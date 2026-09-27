@@ -8,6 +8,7 @@ const props = defineProps({ slip: { type: Object, required: true } })
 const s = computed(() => props.slip)
 const p = computed(() => s.value.pay || {})
 const co = computed(() => s.value.company || {})
+const logo = import.meta.env.BASE_URL + 'brand/logo.png'
 const lines = (text) => String(text || '').split(/\n|,\s*/).map((x) => x.trim()).filter(Boolean)
 const date = (d) => (d ? new Date(d + 'T12:00').toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' }) : '')
 const days = (n) => `${Math.round((n || 0) * 100) / 100} day(s)`
@@ -21,6 +22,7 @@ const rows = computed(() => {
   <article class="payslip">
     <header>
       <div>
+        <img class="ps-logo" :src="logo" alt="" width="190" height="55">
         <div class="ps-company">{{ co.name || 'Little Lash Lounge' }}</div>
         <h1>Payslip</h1>
         <div class="ps-month">{{ monthLabel(s.month) }}</div>

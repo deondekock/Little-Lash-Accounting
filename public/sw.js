@@ -5,10 +5,10 @@
  * - Google (sign-in) and the data (Cloudflare) are never cached.
  * - Push notifications: shown here; tapping one opens (or focuses) the app on the right page.
  */
-const CACHE = 'llp-v2'
+const CACHE = 'llp-v3'
 // Paths are relative to where the app is served from (e.g. /Little-Lash-Accounting/ on GitHub Pages).
 const BASE = new URL('./', self.location).pathname
-const SHELL = [BASE, BASE + 'manifest.webmanifest', BASE + 'icons/icon.svg', BASE + 'icons/icon-192.png']
+const SHELL = [BASE, BASE + 'manifest.webmanifest', BASE + 'icons/favicon-64.png', BASE + 'icons/icon-192.png', BASE + 'brand/logo.png']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()))
