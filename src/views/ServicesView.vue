@@ -22,6 +22,14 @@ const people = computed(() =>
 )
 const person = computed(() => state.employees.find((e) => e.id === filter.value))
 
+// Sort: most done first, or A–Z (remembered on this phone).
+const SORT_KEY = 'llp.serviceSort'
+const sortBy = ref((() => { try { return localStorage.getItem(SORT_KEY) === 'az' ? 'az' : 'count' } catch { return 'count' } })())
+function setSort(v) {
+  sortBy.value = v
+  try { localStorage.setItem(SORT_KEY, v) } catch { /* private mode */ }
+}
+
 const list = computed(() => {
   const q = looseKey(query.value)
   let out = serviceCatalog.value
@@ -31,6 +39,7 @@ const list = computed(() => {
     if (person.value) out = out.filter((s) => doneBy(s, person.value.id))
   }
   if (q) out = out.filter((s) => looseKey(s.name).includes(q))
+  if (sortBy.value === 'az') return [...out].sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base' }))
   const by = person.value ? (s) => doneBy(s, person.value.id) : (s) => s.count
   return [...out].sort((a, b) => by(b) - by(a) || a.name.localeCompare(b.name))
 })
@@ -112,6 +121,14 @@ function meta(s) {
     <p v-if="person && !list.length" class="sub" style="color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px">
       No services recorded for {{ person.name }} yet. They'll appear here as her appointments are added with services — or open a service and give her a price.
     </p>
+
+    <div v-if="filter !== 'dupes'" class="sort-row">
+      <span>Sort</span>
+      <div class="segmented" role="radiogroup" aria-label="Sort services">
+        <button role="radio" :aria-checked="sortBy === 'count'" :class="{ active: sortBy === 'count' }" @click="setSort('count')">Most done</button>
+        <button role="radio" :aria-checked="sortBy === 'az'" :class="{ active: sortBy === 'az' }" @click="setSort('az')">A–Z</button>
+      </div>
+    </div>
 
     <p v-if="filter === 'hidden'" class="sub" style="color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px">
       Services you don't offer any more. They're not in the appointment form, but their history stays. Switch one on to offer it again.

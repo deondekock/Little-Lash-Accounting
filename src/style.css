@@ -1044,3 +1044,4 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .pin-help { font-size: 12.5px; color: var(--muted) !important; }
 .sec-status { border-radius: var(--radius-sm); padding: 10px 14px; background: var(--card-2); border: 1px solid var(--line); font-weight: 500; }
 .sec-status.on { background: var(--paid-soft); color: var(--paid); border-color: transparent; }
+.sort-row { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 0 0 10px; font-size: 13px; color: var(--muted); }
