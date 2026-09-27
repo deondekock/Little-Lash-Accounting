@@ -1,12 +1,13 @@
 <script setup>
 import { computed } from 'vue'
-import { phoneOf, senderName } from '../store.js'
+import { phoneOf, senderName, openInvoice } from '../store.js'
 import { MESSAGES, openWhatsApp } from '../lib/whatsapp.js'
 
 /** A round WhatsApp button that opens a ready-written message to this client. */
 const props = defineProps({ client: { type: Object, required: true }, kind: { type: String, default: 'hello' }, label: { type: String, default: '' } })
-const title = computed(() => props.label || { refill: 'Send a refill reminder', quiet: 'Send a "we miss you"', owed: 'Send a payment reminder', hello: 'Message on WhatsApp' }[props.kind])
-const send = () => openWhatsApp(phoneOf(props.client), MESSAGES[props.kind](props.client, senderName.value))
+const title = computed(() => props.label || { refill: 'Send a refill reminder', quiet: 'Send a "we miss you"', owed: 'Send a statement', hello: 'Message on WhatsApp' }[props.kind])
+// Money owed: a statement image goes with the message.
+const send = () => (props.kind === 'owed' ? openInvoice(props.client) : openWhatsApp(phoneOf(props.client), MESSAGES[props.kind](props.client, senderName.value)))
 </script>
 
 <template>

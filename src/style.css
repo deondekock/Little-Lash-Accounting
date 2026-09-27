@@ -1000,3 +1000,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .toggle-row.stack { flex-wrap: wrap; }
 .toggle-row.stack .grow { flex-basis: 100%; }
 .toggle-row.stack .seg { width: 100%; }
+/* Client statement (invoice image) */
+.invoice-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: #fff; min-height: 160px; display: grid; place-items: center; }
+.invoice-preview img { width: 100%; height: auto; display: block; }
+.btn.wa-send { background: #1f9d55; color: #fff; }

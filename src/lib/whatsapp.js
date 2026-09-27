@@ -34,6 +34,10 @@ export const MESSAGES = {
     return `Hi ${first(c.name)}, hope you're well! 😊 Just a friendly reminder that ${fmt0(c.unpaid)} is still outstanding${when}. ` +
       `You're welcome to pay by EFT or at your next visit. Thank you!${sign(from)}`
   },
+  // Sent with the statement image.
+  statement: (c, from, bankOnIt = false) =>
+    `Hi ${first(c.name)}, hope you're well! 😊 Here's a statement of your outstanding visit${c.history.filter((v) => v.status !== 'Paid').length === 1 ? '' : 's'}: ${fmt0(c.unpaid)} in total. ` +
+    `You're welcome to pay ${bankOnIt ? 'by EFT (details on the statement)' : 'by EFT'} or at your next visit. Thank you!${sign(from)}`,
   hello: (c, from) => `Hi ${first(c.name)}!${sign(from)}`,
 }
 

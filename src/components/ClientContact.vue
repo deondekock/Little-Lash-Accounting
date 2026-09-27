@@ -1,6 +1,6 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
-import { phoneOf, saveClientPhone, senderName, toast, fail } from '../store.js'
+import { phoneOf, saveClientPhone, senderName, toast, fail, openInvoice } from '../store.js'
 import { MESSAGES, openWhatsApp } from '../lib/whatsapp.js'
 import { fmt0 } from '../lib/format.js'
 import { ordinal } from '../lib/stats.js'
@@ -37,12 +37,12 @@ async function save() {
 }
 
 const buttons = computed(() => [
-  props.owed && c.value.unpaid > 0 && { kind: 'owed', label: `Remind about ${fmt0(c.value.unpaid)}` },
+  props.owed && c.value.unpaid > 0 && { kind: 'owed', label: `Send statement (${fmt0(c.value.unpaid)})` },
   c.value.due && { kind: 'refill', label: 'Refill reminder' },
   c.value.quiet && { kind: 'quiet', label: 'We miss you' },
   { kind: 'hello', label: 'WhatsApp' },
 ].filter(Boolean))
-const send = (kind) => openWhatsApp(phone.value, MESSAGES[kind](c.value, senderName.value))
+const send = (kind) => (kind === 'owed' ? openInvoice(c.value) : openWhatsApp(phone.value, MESSAGES[kind](c.value, senderName.value)))
 </script>
 
 <template>

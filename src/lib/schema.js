@@ -34,6 +34,9 @@ export const PAY_FIELDS = [
 export const COMPANY_FIELDS = [
   ['name', 'Company Name'], ['type', 'Company Type'], ['registration', 'Registration Number'],
   ['address', 'Company Address'], ['payeRef', 'PAYE Reference'], ['uifRef', 'UIF Reference'],
+  // For client invoices / statements
+  ['phone', 'Salon Phone'], ['email', 'Salon Email'], ['bank', 'Invoice Bank'], ['bankHolder', 'Invoice Account Name'],
+  ['bankAccount', 'Invoice Account Number'], ['bankBranch', 'Invoice Branch Code'],
 ]
 export const MONTH_START_SETTING = 'Month starts on day'
 export const LEAVE_TYPES = ['Annual', 'Sick', 'Family', 'Maternity', 'Unpaid']

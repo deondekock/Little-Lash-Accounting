@@ -3,7 +3,7 @@ import { reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import { state, closeModal, saveCompany, toast, fail } from '../store.js'
 
-const form = reactive({ name: '', type: '', registration: '', address: '', payeRef: '', uifRef: '', ...state.company })
+const form = reactive({ name: '', type: '', registration: '', address: '', payeRef: '', uifRef: '', phone: '', email: '', bank: '', bankHolder: '', bankAccount: '', bankBranch: '', ...state.company })
 const saving = ref(false)
 
 async function submit() {
@@ -23,7 +23,7 @@ async function submit() {
 <template>
   <BaseModal title="Company details" @close="closeModal">
     <form autocomplete="off" @submit.prevent="submit">
-      <p class="muted-note" style="margin-top: -6px">Shown on every payslip. Kept in the sheet's Settings tab.</p>
+      <p class="muted-note" style="margin-top: -6px">Shown on payslips and on the statements clients get for unpaid visits.</p>
       <div class="field">
         <label for="c-name">Company name</label>
         <input id="c-name" v-model="form.name" placeholder="Little Lash Lounge (PTY) LTD">
@@ -51,6 +51,37 @@ async function submit() {
         <div class="field">
           <label for="c-uif">UIF reference (optional)</label>
           <input id="c-uif" v-model="form.uifRef" placeholder="U…">
+        </div>
+      </div>
+      <h4 class="section-label">On client statements</h4>
+      <div class="row2">
+        <div class="field">
+          <label for="c-phone">Salon phone</label>
+          <input id="c-phone" v-model="form.phone" type="tel" placeholder="061 998 9036">
+        </div>
+        <div class="field">
+          <label for="c-email">Salon email</label>
+          <input id="c-email" v-model="form.email" type="email" placeholder="info@…">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="c-bank">Bank</label>
+          <input id="c-bank" v-model="form.bank" placeholder="Capitec">
+        </div>
+        <div class="field">
+          <label for="c-holder">Account name</label>
+          <input id="c-holder" v-model="form.bankHolder" placeholder="Little Lash Lounge">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="c-acc">Account number</label>
+          <input id="c-acc" v-model="form.bankAccount" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label for="c-branch">Branch code</label>
+          <input id="c-branch" v-model="form.bankBranch" inputmode="numeric">
         </div>
       </div>
       <div class="modal-actions">
