@@ -23,6 +23,9 @@ import ReportDocument from './components/ReportDocument.vue'
 import MonthEndModal from './components/MonthEndModal.vue'
 import PriceCalcModal from './components/PriceCalcModal.vue'
 import ReviewModal from './components/ReviewModal.vue'
+import PinScreen from './components/PinScreen.vue'
+import SecurityModal from './components/SecurityModal.vue'
+import { markSeen, shouldLock } from './lib/lock.js'
 import InvoiceModal from './components/InvoiceModal.vue'
 import TaxYearModal from './components/TaxYearModal.vue'
 import LeaveModal from './components/LeaveModal.vue'
@@ -68,7 +71,9 @@ const tabs = computed(() => (state.role === 'staff' ? staffTabs : ownerTabs))
 // Coming back to the app after a while: pick up changes made on another device.
 // A newer version of the app is picked up too, unless a form is open (so nothing typed is lost).
 async function onVisible() {
-  if (document.visibilityState !== 'visible') return
+  // The app lock: note when she leaves; ask for the passcode if she was away long enough.
+  if (document.visibilityState === 'hidden') return state.locked || markSeen()
+  if (shouldLock() && state.phase === 'ready') state.locked = true
   if (!state.modal && (await newVersionAvailable())) return updateApp()
   if (state.phase === 'ready' && Date.now() - state.loadedAt > 2 * 60_000) refresh()
 }
@@ -108,6 +113,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
       <p>This copy of the app has no Google Client ID yet. Set <code>VITE_GOOGLE_CLIENT_ID</code> (see the README) and rebuild.</p>
     </div>
     <SignInScreen v-else-if="state.phase === 'signedOut'" />
+    <PinScreen v-else-if="state.phase === 'pin'" mode="signin" />
     <SheetPicker v-else-if="state.phase === 'pickSheet'" />
     <div v-else-if="state.phase === 'error'" class="card welcome-card">
       <template v-if="BACKEND === 'cloudflare'">
@@ -159,12 +165,14 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   <ExportModal v-if="state.modal?.type === 'export'" />
   <MonthEndModal v-if="state.modal?.type === 'monthEnd'" />
   <ReviewModal v-if="state.modal?.type === 'review'" />
+  <SecurityModal v-if="state.modal?.type === 'security'" />
   <InvoiceModal v-if="state.modal?.type === 'invoice'" :client-key="state.modal.data.key" />
   <PriceCalcModal v-if="state.modal?.type === 'priceCalc'" :focus="state.modal.data.focus" />
   <TaxYearModal v-if="state.modal?.type === 'taxYear'" />
   <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 
   <Teleport to="body">
+    <PinScreen v-if="state.locked && state.phase !== 'pin' && state.phase !== 'signedOut'" mode="lock" />
     <div v-if="state.printing" class="print-root">
       <PayslipDocument v-for="(s, i) in state.printing" :key="i" :slip="s" />
     </div>

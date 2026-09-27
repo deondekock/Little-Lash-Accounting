@@ -1,5 +1,7 @@
 import { reactive, computed, shallowRef, nextTick, watch } from 'vue'
 import { newVersionAvailable, updateApp } from './lib/update.js'
+import { shouldLock, markSeen, rememberPinSet } from './lib/lock.js'
+import { PinRequiredError } from './backend-cf.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween } from './lib/stats.js'
@@ -20,8 +22,10 @@ function savedSheetId(value) {
 }
 
 export const state = reactive({
-  // 'loading' | 'config' (no Google client ID) | 'signedOut' | 'pickSheet' | 'ready' | 'error'
+  // 'loading' | 'config' (no Google client ID) | 'signedOut' | 'pin' (owner's passcode to sign in) | 'pickSheet' | 'ready' | 'error'
   phase: 'loading',
+  locked: false, // the app lock is showing (owner's passcode needed again)
+  pinSet: false, // the signed-in owner has a passcode
   email: '',
   loadedAt: 0,
   pending: 0,
@@ -165,6 +169,7 @@ async function api(fn, ...args) {
 /* ---------------- loading ---------------- */
 
 export async function init() {
+  if (shouldLock()) state.locked = true // before anything shows
   const redirect = auth.handleRedirect()
   if (!CLIENT_ID && !FAKE_API) {
     state.phase = 'config'
@@ -192,12 +197,18 @@ export async function init() {
         return await openStaff()
       }
     } catch (err) {
+      if (err instanceof PinRequiredError) {
+        state.locked = false
+        state.phase = 'pin'
+        return
+      }
       state.error = String(err?.message || err)
       if (!(err instanceof AuthError)) state.phase = 'error'
       fail(err)
       return
     }
     await openSheet('cloudflare')
+    if (state.role === 'admin') refreshPin()
     return
   }
   const id = savedSheetId() || DEFAULT_SHEET_ID
@@ -210,7 +221,33 @@ export async function init() {
 
 export const signIn = () => auth.signIn()
 
+/* ---------------- owner's passcode ---------------- */
+
+/** Signing in on a new phone: Google, then her passcode. */
+export async function signInWithPin(pin) {
+  await api('ensureSession', pin)
+  markSeen()
+  state.locked = false
+  state.phase = 'loading'
+  await init()
+}
+/** The app lock: her passcode again (checked by the Worker, so guesses are limited). */
+export async function unlock(pin) {
+  await api('verifyPin', pin)
+  markSeen()
+  state.locked = false
+}
+export async function refreshPin() {
+  try {
+    const r = await api('getPin')
+    state.pinSet = !!r.set
+    rememberPinSet(r.set)
+  } catch { /* keep what we knew */ }
+}
+export const openSecurity = () => (state.modal = { type: 'security', data: null })
+
 export function signOut() {
+  state.locked = false
   auth.signOut()
   state.phase = 'signedOut'
   state.email = ''

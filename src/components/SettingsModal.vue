@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openMonthEnd, openTaxYear, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openMonthEnd, openTaxYear, openSecurity, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 import { theme, setTheme } from '../lib/theme.js'
 
@@ -68,6 +68,10 @@ function run(fn) {
       <button v-else-if="BACKEND === 'cloudflare' && state.role !== 'staff'" class="list-row" @click="openViewAsPicker()">
         <Icon name="users" />
         <div class="grow"><div class="title">View the app as…</div><div class="meta">See exactly what a team member sees</div></div>
+      </button>
+      <button v-if="BACKEND === 'cloudflare' && !state.viewAs && state.role !== 'staff'" class="list-row" @click="openSecurity()">
+        <span aria-hidden="true" style="width: 22px; text-align: center">🔒</span>
+        <div class="grow"><div class="title">Passcode &amp; security</div><div class="meta">{{ state.pinSet ? 'Passcode on · lock the app, sign out other phones' : 'Add a passcode so only you can open your account' }}</div></div>
       </button>
       <button v-if="BACKEND === 'cloudflare' && !state.viewAs" class="list-row" @click="openNotifications()">
         <Icon name="bell" />

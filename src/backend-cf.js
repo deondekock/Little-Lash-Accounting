@@ -642,20 +642,43 @@ export async function whoami() {
 }
 
 /** Swaps a fresh Google sign-in for the app's own 60-day session (once, after signing in). */
-export async function ensureSession() {
+/** An owner with a passcode signing in on this phone: ask for it (then call ensureSession(pin)). */
+export class PinRequiredError extends Error {}
+
+export async function ensureSession(pin = '') {
   if (FAKE_API || sessionToken()) return
   const google = googleToken()
   if (!google) throw new AuthError('Please sign in with Google again.')
   let res
   try {
-    res = await fetch(API_URL + '/api/session', { method: 'POST', headers: { Authorization: 'Bearer ' + google } })
+    res = await fetch(API_URL + '/api/session', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + google, 'Content-Type': 'application/json' }, body: JSON.stringify(pin ? { pin } : {}),
+    })
   } catch {
     throw new Error('No connection to the salon\'s data. Check your internet and try again.')
   }
   const data = await res.json().catch(() => ({}))
+  if (res.status === 401 && data.pinRequired) throw new PinRequiredError(data.error)
+  if (pin && [401, 403, 429].includes(res.status)) throw new Error(data.error || 'Wrong passcode.')
   if (res.status === 401) throw new AuthError(data.error || 'Please sign in with Google again.')
   if (!res.ok) throw new Error(data.error || `Server error ${res.status}`)
   saveSession(data)
+}
+
+/* ---------------- passcode (owners) ---------------- */
+
+export const getPin = () => request('/api/pin')
+export const verifyPin = (pin) => request('/api/pin/verify', { method: 'POST', body: { pin } })
+export async function setPin(pin, current, signOutOthers) {
+  const res = await request('/api/pin/set', { method: 'POST', body: { pin, current, signOutOthers } })
+  if (res.session) saveSession(res.session)
+  return res
+}
+export const removePin = (current) => request('/api/pin/remove', { method: 'POST', body: { current } })
+export async function signOutOthers() {
+  const res = await request('/api/pin/signout-others', { method: 'POST', body: {} })
+  if (res.session) saveSession(res.session)
+  return res
 }
 
 /** Staff: loads her own record, leave and payslips (the Worker only sends hers). */

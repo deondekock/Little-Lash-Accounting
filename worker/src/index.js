@@ -5,7 +5,9 @@
  * The addresses in the ALLOWED_EMAILS secret are the owners and see everything; a team member
  * whose "Login Email" matches (and who is active) is staff and only ever gets her own records.
  *
- *   POST /api/session            swap a Google sign-in (1 hour) for the app's own session (60 days)
+ *   POST /api/session            swap a Google sign-in (1 hour) for the app's own session (60 days);
+ *                                an owner with a passcode must also send it ({ pin })
+ *   GET  /api/pin, POST /api/pin/set | remove | verify | signout-others   her passcode (see "passcodes")
  *   GET  /api/me                 who is signed in: { role: 'admin' | 'staff', email, employeeId, name }
  * Owners:
  *   GET  /api/load               everything the app needs (all tables, settings)
@@ -62,11 +64,17 @@ export default {
       if (url.pathname === '/api/session' && request.method === 'POST') {
         const email = await authenticate(request, env, ctx, { googleOnly: true })
         await identify(env.DB, email, env) // only people with access get a session
+        // An owner with a passcode needs it on every new phone or computer, not just her Google account.
+        if (await getConfig(env.DB, `pin:${email}`)) {
+          const body = await request.json().catch(() => ({}))
+          if (!body.pin) return new Response(JSON.stringify({ error: 'Enter your passcode.', pinRequired: true }), { status: 401, headers: { ...cors, 'Content-Type': 'application/json' } })
+          await checkPin(env.DB, email, body.pin)
+        }
         return json(JSON.stringify(await issueSession(env.DB, email)), cors)
       }
       const url0 = new URL(request.url)
       // Notification settings always belong to the real person, even while viewing as someone else.
-      const viewAs = url0.pathname.startsWith('/api/notify') ? '' : request.headers.get('X-View-As') || ''
+      const viewAs = url0.pathname.startsWith('/api/notify') || url0.pathname.startsWith('/api/pin') ? '' : request.headers.get('X-View-As') || ''
       const me = await identify(env.DB, await authenticate(request, env, ctx), env, viewAs)
       const route = `${request.method} ${url.pathname}`
       // Notifications go out after the answer, so they never slow down or fail a change.
@@ -74,6 +82,7 @@ export default {
       const owners = String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean)
       if (route === 'GET /api/me') return json(JSON.stringify(me), cors)
       if (url.pathname.startsWith('/api/notify')) return json(await notifyRoute(env, me, route, request), cors)
+      if (url.pathname.startsWith('/api/pin')) return json(await pinRoute(env.DB, me, route, request), cors)
       if (me.role === 'staff') {
         if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
@@ -147,6 +156,8 @@ async function authenticate(request, env, ctx, { googleOnly = false } = {}) {
   if (info.aud !== env.GOOGLE_CLIENT_ID && info.azp !== env.GOOGLE_CLIENT_ID) throw new HttpError(401, 'Please sign in again.')
   const email = String(info.email || '').toLowerCase()
   if (!email || String(info.email_verified) !== 'true') throw new HttpError(403, 'This Google account has no verified email address.')
+  // With a passcode, a Google sign-in alone isn't enough: only the session (Google + passcode) opens the data.
+  if (!googleOnly && (await getConfig(env.DB, `pin:${email}`))) throw new HttpError(401, 'Enter your passcode.')
   return email
 }
 
@@ -166,9 +177,12 @@ async function sessionKey(db) {
   return crypto.subtle.importKey('raw', unb64url(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'])
 }
 
+/** Sessions carry a generation per person; "sign out other devices" moves it on, ending older sessions. */
+const sessionGen = async (db, email) => Number(await getConfig(db, `sgen:${email}`)) || 0
+
 async function issueSession(db, email) {
   const exp = Date.now() + SESSION_DAYS * 864e5
-  const body = b64url(new TextEncoder().encode(JSON.stringify({ e: email, exp })))
+  const body = b64url(new TextEncoder().encode(JSON.stringify({ e: email, exp, g: await sessionGen(db, email) })))
   const sig = await crypto.subtle.sign('HMAC', await sessionKey(db), new TextEncoder().encode(body))
   return { session: `llp1.${body}.${b64url(sig)}`, exp, email }
 }
@@ -177,8 +191,9 @@ async function verifySession(db, token) {
   const [, body, sig] = token.split('.')
   const ok = body && sig && await crypto.subtle.verify('HMAC', await sessionKey(db), unb64url(sig), new TextEncoder().encode(body)).catch(() => false)
   if (!ok) throw new HttpError(401, 'Please sign in again.')
-  const { e, exp } = JSON.parse(new TextDecoder().decode(unb64url(body)))
+  const { e, exp, g = 0 } = JSON.parse(new TextDecoder().decode(unb64url(body)))
   if (!e || !(exp > Date.now())) throw new HttpError(401, 'Your sign-in expired. Please sign in again.')
+  if (g !== (await sessionGen(db, String(e).toLowerCase()))) throw new HttpError(401, 'You were signed out on this phone. Please sign in again.')
   return String(e).toLowerCase()
 }
 
@@ -491,6 +506,71 @@ async function staffProfile(db, me, body, tell) {
   ])
   tell({ title: `${me.name} updated her ${changed}`, body: [phone !== (emp.phone || '') && `Phone: ${phone || '—'}`, address !== (pay.address || '') && `Address: ${address.replace(/\n/g, ', ') || '—'}`].filter(Boolean).join(' · '), hash: 'team' })
   return JSON.stringify(await recordOf(db, 'employees', 'id = ?1', emp.id))
+}
+
+/* ---------------- passcodes ---------------- */
+
+// An owner can set a passcode (4–8 digits). It's needed to sign in on a new phone or computer, and the
+// app asks for it again after she's been away (checked here, so wrong guesses are limited: 5 tries,
+// then 15 minutes' wait). Stored as a salted PBKDF2 hash in `config` (pin:<email>), never sent back.
+
+const PIN_TRIES = 5
+const PIN_WAIT_MIN = 15
+
+async function pinHash(pin, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pin)), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: unb64url(salt), iterations: 100000 }, key, 256)
+  return b64url(bits)
+}
+
+/** Throws unless `pin` is her passcode; counts wrong tries. */
+async function checkPin(db, email, pin) {
+  const saved = await getConfig(db, `pin:${email}`)
+  if (!saved) return
+  const fails = JSON.parse((await getConfig(db, `pinfail:${email}`)) || '{"n":0,"until":0}')
+  if (fails.until > Date.now()) throw new HttpError(429, `Too many wrong tries. Try again in ${Math.ceil((fails.until - Date.now()) / 60000)} minutes.`)
+  const { salt, hash } = JSON.parse(saved)
+  if ((await pinHash(pin, salt)) === hash) {
+    if (fails.n) await setConfig(db, `pinfail:${email}`, '{"n":0,"until":0}')
+    return
+  }
+  const n = fails.n + 1
+  await setConfig(db, `pinfail:${email}`, JSON.stringify(n >= PIN_TRIES ? { n: 0, until: Date.now() + PIN_WAIT_MIN * 60000 } : { n, until: 0 }))
+  // 403, not 401: a wrong passcode mustn't look like being signed out.
+  throw new HttpError(403, n >= PIN_TRIES ? `Wrong passcode. Too many tries — wait ${PIN_WAIT_MIN} minutes.` : `Wrong passcode (${PIN_TRIES - n} ${PIN_TRIES - n === 1 ? 'try' : 'tries'} left).`)
+}
+
+async function pinRoute(db, me, route, request) {
+  const email = me.email
+  const body = route.startsWith('POST') ? await request.json().catch(() => ({})) : {}
+  if (route === 'GET /api/pin') return JSON.stringify({ set: !!(await getConfig(db, `pin:${email}`)) })
+  if (me.role !== 'admin') throw new HttpError(403, 'Only owners have a passcode.')
+  if (route === 'POST /api/pin/verify') {
+    await checkPin(db, email, body.pin)
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/pin/set') {
+    await checkPin(db, email, body.current) // when there is one already
+    const pin = String(body.pin || '')
+    if (!/^\d{4,8}$/.test(pin)) throw new HttpError(400, 'Use 4 to 8 digits.')
+    const salt = b64url(crypto.getRandomValues(new Uint8Array(16)))
+    await setConfig(db, `pin:${email}`, JSON.stringify({ salt, hash: await pinHash(pin, salt) }))
+    if (body.signOutOthers) return JSON.stringify({ ok: true, ...(await signOutOthers(db, email)) })
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/pin/remove') {
+    await checkPin(db, email, body.current)
+    await db.prepare('DELETE FROM config WHERE key IN (?1, ?2)').bind(`pin:${email}`, `pinfail:${email}`).run()
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/pin/signout-others') return JSON.stringify({ ok: true, ...(await signOutOthers(db, email)) })
+  throw new HttpError(404, 'Not found')
+}
+
+/** Ends every session of hers, and gives this phone a fresh one. */
+async function signOutOthers(db, email) {
+  await setConfig(db, `sgen:${email}`, String((await sessionGen(db, email)) + 1))
+  return { session: await issueSession(db, email) }
 }
 
 /* ---------------- notifications ---------------- */

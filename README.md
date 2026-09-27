@@ -55,6 +55,11 @@ You sign in with Google, and the data lives in a normal **Google Sheet** in your
   counted as leave days, work on a public holiday is flagged on the payslip, and booking leave warns who else is off.
 - **Morning summary** (Settings → Notifications, owners): daily at 7:00 (yesterday's takings, unpaid, who's off,
   leave waiting) or Mondays (last week vs the week before), by push and/or email.
+- **Passcode & security** (Settings, owners): a 4–8 digit passcode that's needed on every new phone or computer
+  (on top of Google) and to reopen the app after being away (choose how long per phone); 5 wrong tries → 15
+  minutes' wait. "Sign out everywhere else" ends every other session. Forgotten passcode: in the Cloudflare
+  dashboard → D1 → little-lash → Console, run
+  `DELETE FROM config WHERE key IN ('pin:her@email.com', 'pinfail:her@email.com');`
 - Light and dark mode (Settings → Appearance); works on phone and laptop; **Add to Home Screen** to use it like an app.
   The ↻ button also loads a newer version of the app when there is one.
 
