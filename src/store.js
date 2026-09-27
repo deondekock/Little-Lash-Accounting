@@ -1,4 +1,4 @@
-import { reactive, computed, shallowRef, nextTick } from 'vue'
+import { reactive, computed, shallowRef, nextTick, watch } from 'vue'
 import { newVersionAvailable, updateApp } from './lib/update.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
@@ -253,6 +253,7 @@ export function useDifferentSheet() {
 /** Re-reads the sheet (e.g. after changes made on another phone). */
 /** Opens the page a notification points to (#leave, #payslips, #team). */
 export function openHash(hash) {
+  if (state.phase === 'ready') markFirstPage()
   const h = String(hash || '').replace(/^#/, '')
   if (!h || state.phase !== 'ready') return
   if (state.role === 'staff') {
@@ -264,7 +265,7 @@ export function openHash(hash) {
     if (h === 'team') setView('team')
     if (h === 'clients') setView('clients')
   }
-  if (location.hash) history.replaceState(null, '', location.pathname + location.search)
+  if (location.hash) history.replaceState(history.state, '', location.pathname + location.search)
 }
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
@@ -395,6 +396,7 @@ export function setYear(year) {
 }
 
 export function setView(view, opts = {}) {
+  if (view !== state.view) rememberPage(view)
   state.view = view
   if (opts.employee) state.employee = opts.employee
   if (opts.status) state.status = opts.status
@@ -598,6 +600,68 @@ export const openInvoice = (client) => (state.modal = { type: 'invoice', data: {
 export const openReview = () => (state.modal = { type: 'review', data: null })
 export const openMonthEnd = () => (state.modal = { type: 'monthEnd', data: null })
 export const openTaxYear = () => (state.modal = { type: 'taxYear', data: null })
+
+/* ---------------- the phone's back button ---------------- */
+
+/*
+ * Pages and pop-ups go into the browser history, so the phone's back button (or back gesture) closes an
+ * open pop-up first, then goes back to the previous page — and from the first page leaves the app.
+ */
+let modalEntry = false // a history entry is holding an open pop-up
+let ignorePops = 0 // our own history.back() calls, not the back button
+let pendingView = null // a page change waiting for that history.back() to finish
+const pageOk = (view) => view && view.startsWith('my-') === (state.role === 'staff')
+
+function rememberPage(view) {
+  if (typeof history === 'undefined') return
+  // A pop-up is closing (e.g. Settings → Services): its entry goes first, then the new page.
+  if (ignorePops || (modalEntry && !state.modal)) {
+    pendingView = view
+    return
+  }
+  if (modalEntry) return // the page changed under an open pop-up; its entry stays on top
+  history.pushState({ llpView: view }, '')
+}
+/** Once the app knows its first page (after loading), that's the current history entry. */
+function markFirstPage() {
+  if (typeof history !== 'undefined' && !modalEntry) history.replaceState({ ...(history.state || {}), llpView: state.view }, '')
+}
+
+if (typeof window !== 'undefined') {
+  history.replaceState({ ...(history.state || {}), llpView: state.view }, '')
+  // A pop-up opens: add an entry for it. It closes some other way (✕, Cancel, swipe, Save): drop that entry.
+  watch(() => !!state.modal, (open) => {
+    if (open && !modalEntry) {
+      history.pushState({ llpView: state.view, llpModal: true }, '')
+      modalEntry = true
+    } else if (!open && modalEntry) {
+      modalEntry = false
+      ignorePops++
+      history.back()
+    }
+  })
+  window.addEventListener('popstate', (e) => {
+    if (ignorePops) {
+      ignorePops--
+      if (!ignorePops && pendingView) {
+        history.pushState({ llpView: pendingView }, '')
+        pendingView = null
+      }
+      return
+    }
+    if (modalEntry) {
+      modalEntry = false
+      state.modal = null
+      return
+    }
+    const view = e.state?.llpView
+    if (pageOk(view) && view !== state.view) {
+      state.view = view
+      state.selected.clear()
+      window.scrollTo({ top: 0 })
+    }
+  })
+}
 
 /* ---------------- modals ---------------- */
 
