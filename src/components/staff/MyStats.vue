@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { all, state, setView } from '../../store.js'
+import { all, state, setView, openReview } from '../../store.js'
 import { monthLabel, shortDate, todayStr } from '../../lib/format.js'
 import { minutesLabel } from '../../lib/payroll.js'
 import { monthProgress, loyalty, serviceMix, milestones } from '../../lib/staffStats.js'
@@ -20,6 +20,11 @@ const plural = (n, w) => `${n.toLocaleString('en-ZA')} ${w}${n === 1 ? '' : 's'}
 
 <template>
   <div class="stats-stack">
+    <button class="card list-row review-cta" @click="openReview()">
+      <div class="history-icon">✨</div>
+      <div class="grow"><div class="title">My year in review</div><div class="meta">Your clients, busiest days and milestones</div></div>
+      <span aria-hidden="true">›</span>
+    </button>
     <!-- Celebrations first -->
     <div v-if="m.anniversary?.today" class="card celebrate">🎉 <b>Happy {{ m.anniversary.years }}-year anniversary</b> at the salon today!</div>
     <div v-if="m.recent" class="card celebrate">🎉 You reached <b>{{ m.reached.toLocaleString('en-ZA') }} appointments</b> on {{ shortDate(m.reachedOn) }}!</div>

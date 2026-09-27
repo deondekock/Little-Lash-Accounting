@@ -591,6 +591,7 @@ export async function printReport(report) {
   window.print()
 }
 export const openPriceCalc = (focus = '') => (state.modal = { type: 'priceCalc', data: { focus } })
+export const openReview = () => (state.modal = { type: 'review', data: null })
 export const openMonthEnd = () => (state.modal = { type: 'monthEnd', data: null })
 export const openTaxYear = () => (state.modal = { type: 'taxYear', data: null })
 

@@ -6,7 +6,7 @@ import Columns from '../components/charts/Columns.vue'
 import ClientFlowCard from '../components/ClientFlowCard.vue'
 import TaxNotice from '../components/TaxNotice.vue'
 import WaButton from '../components/WaButton.vue'
-import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
+import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth, openReview } from '../store.js'
 import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
 import { totals, byEmployee } from '../lib/format.js'
@@ -64,6 +64,9 @@ const quiet = computed(() => clients.value.filter((c) => c.quiet).sort((a, b) =>
 const quietCount = computed(() => clients.value.filter((c) => c.quiet).length)
 // Who owes money (all time), biggest first.
 const owing = computed(() => clients.value.filter((c) => c.unpaid > 0).sort((a, b) => b.unpaid - a.unpaid))
+// Year in review, offered in December and January.
+const reviewSeason = [11, 0].includes(new Date().getMonth())
+const reviewYear = new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()
 const leaveRequests = computed(() => state.leave.filter((l) => l.status === 'requested'))
 const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d < 70 ? `${Math.round(d / 7)} weeks ago` : `${Math.round(d / 30)} months ago`)
 </script>
@@ -95,6 +98,12 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d <
           <div class="title">{{ leaveRequests.length }} leave request{{ leaveRequests.length === 1 ? '' : 's' }} waiting</div>
           <div class="meta">{{ leaveRequests.map((l) => employeeById(l.employeeId)?.name).filter(Boolean).join(', ') }} · tap to approve or decline</div>
         </div>
+        <Icon name="right" />
+      </button>
+
+      <button v-if="reviewSeason" class="card list-row review-cta" @click="openReview()">
+        <div class="history-icon">✨</div>
+        <div class="grow"><div class="title">Your {{ reviewYear }} in review</div><div class="meta">Busiest days, most loyal clients, milestones</div></div>
         <Icon name="right" />
       </button>
 

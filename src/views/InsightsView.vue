@@ -6,7 +6,7 @@ import Columns from '../components/charts/Columns.vue'
 import StackedColumns from '../components/charts/StackedColumns.vue'
 import TotalsTable from '../components/TotalsTable.vue'
 import Icon from '../components/Icon.vue'
-import { all, state, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView } from '../store.js'
+import { all, state, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview } from '../store.js'
 import { byEmployee, fmt, fmt0, monthName, totals, METHODS } from '../lib/format.js'
 import { compactMoney, monthlyTotals } from '../lib/stats.js'
 
@@ -73,6 +73,12 @@ function pickEmployee(id) {
       <div class="range">Jan – Dec (business months)</div>
     </PeriodNav>
     <EmployeeChips />
+
+    <button class="card list-row review-cta" @click="openReview()">
+      <div class="history-icon">✨</div>
+      <div class="grow"><div class="title">Year in review</div><div class="meta">Busiest days, most loyal clients, milestones — and a summary to share</div></div>
+      <Icon name="right" />
+    </button>
 
     <section class="card hero">
       <div class="eyebrow">{{ state.employee === 'all' ? 'Salon' : employeeById(state.employee)?.name }} takings in {{ state.year }}</div>
