@@ -6,6 +6,7 @@ import EmployeeChips from '../components/EmployeeChips.vue'
 import StatCards from '../components/StatCards.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
 import { currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, totals } from '../lib/format.js'
+import { holidayOn } from '../lib/holidays.js'
 import { state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment } from '../store.js'
 
 const monthTotals = computed(() => totals(employeeAppts.value))
@@ -73,7 +74,7 @@ const emptyText = computed(() => {
         </div>
         <template v-for="g in groups" :key="g.date">
           <div class="date-head">
-            <span>{{ dayLabel(g.date) }}</span>
+            <span>{{ dayLabel(g.date) }}<template v-if="holidayOn(g.date)"> · 🇿🇦 {{ holidayOn(g.date) }}</template></span>
             <span>{{ fmt(g.total) }}</span>
           </div>
           <AppointmentItem v-for="a in g.items" :key="a.id" :appt="a" />

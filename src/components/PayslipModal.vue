@@ -83,6 +83,11 @@ const editPay = () => openEmployee(emp.value)
       <input id="ps-date" v-model="inputs.payDate" type="date" required>
     </div>
 
+    <p v-if="slip.holidayWork?.length" class="field-hint orange" style="margin: 0 0 12px">
+      🇿🇦 She worked on a public holiday: {{ slip.holidayWork.map((h) => `${h.name} (${shortDate(h.date)}, ${h.count} appt${h.count === 1 ? '' : 's'})`).join(', ') }}.
+      By law, work on a public holiday is paid at double her normal day's pay (unless you agreed otherwise) — add it with “+ Add earning” below if it applies.
+    </p>
+
     <!-- How the commission was worked out -->
     <div class="calc-box">
       <div><span>{{ c.count }} appointments</span><b>{{ fmt(c.takings) }}</b></div>

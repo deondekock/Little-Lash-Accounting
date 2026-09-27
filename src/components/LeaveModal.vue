@@ -3,7 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { state, closeModal, saveLeave, deleteLeave, decideLeave, toastUndo, fail } from '../store.js'
-import { todayStr } from '../lib/format.js'
+import { todayStr, shortDate } from '../lib/format.js'
+import { holidaysBetween } from '../lib/holidays.js'
 import { LEAVE_TYPES, MATERNITY_MONTHS, addMonths, leaveBalance, sickBalance, familyBalance, leaveSettings, leaveText, payDefaults, weekDays, workDays } from '../lib/payroll.js'
 
 const props = defineProps({ leave: Object, prefill: Object })
@@ -25,6 +26,11 @@ const settings = computed(() => leaveSettings(payDefaults(emp.value?.pay)))
 const perDay = computed(() => settings.value.perDay)
 const days = computed(() => workDays(form.from, form.to, weekDays(settings.value.perWeek)))
 const half = ref(false)
+// Public holidays in these dates (not counted as leave), and who else is off then.
+const holidays = computed(() => (form.from && form.to >= form.from ? holidaysBetween(form.from, form.to) : []))
+const alsoOff = computed(() => state.leave.filter((l) => l.id !== form.id && l.employeeId !== form.employeeId && l.status !== 'declined'
+  && l.from <= form.to && (l.to || l.from) >= form.from))
+const nameOf = (id) => state.employees.find((e) => e.id === id)?.name || '—'
 
 // Hours follow the dates (Mon–Sat × her hours a day) until she types her own.
 const autoHours = ref(!editing)
@@ -121,6 +127,10 @@ async function remove() {
           <label class="calc-check"><input v-model="half" type="checkbox" @change="autoHours = true; fillHours()"> Half day{{ days > 1 ? 's' : '' }}</label>
         </div>
       </div>
+      <p v-if="holidays.length" class="muted-note">🇿🇦 {{ holidays.map((h) => `${h.name} (${shortDate(h.date)})`).join(', ') }} — public holiday{{ holidays.length === 1 ? '' : 's' }}, not counted as leave.</p>
+      <p v-if="alsoOff.length" class="field-hint orange" style="margin: 0 0 12px">
+        👥 Also off then: {{ alsoOff.map((l) => `${nameOf(l.employeeId)} (${shortDate(l.from)}${l.to && l.to !== l.from ? '–' + shortDate(l.to) : ''}${l.status === 'requested' ? ', asked' : ''})`).join(', ') }}
+      </p>
       <div class="field">
         <label for="l-notes">Notes (optional)</label>
         <input id="l-notes" v-model="form.notes">

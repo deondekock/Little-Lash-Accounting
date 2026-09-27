@@ -6,6 +6,7 @@
  * UIF is 1% (employee) + 1% (employer) of pay excluding commission, up to the
  * monthly ceiling.
  */
+import { holidaysBetween, holidayOn } from './holidays.js'
 import { monthRange } from './format.js'
 
 /**
@@ -202,14 +203,16 @@ export function weekDays(perWeek = 5) {
   return [1, 2, 3, 4, 5, 6, 0].slice(0, n)
 }
 
-/** Her work days between two dates, inclusive. */
+/** Her work days between two dates, inclusive — public holidays aren't work days (nor leave days). */
 export function workDays(from, to, days = weekDays(5)) {
   if (!from || !to || to < from) return 0
   let n = 0
+  const holidays = new Set(holidaysBetween(from, to).map((h) => h.date))
   const d = new Date(from + 'T12:00:00')
   const end = new Date(to + 'T12:00:00')
   while (d <= end) {
-    if (days.includes(d.getDay())) n++
+    const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    if (days.includes(d.getDay()) && !holidays.has(date)) n++
     d.setDate(d.getDate() + 1)
   }
   return n
@@ -431,6 +434,8 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
     totalDeductions: totalDed,
     net: round2(gross - totalDed),
     employerUif: monthlyUif(uifPay),
+    // Worked on a public holiday: by law that day is paid at double (or as agreed) — flagged to check.
+    holidayWork: [...new Set(mine.map((a) => a.date))].map((date) => ({ date, name: holidayOn(date), count: mine.filter((a) => a.date === date).length })).filter((h) => h.name),
     age,
     table: calcPaye.table,
     leave: {

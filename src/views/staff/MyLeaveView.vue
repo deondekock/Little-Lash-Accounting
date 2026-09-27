@@ -4,6 +4,7 @@ import { state, openMyLeave } from '../../store.js'
 import { shortDate, todayStr } from '../../lib/format.js'
 import { leaveBalance, sickBalance, familyBalance, payDefaults } from '../../lib/payroll.js'
 import { LEAVE_STATUS } from '../../lib/schema.js'
+import { holidaysIn } from '../../lib/holidays.js'
 
 /** Staff: her leave balances, her requests and her leave. */
 const me = computed(() => state.employees[0])
@@ -20,6 +21,10 @@ const upcoming = computed(() => sorted.value.filter((l) => l.status !== 'request
 const past = computed(() => sorted.value.filter((l) => l.status !== 'requested' && l.to < today))
 const range = (l) => (l.to && l.to !== l.from ? `${shortDate(l.from)} – ${shortDate(l.to)}` : shortDate(l.from))
 const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧', Maternity: '🤱', Unpaid: '⏸️' }
+// The next few public holidays.
+const y = Number(today.slice(0, 4))
+const holidays = [...holidaysIn(y), ...holidaysIn(y + 1)].filter((h) => h.date >= today).slice(0, 5)
+const weekday = (d) => new Date(d + 'T12:00').toLocaleDateString('en-ZA', { weekday: 'short' })
 const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag' }
 </script>
 
@@ -65,6 +70,14 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
       </div>
     </div>
     <div v-else class="card empty" style="padding: 18px">No leave coming up.</div>
+
+    <h4 class="section-label">Public holidays coming up</h4>
+    <div class="list card" style="padding: 4px 0">
+      <div v-for="h in holidays" :key="h.date" class="list-row">
+        <div class="history-icon">🇿🇦</div>
+        <div class="grow"><div class="title">{{ h.name }}</div><div class="meta">{{ weekday(h.date) }} {{ shortDate(h.date) }} {{ h.date.slice(0, 4) }}</div></div>
+      </div>
+    </div>
 
     <template v-if="past.length">
       <h4 class="section-label">Taken</h4>

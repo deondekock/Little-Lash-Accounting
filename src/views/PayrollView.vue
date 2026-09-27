@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import SegmentedControl from '../components/SegmentedControl.vue'
 import TaxNotice from '../components/TaxNotice.vue'
+import LeaveCalendar from '../components/LeaveCalendar.vue'
 import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmployee, openCompany, printPayslips, decideLeave, toastUndo, fail, openMonthEnd, openTaxYear } from '../store.js'
 import { LEAVE_STATUS } from '../lib/schema.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
@@ -163,6 +164,8 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
           </div>
         </div>
       </template>
+
+      <LeaveCalendar />
 
       <div class="team-grid">
         <div v-for="{ e, b, sick, family } in balances" :key="e.id" class="card leave-card">

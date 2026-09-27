@@ -3,7 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import { state, closeModal, requestLeave, cancelLeave, toast, fail } from '../store.js'
-import { todayStr } from '../lib/format.js'
+import { todayStr, shortDate } from '../lib/format.js'
+import { holidaysBetween } from '../lib/holidays.js'
 import { MATERNITY_MONTHS, addMonths, leaveBalance, sickBalance, familyBalance, leaveSettings, leaveText, payDefaults, weekDays, workDays } from '../lib/payroll.js'
 import { LEAVE_TYPES } from '../lib/schema.js'
 
@@ -16,6 +17,7 @@ const me = computed(() => state.employees[0])
 const withPay = computed(() => me.value && { ...me.value, pay: payDefaults(me.value.pay) })
 const settings = computed(() => leaveSettings(withPay.value?.pay || {}))
 const days = computed(() => workDays(form.from, form.to, weekDays(settings.value.perWeek)))
+const holidays = computed(() => (form.from && form.to >= form.from ? holidaysBetween(form.from, form.to) : []))
 const half = ref(false)
 const autoHours = ref(!editing)
 function fillHours() {
@@ -84,6 +86,7 @@ async function withdraw() {
           <label class="calc-check"><input v-model="half" type="checkbox" @change="autoHours = true; fillHours()"> Half day{{ days > 1 ? 's' : '' }}</label>
         </div>
       </div>
+      <p v-if="holidays.length" class="muted-note">🇿🇦 {{ holidays.map((h) => `${h.name} (${shortDate(h.date)})`).join(', ') }} — public holiday{{ holidays.length === 1 ? '' : 's' }}, not counted as leave.</p>
       <div class="field">
         <label for="m-notes">Note (optional)</label>
         <input id="m-notes" v-model="form.notes" maxlength="500">

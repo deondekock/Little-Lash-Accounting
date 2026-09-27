@@ -977,3 +977,23 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .rv-card ol:not(.plain) li span::before { content: counter(rv) '. '; color: var(--muted); }
 .rv-card ol li b { font-family: var(--font-sans); font-size: 13.5px; font-weight: 500; color: var(--ink-2); white-space: nowrap; }
 .rv-card ol li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+/* Team leave calendar */
+.leave-cal { margin-bottom: 14px; }
+.lc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.lc-head { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0 4px; letter-spacing: .06em; }
+.lc-day {
+  border: 1px solid transparent; background: var(--card-2); border-radius: 9px; min-height: 46px; padding: 4px 2px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--ink); font: inherit; cursor: pointer;
+}
+.lc-day.weekend { background: transparent; color: var(--muted); }
+.lc-day.holiday { background: var(--rose-soft); color: var(--rose-ink); }
+.lc-day.today .lc-num { background: var(--brand); color: var(--brand-ink); border-radius: 50%; width: 22px; height: 22px; display: grid; place-items: center; }
+.lc-day.picked { border-color: var(--brand); }
+.lc-day.busy { box-shadow: inset 0 -2px 0 var(--unpaid); }
+.lc-num { font-size: 13px; line-height: 22px; }
+.lc-dots { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.lc-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.lc-dots i.req { background: transparent; box-shadow: inset 0 0 0 1.5px var(--c); }
+.lc-detail { margin-top: 12px; display: grid; gap: 6px; font-size: 14px; }
+.lc-hol { color: var(--rose-ink); }
+.lc-person { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 4px 0; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }

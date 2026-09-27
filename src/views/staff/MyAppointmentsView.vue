@@ -8,6 +8,7 @@ import { lockedReason } from '../../lib/staffRules.js'
 import { monthProgress } from '../../lib/staffStats.js'
 import { monthLabel } from '../../lib/format.js'
 import { setView } from '../../store.js'
+import { holidayOn } from '../../lib/holidays.js'
 
 /** Staff: one day at a time (today first), in the order the appointments were added. No amounts. */
 const today = todayStr()
@@ -42,7 +43,7 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
     <div class="day-nav">
       <button class="icon-btn" aria-label="Previous day" @click="shift(-1)"><Icon name="left" /></button>
       <label class="day-pick">
-        <b>{{ label }}</b><small>{{ long }}</small>
+        <b>{{ label }}</b><small>{{ long }}<template v-if="holidayOn(day)"> · 🇿🇦 {{ holidayOn(day) }}</template></small>
         <input type="date" :value="day" :max="today" aria-label="Choose a day" @change="pick">
       </label>
       <button class="icon-btn" aria-label="Next day" :disabled="day >= today" @click="shift(1)"><Icon name="right" /></button>
