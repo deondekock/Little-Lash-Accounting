@@ -4,6 +4,7 @@ import '@fontsource-variable/jost'
 import '@fontsource/libre-baskerville/400.css'
 import '@fontsource/libre-baskerville/400-italic.css'
 import './style.css'
+import './lib/theme.js'
 
 createApp(App).mount('#app')
 

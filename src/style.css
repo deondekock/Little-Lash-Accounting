@@ -1,5 +1,5 @@
 /* Little Lash Lounge — design tokens and global styles.
-   Taken from the salon's website: dark tropical greens, rose-gold, blush and sage.
+   Taken from the salon's website: the rose-gold logo on blush pink, dusty rose and warm charcoal.
    Libre Baskerville for headings and big figures; Jost for everything else (tabular numbers). */
 
 :root {
@@ -7,26 +7,26 @@
   --font-sans: 'Jost Variable', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-serif: 'Libre Baskerville', Georgia, 'Times New Roman', serif;
 
-  --bg: #f7f2ef;            /* warm ivory */
-  --bg-glow: #f6e3e1;       /* blush */
+  --bg: #fbf5f3;            /* warm ivory */
+  --bg-glow: #f7e2e1;       /* blush */
   --card: #ffffff;
-  --card-2: #faf6f3;
-  --ink: #2c312d;           /* charcoal with a hint of green */
-  --ink-2: #5c605b;
-  --muted: #8b8782;
-  --line: #ebe3de;
-  --grid: #efe9e5;
-  --baseline: #d9d0ca;
-  --brand: #4b6635;         /* the website's sage/olive button green */
+  --card-2: #fdf7f6;
+  --ink: #33292b;           /* warm charcoal */
+  --ink-2: #66595b;
+  --muted: #958889;
+  --line: #f0e2e1;
+  --grid: #f4eaea;
+  --baseline: #e2d2d2;
+  --brand: #a0555c;         /* deep dusty rose: buttons and links */
   --brand-ink: #ffffff;
-  --brand-soft: #e8eee1;
+  --brand-soft: #f9e8e7;
   --rose: #e6bebe;          /* the website's dusty rose */
-  --rose-soft: #f7e6e5;
+  --rose-soft: #f8e7e6;
   --rose-ink: #8f5553;      /* rose-gold, dark enough for text */
-  --forest: #1d2520;        /* header / nav: the dark leaves */
-  --forest-2: #26312a;
-  --on-forest: #efe4df;
-  --on-forest-2: #a9b3aa;
+  --bar: #f8e6e4;           /* header and bottom bar: blush, like the website's footer */
+  --bar-2: #f1d2d1;
+  --bar-ink: #5b4446;
+  --bar-ink-2: #9b8385;
   --gold: #b98a4e;
   --paid: #2f7a4c;
   --paid-soft: #e3f1e7;
@@ -59,24 +59,26 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #111512;
-    --bg-glow: #1b2620;
-    --card: #1b211d;
-    --card-2: #171c19;
-    --ink: #efe8e4;
-    --ink-2: #c7bdb8;
-    --muted: #8f8a85;
+    --bg: #141112;
+    --bg-glow: #261a1c;
+    --card: #1f1a1b;
+    --card-2: #1a1617;
+    --ink: #f3e9e8;
+    --ink-2: #cdbdbd;
+    --muted: #958788;
     --line: rgba(255, 255, 255, .08);
     --grid: rgba(255, 255, 255, .06);
     --baseline: rgba(255, 255, 255, .16);
-    --brand: #a3c088;
-    --brand-ink: #15200f;
-    --brand-soft: #25301f;
+    --brand: #e8a3a9;
+    --brand-ink: #2a1215;
+    --brand-soft: #3a2528;
     --rose: #e6bebe;
     --rose-soft: #35262a;
     --rose-ink: #eab3b1;
-    --forest: #0c100e;
-    --forest-2: #161d19;
+    --bar: #1c1718;
+    --bar-2: #2a2021;
+    --bar-ink: #eddcdb;
+    --bar-ink-2: #a89596;
     --gold: #d2a86f;
     --paid: #72c28f;
     --paid-soft: #183123;
@@ -101,24 +103,26 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #111512;
-  --bg-glow: #1b2620;
-  --card: #1b211d;
-  --card-2: #171c19;
-  --ink: #efe8e4;
-  --ink-2: #c7bdb8;
-  --muted: #8f8a85;
+  --bg: #141112;
+  --bg-glow: #261a1c;
+  --card: #1f1a1b;
+  --card-2: #1a1617;
+  --ink: #f3e9e8;
+  --ink-2: #cdbdbd;
+  --muted: #958788;
   --line: rgba(255, 255, 255, .08);
   --grid: rgba(255, 255, 255, .06);
   --baseline: rgba(255, 255, 255, .16);
-  --brand: #a3c088;
-  --brand-ink: #15200f;
-  --brand-soft: #25301f;
+  --brand: #e8a3a9;
+  --brand-ink: #2a1215;
+  --brand-soft: #3a2528;
   --rose: #e6bebe;
   --rose-soft: #35262a;
   --rose-ink: #eab3b1;
-  --forest: #0c100e;
-  --forest-2: #161d19;
+  --bar: #1c1718;
+  --bar-2: #2a2021;
+  --bar-ink: #eddcdb;
+  --bar-ink-2: #a89596;
   --gold: #d2a86f;
   --paid: #72c28f;
   --paid-soft: #183123;
@@ -165,15 +169,14 @@ svg { flex-shrink: 0; }
 .hidden { display: none !important; }
 
 /* ---------- header ---------- */
-/* The dark, leafy band from the website, with the rose-gold logo. */
+/* A blush band with the rose-gold logo, like the website's footer. */
 .top {
   position: sticky; top: 0; z-index: 20;
-  background-color: var(--forest);
-  background-image: linear-gradient(90deg, var(--forest) 35%, transparent 100%), url('./assets/leaves.svg');
-  background-size: auto, 520px auto; background-position: 0 0, right -40px center; background-repeat: no-repeat;
-  color: var(--on-forest);
+  background: linear-gradient(100deg, var(--bar) 0%, var(--bar) 45%, var(--bar-2) 100%);
+  color: var(--bar-ink);
   padding-top: env(safe-area-inset-top);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, .2), 0 6px 20px rgba(20, 28, 23, .18);
+  border-bottom: 1px solid color-mix(in srgb, var(--rose) 55%, transparent);
+  box-shadow: 0 6px 18px rgba(120, 70, 72, .08);
 }
 .top-row { display: flex; align-items: center; justify-content: space-between; height: 70px; }
 .wordmark { display: block; line-height: 0; margin: 0; }
@@ -184,29 +187,30 @@ svg { flex-shrink: 0; }
   display: grid; place-items: center; color: var(--ink-2);
 }
 .icon-btn:hover { background: var(--brand-soft); color: var(--brand); }
-.top .icon-btn { color: var(--on-forest-2); }
-.top .icon-btn:hover { background: rgba(255, 255, 255, .08); color: var(--rose); }
+.top .icon-btn { color: var(--bar-ink-2); }
+.top .icon-btn:hover { background: color-mix(in srgb, var(--rose) 30%, transparent); color: var(--brand); }
 .avatar-btn {
-  width: 36px; height: 36px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--rose) 60%, transparent);
-  background: color-mix(in srgb, var(--rose) 16%, transparent); color: var(--rose); font-family: var(--font-serif); font-size: 15px;
+  width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--rose);
+  background: var(--card); color: var(--rose-ink); font-family: var(--font-serif); font-size: 15px;
 }
 
 /* ---------- bottom navigation ---------- */
 .bottom-nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: var(--forest);
-  border-top: 1px solid rgba(255, 255, 255, .06);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .bottom-nav .wrap { display: flex; height: var(--nav-h); padding: 0 6px; }
 .bottom-nav button {
-  flex: 1; border: 0; background: none; color: var(--on-forest-2);
+  flex: 1; border: 0; background: none; color: var(--muted);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
   font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; position: relative;
 }
-.bottom-nav button.active { color: var(--rose); }
+.bottom-nav button.active { color: var(--brand); }
 .bottom-nav button.active::before {
-  content: ''; position: absolute; top: 0; width: 28px; height: 2px; border-radius: 0 0 2px 2px; background: var(--rose);
+  content: ''; position: absolute; top: 7px; width: 46px; height: 30px; border-radius: 15px; background: var(--rose-soft); z-index: -1;
 }
 
 .fab {
@@ -444,7 +448,7 @@ a.btn { text-decoration: none; }
 .bulk {
   position: fixed; left: 12px; right: 12px; z-index: 32;
   bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom));
-  background: var(--forest); color: var(--on-forest); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow-lg);
+  background: var(--ink); color: var(--card); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow-lg);
   max-width: 956px; margin: 0 auto;
 }
 .bulk .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -530,7 +534,7 @@ tr.muted td { color: var(--muted); }
 /* toast + loading */
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--nav-h) + 90px + env(safe-area-inset-bottom)); transform: translateX(-50%);
-  background: var(--forest); color: var(--on-forest); padding: 10px 16px; border-radius: 12px; z-index: 60; font-weight: 500;
+  background: var(--ink); color: var(--card); padding: 10px 16px; border-radius: 12px; z-index: 60; font-weight: 500;
   pointer-events: none; max-width: calc(100% - 32px); text-align: center; animation: rise .2s ease-out; box-shadow: var(--shadow-lg);
 }
 .toast.error { background: #b3261e; color: #fff; }
@@ -548,16 +552,15 @@ tr.muted td { color: var(--muted); }
 .welcome-card h2 { font-size: 24px; margin-bottom: 10px; }
 .welcome-card p { color: var(--ink-2); margin: 0 0 20px; }
 .welcome-card .field input { text-align: left; }
-/* Sign-in: the website's dark, leafy look with the logo. */
+/* Sign-in: the logo on blush, like the website's footer. */
 .welcome-card.sign-in {
-  margin-top: 28px; padding: 44px 24px 36px; border-radius: 18px; color: var(--on-forest);
-  background-color: var(--forest);
-  background-image: radial-gradient(90% 70% at 50% 35%, rgba(29, 37, 32, .2), rgba(29, 37, 32, .85)), url('./assets/leaves.svg');
-  background-size: cover, 900px auto; background-position: center, 60% 40%;
+  margin-top: 36px; padding: 44px 24px 36px; border-radius: 18px; color: var(--ink);
+  background: radial-gradient(120% 90% at 50% 30%, var(--card) 0%, var(--bar) 55%, var(--bar-2) 100%);
+  border: 1px solid color-mix(in srgb, var(--rose) 50%, transparent);
   box-shadow: var(--shadow-lg);
 }
 .sign-in-logo { width: min(300px, 100%); height: auto; display: block; margin: 0 auto 22px; }
-.sign-in .sign-in-tag { font-family: var(--font-serif); font-style: italic; color: var(--rose); font-size: 15.5px; line-height: 1.6; margin: 0 auto 28px; max-width: 290px; }
+.sign-in .sign-in-tag { font-family: var(--font-serif); font-style: italic; color: var(--rose-ink); font-size: 15.5px; line-height: 1.6; margin: 0 auto 28px; max-width: 290px; }
 .btn.google { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 13px 22px; box-shadow: var(--shadow); }
 .muted-note { font-size: 13px; margin: 16px 0 8px !important; color: var(--muted) !important; }
 code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
@@ -763,10 +766,10 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
   .payslip:last-child { break-after: auto; }
 }
 .payslip { color: #222; background: #fff; font-family: var(--font-sans); font-size: 12px; max-width: 760px; margin: 0 auto; }
-.payslip header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #4b6635; padding-bottom: 10px; margin-bottom: 16px; }
-.payslip h1 { font-family: var(--font-serif); font-size: 30px; margin: 2px 0 0; color: #1d2520; }
+.payslip header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #a0555c; padding-bottom: 10px; margin-bottom: 16px; }
+.payslip h1 { font-family: var(--font-serif); font-size: 30px; margin: 2px 0 0; color: #33292b; }
 .payslip .ps-logo { height: 52px; width: auto; display: block; margin: 0 0 6px -4px; }
-.payslip .ps-company { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #4b6635; font-weight: 600; }
+.payslip .ps-company { font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #a0555c; font-weight: 600; }
 .payslip .ps-month { font-size: 15px; font-weight: 600; }
 .payslip .ps-right { text-align: right; line-height: 1.7; }
 .payslip .ps-right span { color: #777; margin-right: 6px; }
@@ -784,7 +787,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .payslip .ps-totals { margin-left: auto; width: 50%; }
 .payslip .ps-totals div { display: flex; justify-content: space-between; padding: 5px 8px; }
 .payslip .ps-totals b { font-variant-numeric: tabular-nums; }
-.payslip .ps-totals .net { background: #1d2520; color: #fff; font-size: 15px; margin-top: 4px; }
+.payslip .ps-totals .net { background: #33292b; color: #fff; font-size: 15px; margin-top: 4px; }
 .payslip .ps-foot { color: #777; font-size: 11px; margin-top: 14px; }
 
 .tax-notice {
@@ -847,7 +850,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .change-row.undone { opacity: .55; }
 .viewas-banner { background: var(--rose); color: #3b2b2b; }
 .viewas-banner .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 16px; font-size: 14px; }
-.viewas-banner .btn { background: var(--forest); color: var(--on-forest); }
+.viewas-banner .btn { background: var(--ink); color: var(--card); }
 /* A payslip on screen (inside the app), fitted to a phone. */
 .payslip-screen { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 16px; background: #fff; margin-bottom: 4px; overflow: hidden; }
 .payslip-screen .payslip { font-size: 12.5px; }
