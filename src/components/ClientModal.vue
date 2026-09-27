@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import BaseModal from './BaseModal.vue'
 import Sparkline from './charts/Sparkline.vue'
+import ClientContact from './ClientContact.vue'
 import { closeModal, openAppointment, employeeById, employeeColor, openMerge } from '../store.js'
 import { fmt, fmt0, dayLabel, shortDate } from '../lib/format.js'
 
@@ -25,7 +26,9 @@ function book() {
     <p style="margin: -10px 0 14px; color: var(--muted); font-size: 13.5px">
       Client since {{ since }}<template v-if="c.usualGap"> · usually every {{ c.usualGap }} days</template>
       <span v-if="c.due" class="badge due" style="margin-left: 6px">Due for a refill</span>
+      <span v-if="c.quiet" class="badge quiet" style="margin-left: 6px">Gone quiet</span>
     </p>
+    <ClientContact :client="c" owed />
     <div class="client-tools">
       <button class="btn small ghost" @click="openMerge(c, { mode: 'rename' })">Rename</button>
       <button class="btn small ghost" @click="openMerge(c)">Merge with…</button>

@@ -22,6 +22,7 @@
  *   POST /api/staff/leave        ask for leave (or change a request that's still waiting)
  *   POST /api/staff/leave/cancel withdraw a request that's still waiting
  *   POST /api/staff/profile      change her phone number and address
+ *   POST /api/staff/client-phone a client's cell number (only for clients she has seen)
  * Owners can view the app as a team member: header `X-View-As: <employeeId>` makes the request a staff
  * request for her (same data, same rules); what they do is logged as "owner (as <name>)".
  * Everyone (her own notifications):
@@ -34,11 +35,15 @@
  * Owners are told when staff ask for, change or withdraw leave, or change their details; staff when
  * the owner approves/declines their leave or saves a new payslip (sent with /api/write as `notify`).
  *
+ * Loyalty milestones: when an appointment brings a client to one visit short of a milestone (10th, 25th…),
+ * the team member who saw her is told, so she can plan a treat for the milestone visit itself.
+ *
  * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
-import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING } from '../../src/lib/schema.js'
+import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING, MILESTONES } from '../../src/lib/schema.js'
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
+import { clientKey } from '../../src/lib/stats.js'
 import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
@@ -70,7 +75,8 @@ export default {
         if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         if (route === 'POST /api/staff/leave/cancel') return json(await staffCancel(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
-        if (route === 'POST /api/staff/appointment') return json(await staffAppointment(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/appointment') return json(await staffAppointment(env.DB, me, await request.json(), (rec) => ctx.waitUntil(milestoneCheck(env, [rec]))), cors)
+        if (route === 'POST /api/staff/client-phone') return json(await staffClientPhone(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
@@ -78,8 +84,10 @@ export default {
       if (route === 'GET /api/load') return json(await loadAll(env.DB), cors)
       if (route === 'POST /api/write') {
         const body = await request.json()
+        const added = await newAppointments(env.DB, body)
         const res = await write(env.DB, body, cors)
         if (res.ok && body.notify?.length) ctx.waitUntil(notifyStaff(env, body.notify))
+        if (res.ok && added.length) ctx.waitUntil(milestoneCheck(env, added))
         return res
       }
       if (route === 'GET /api/history' && url.searchParams.get('record')) return json(await recordHistory(env.DB, url.searchParams.get('record')), cors)
@@ -212,7 +220,7 @@ const arraysOf = (table, where = '') =>
 async function loadAll(db, { withHistory = false } = {}) {
   // Appointments come per year so no single result gets too big.
   const years = (await db.prepare('SELECT DISTINCT substr(month, 1, 4) AS y FROM appointments ORDER BY y').all()).results.map((r) => r.y)
-  const small = ['employees', 'services', 'leave', 'payslips']
+  const small = ['employees', 'services', 'leave', 'payslips', 'client_info']
   const stmts = [
     ...small.map((t) => db.prepare(arraysOf(t))),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
@@ -319,7 +327,99 @@ async function staffLoad(db, me) {
     db.prepare(`SELECT json_group_array(json_array(id, name, NULL, active, NULL, created_at, updated_at)) AS j FROM services`),
   ])
   const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
-  return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts}}`
+  const { phones, stats } = await staffClients(db, me)
+  return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts},` +
+    `"client_info":${JSON.stringify(phones)},"client_stats":${JSON.stringify(stats)}}`
+}
+
+/** Name keys of the clients she has seen. */
+async function herClientKeys(db, me) {
+  const { results } = await db.prepare('SELECT DISTINCT client FROM appointments WHERE employee_id = ?1').bind(me.employeeId).all()
+  return new Set(results.map((r) => clientKey(String(r.client || ''))).filter(Boolean))
+}
+
+/**
+ * For her clients: their cell numbers, and their visits at the salon as a whole (with anyone) —
+ * [key, visits, last visit] — so milestones and "gone quiet" are right. No amounts.
+ */
+async function staffClients(db, me) {
+  const keys = await herClientKeys(db, me)
+  const { results: info } = await db.prepare(`SELECT ${cols('client_info')} FROM client_info WHERE id IN (SELECT value FROM json_each(?1))`).bind(JSON.stringify([...keys])).all()
+  const { results: rows } = await db.prepare('SELECT DISTINCT client, date FROM appointments').all()
+  const days = new Map()
+  for (const r of rows) {
+    const k = clientKey(String(r.client || ''))
+    if (!keys.has(k)) continue
+    if (!days.has(k)) days.set(k, new Set())
+    days.get(k).add(r.date)
+  }
+  const stats = [...days].map(([k, set]) => [k, set.size, [...set].sort().pop()])
+  return { phones: info.map((r) => TABLES.client_info.map((c) => r[c] ?? null)), stats }
+}
+
+/** She saves a client's cell number (only a client she has seen). */
+async function staffClientPhone(db, me, b) {
+  const name = String(b.client || '').trim().slice(0, 80)
+  const key = clientKey(name)
+  if (!key || !(await herClientKeys(db, me)).has(key)) throw new HttpError(403, 'You can only add numbers for your own clients.')
+  const phone = String(b.phone || '').replace(/[^\d+ ]/g, '').trim().slice(0, 20)
+  const existing = await recordOf(db, 'client_info', 'id = ?1', key)
+  const now = new Date().toISOString()
+  const rec = { id: key, name, phone, created_at: existing?.created_at || now, updated_at: now, updated_by: me.actor || me.email }
+  await db.batch([
+    db.prepare(`INSERT INTO client_info (${cols('client_info')}) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+      ON CONFLICT(id) DO UPDATE SET name = excluded.name, phone = excluded.phone, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
+      .bind(rec.id, rec.name, rec.phone, rec.created_at, rec.updated_at, rec.updated_by),
+    logEntry(db, me, 'clients', `${me.name} ${phone ? `saved ${name}'s cell number` : `removed ${name}'s cell number`}`, { cinfo: { [key]: existing || null } }),
+  ])
+  return JSON.stringify(rec)
+}
+
+/* ---------------- loyalty milestones ---------------- */
+
+const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th')
+
+/** The appointments in an owner's write that are new (not changes), when it's a normal-sized change. */
+async function newAppointments(db, body) {
+  const rows = body.put?.appointments || []
+  if (body.replace || !rows.length || rows.length > 5) return []
+  const { results } = await db.prepare('SELECT id FROM appointments WHERE id IN (SELECT value FROM json_each(?1))').bind(JSON.stringify(rows.map((r) => r.id))).all()
+  const known = new Set(results.map((r) => r.id))
+  return rows.filter((r) => r && !known.has(r.id))
+}
+
+/**
+ * After new appointments are saved: if one is a client's newest visit and brings her to one short of a
+ * milestone, tell the team member who saw her (or the owners, for an owner without a login email).
+ */
+async function milestoneCheck(env, appts) {
+  try {
+    const today = saToday()
+    for (const a of appts) {
+      const name = String(a.client || '').trim()
+      if (!name || !a.employee_id || !DATE.test(a.date || '') || a.date > today) continue
+      if ((Date.parse(today) - Date.parse(a.date)) / 864e5 > 14) continue // back-filled old visits don't count
+      const key = clientKey(name)
+      const { results } = await env.DB.prepare('SELECT id, client, date FROM appointments WHERE lower(trim(client)) = lower(?1)').bind(name).all()
+      const mine = results.filter((r) => clientKey(String(r.client || '')) === key)
+      if (mine.some((r) => r.id !== a.id && r.date === a.date)) continue // another service on the same visit
+      const dates = [...new Set(mine.map((r) => r.date))].sort()
+      if (dates[dates.length - 1] !== a.date) continue // not her latest visit
+      const next = dates.length + 1
+      if (!MILESTONES.includes(next)) continue
+      const emp = await env.DB.prepare(`SELECT name, lower(trim(json_extract(pay, '$.loginEmail'))) AS email, json_extract(pay, '$.owner') AS owner
+        FROM employees WHERE id = ?1`).bind(a.employee_id).first()
+      const to = emp?.email ? [emp.email] : emp?.owner ? String(env.ALLOWED_EMAILS || '').toLowerCase().split(/[,\s]+/).filter(Boolean) : []
+      if (!to.length) continue
+      await notify(env, to, {
+        title: `🎉 ${name}'s next visit is her ${ordinal(next)}!`,
+        body: `She's been in ${dates.length} times. Maybe plan a little treat or a thank-you note for next time 💕`,
+        hash: 'clients', tag: `milestone-${key}-${next}`,
+      })
+    }
+  } catch (err) {
+    console.error('milestones', err)
+  }
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -469,7 +569,7 @@ async function checkMonths(db, me, months) {
   return startDay
 }
 
-async function staffAppointment(db, me, b) {
+async function staffAppointment(db, me, b, onNew = () => {}) {
   const date = String(b.date || '')
   if (!DATE.test(date) || date > saToday()) throw new HttpError(400, 'Please choose a valid date (not in the future).')
   const client = String(b.client || '').trim().slice(0, 80)
@@ -507,6 +607,7 @@ async function staffAppointment(db, me, b) {
       ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
     logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null } }),
   ])
+  if (!existing) onNew(rec)
   return JSON.stringify(withoutAmount(rec))
 }
 

@@ -2,7 +2,8 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import { all, state, clients, employeeColor, openClient, openAppointment, openMerge } from '../store.js'
-import { findDuplicates } from '../lib/stats.js'
+import { findDuplicates, ordinal } from '../lib/stats.js'
+import WaButton from '../components/WaButton.vue'
 import { fmt, fmt0, initials, shortDate } from '../lib/format.js'
 
 const query = ref('')
@@ -10,6 +11,8 @@ const shown = ref(50)
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'due', label: 'Due for refill' },
+  { id: 'quiet', label: 'Gone quiet' },
+  { id: 'owing', label: 'Owe money' },
   { id: 'regulars', label: 'Regulars' },
   { id: 'new', label: 'New this month' },
   { id: 'dupes', label: 'Possible duplicates' },
@@ -21,15 +24,22 @@ const list = computed(() => {
   let out = clients.value
   if (q) out = out.filter((c) => c.key.includes(q))
   else if (state.clientFilter === 'due') out = out.filter((c) => c.due)
+  else if (state.clientFilter === 'quiet') out = out.filter((c) => c.quiet)
+  else if (state.clientFilter === 'owing') out = out.filter((c) => c.unpaid > 0)
   else if (state.clientFilter === 'regulars') out = out.filter((c) => c.visits >= 5 && c.daysSince <= 120)
   else if (state.clientFilter === 'new') out = out.filter((c) => c.history[c.history.length - 1].month === state.month)
-  const sortKey = state.clientFilter === 'due' && !q ? (c) => -c.visits : (c) => (c.last < '' ? 0 : -Date.parse(c.last))
+  const sortKey = q ? (c) => -Date.parse(c.last)
+    : state.clientFilter === 'due' || state.clientFilter === 'quiet' ? (c) => -c.visits
+      : state.clientFilter === 'owing' ? (c) => -c.unpaid
+        : (c) => (c.last < '' ? 0 : -Date.parse(c.last))
   return [...out].sort((a, b) => sortKey(a) - sortKey(b))
 })
 
 const counts = computed(() => ({
   all: clients.value.length,
   due: clients.value.filter((c) => c.due).length,
+  quiet: clients.value.filter((c) => c.quiet).length,
+  owing: clients.value.filter((c) => c.unpaid > 0).length,
   regulars: clients.value.filter((c) => c.visits >= 5 && c.daysSince <= 120).length,
   dupes: dupes.value.length,
 }))
@@ -51,12 +61,18 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
 
     <div v-if="!query" class="chips">
       <button v-for="f in FILTERS" :key="f.id" class="chip" :class="{ active: state.clientFilter === f.id }" @click="state.clientFilter = f.id">
-        {{ f.label }}<template v-if="f.id === 'due' && counts.due"> · {{ counts.due }}</template><template v-if="f.id === 'dupes' && counts.dupes"> · {{ counts.dupes }}</template>
+        {{ f.label }}<template v-if="['due', 'quiet', 'owing'].includes(f.id) && counts[f.id]"> · {{ counts[f.id] }}</template><template v-if="f.id === 'dupes' && counts.dupes"> · {{ counts.dupes }}</template>
       </button>
     </div>
 
     <p v-if="state.clientFilter === 'due' && !query" class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
-      Regulars who are past their usual time between visits — a friendly WhatsApp might bring them back. 💌
+      Regulars a little past their usual time between visits. Tap 💬 to send a refill reminder on WhatsApp.
+    </p>
+    <p v-if="state.clientFilter === 'quiet' && !query" class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
+      Regulars who haven't been back in more than twice their usual time (in the last year). A "we miss you" might win them back 💌
+    </p>
+    <p v-if="state.clientFilter === 'owing' && !query" class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
+      Everyone with unpaid visits, biggest first. Tap 💬 for a friendly payment reminder.
     </p>
 
     <template v-if="state.clientFilter === 'dupes' && !query">
@@ -78,21 +94,26 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
     </template>
     <div v-else class="card" style="padding: 4px 16px">
       <div v-if="list.length" class="list">
-        <button v-for="c in list.slice(0, shown)" :key="c.key" class="list-row" @click="openClient(c)">
-          <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
-          <div class="grow">
-            <div class="title">
-              {{ c.name }}
-              <span v-if="c.due" class="badge due">Due</span>
-              <span v-else-if="c.visits === 1 && c.daysSince < 40" class="badge new">New</span>
+        <div v-for="c in list.slice(0, shown)" :key="c.key" class="list-row with-action">
+          <button class="row-main" @click="openClient(c)">
+            <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
+            <div class="grow">
+              <div class="title">
+                {{ c.name }}
+                <span v-if="c.due" class="badge due">Due</span>
+                <span v-else-if="c.quiet" class="badge quiet">Quiet</span>
+                <span v-else-if="c.visits === 1 && c.daysSince < 40" class="badge new">New</span>
+                <span v-if="c.milestone" class="badge milestone" :title="`Her next visit is her ${ordinal(c.milestone)}`">🎉 {{ ordinal(c.milestone) }} next</span>
+              </div>
+              <div class="meta">{{ c.visits }} visit{{ c.visits === 1 ? '' : 's' }} · last {{ ago(c.daysSince) }}<template v-if="c.service"> · {{ c.service }}</template></div>
             </div>
-            <div class="meta">{{ c.visits }} visit{{ c.visits === 1 ? '' : 's' }} · last {{ ago(c.daysSince) }}<template v-if="c.service"> · {{ c.service }}</template></div>
-          </div>
-          <div class="right">
-            <div class="big">{{ fmt0(c.spend) }}</div>
-            <div class="meta">{{ shortDate(c.last) }}</div>
-          </div>
-        </button>
+            <div class="right">
+              <div class="big">{{ fmt0(state.clientFilter === 'owing' && !query ? c.unpaid : c.spend) }}</div>
+              <div class="meta" :class="{ orange: state.clientFilter === 'owing' && !query }">{{ state.clientFilter === 'owing' && !query ? 'owes' : shortDate(c.last) }}</div>
+            </div>
+          </button>
+          <WaButton v-if="!query && ['due', 'quiet', 'owing'].includes(state.clientFilter)" :client="c" :kind="{ due: 'refill', quiet: 'quiet', owing: 'owed' }[state.clientFilter]" />
+        </div>
       </div>
       <div v-else class="empty">No clients found.</div>
     </div>

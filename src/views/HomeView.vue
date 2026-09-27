@@ -5,6 +5,7 @@ import AreaCompare from '../components/charts/AreaCompare.vue'
 import Columns from '../components/charts/Columns.vue'
 import ClientFlowCard from '../components/ClientFlowCard.vue'
 import TaxNotice from '../components/TaxNotice.vue'
+import WaButton from '../components/WaButton.vue'
 import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth } from '../store.js'
 import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
@@ -58,8 +59,13 @@ const due = computed(() =>
     .sort((a, b) => b.visits - a.visits)
     .slice(0, 5),
 )
+// Regulars who have gone quiet (win-back), most loyal first.
+const quiet = computed(() => clients.value.filter((c) => c.quiet).sort((a, b) => b.visits - a.visits).slice(0, 5))
+const quietCount = computed(() => clients.value.filter((c) => c.quiet).length)
+// Who owes money (all time), biggest first.
+const owing = computed(() => clients.value.filter((c) => c.unpaid > 0).sort((a, b) => b.unpaid - a.unpaid))
 const leaveRequests = computed(() => state.leave.filter((l) => l.status === 'requested'))
-const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${Math.round(d / 7)} weeks ago`)
+const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d < 70 ? `${Math.round(d / 7)} weeks ago` : `${Math.round(d / 30)} months ago`)
 </script>
 
 <template>
@@ -181,17 +187,65 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : `${
           <button class="link-btn" @click="setView('clients', { clientFilter: 'due' })">See all</button>
         </div>
         <div v-if="due.length" class="list">
-          <button v-for="c in due" :key="c.key" class="list-row" @click="openClient(c)">
-            <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
-            <div class="grow">
-              <div class="title">{{ c.name }}</div>
-              <div class="meta">Usually every {{ c.usualGap }} days · last visit {{ weeksAgo(c.daysSince) }}</div>
-            </div>
-            <div class="right"><div class="meta">{{ employeeById(c.staffId)?.name }}</div></div>
-          </button>
+          <div v-for="c in due" :key="c.key" class="list-row with-action">
+            <button class="row-main" @click="openClient(c)">
+              <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
+              <div class="grow">
+                <div class="title">{{ c.name }}</div>
+                <div class="meta">Usually every {{ c.usualGap }} days · last visit {{ weeksAgo(c.daysSince) }} · {{ employeeById(c.staffId)?.name }}</div>
+              </div>
+            </button>
+            <WaButton :client="c" kind="refill" />
+          </div>
         </div>
         <div v-else class="empty" style="padding: 18px">All your regulars have been in recently 💕</div>
       </section>
+
+      <div class="grid two" style="margin-top: 14px">
+        <!-- Win-back: regulars who have gone quiet -->
+        <section class="card">
+          <div class="card-title">
+            <h3>Gone quiet</h3>
+            <button v-if="quietCount" class="link-btn" @click="setView('clients', { clientFilter: 'quiet' })">See all {{ quietCount }}</button>
+          </div>
+          <p class="muted-note" style="margin: -4px 0 6px !important">Regulars who haven't been back in over twice their usual time.</p>
+          <div v-if="quiet.length" class="list">
+            <div v-for="c in quiet" :key="c.key" class="list-row with-action">
+              <button class="row-main" @click="openClient(c)">
+                <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
+                <div class="grow">
+                  <div class="title">{{ c.name }}</div>
+                  <div class="meta">{{ c.visits }} visits · last {{ weeksAgo(c.daysSince) }} · usually every {{ c.usualGap }} days</div>
+                </div>
+              </button>
+              <WaButton :client="c" kind="quiet" />
+            </div>
+          </div>
+          <div v-else class="empty" style="padding: 18px">Nobody has gone quiet 💕</div>
+        </section>
+
+        <!-- Money owed -->
+        <section class="card">
+          <div class="card-title">
+            <h3>Who owes</h3>
+            <button v-if="owing.length" class="link-btn" @click="setView('clients', { clientFilter: 'owing' })">See all {{ owing.length }}</button>
+          </div>
+          <div v-if="owing.length" class="list">
+            <div v-for="c in owing.slice(0, 5)" :key="c.key" class="list-row with-action">
+              <button class="row-main" @click="openClient(c)">
+                <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
+                <div class="grow">
+                  <div class="title">{{ c.name }}</div>
+                  <div class="meta">{{ c.history.filter((v) => v.status !== 'Paid').length }} unpaid · last visit {{ weeksAgo(c.daysSince) }}</div>
+                </div>
+                <div class="right"><div class="big orange">{{ fmt0(c.unpaid) }}</div></div>
+              </button>
+              <WaButton :client="c" kind="owed" />
+            </div>
+          </div>
+          <div v-else class="empty" style="padding: 18px">Nobody owes anything 🎉</div>
+        </section>
+      </div>
     </template>
   </div>
 

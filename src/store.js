@@ -2,7 +2,7 @@ import { reactive, computed, shallowRef, nextTick } from 'vue'
 import { newVersionAvailable, updateApp } from './lib/update.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
-import { buildClients, buildServices, clientFlow } from './lib/stats.js'
+import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween } from './lib/stats.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -47,6 +47,8 @@ export const state = reactive({
   error: '', // why the data couldn't be opened
   history: null, // History entries (loaded when the History sheet opens)
   printing: null, // payslips being printed / saved as PDF
+  clientPhones: {}, // { clientKey: cell number }
+  clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
 })
 
 /**
@@ -67,8 +69,37 @@ export const employeeColor = (id) => {
   return slot ? `var(--series-${slot})` : 'var(--series-other)'
 }
 
-/** One entry per client (visits, spend, history…) — shared by Home, Clients and the forms. */
-export const clients = computed(() => buildClients(all.value))
+/**
+ * One entry per client (visits, spend, history…) — shared by Home, Clients and the forms.
+ * Staff only have their own appointments, so visits, "due", "gone quiet" and milestones use the
+ * salon-wide counts the Worker sends (a client who saw someone else last week isn't "due").
+ */
+export const clients = computed(() => {
+  const list = buildClients(all.value)
+  const stats = state.clientStats
+  if (!stats) return list
+  const today = todayStr()
+  return list.map((c) => {
+    const s = stats[c.key]
+    if (!s) return c
+    const [visits, last] = s
+    const since = daysBetween(last, today)
+    const status = followUp(visits, c.usualGap, since)
+    return { ...c, salonVisits: visits, salonLast: last, due: status === 'due', quiet: status === 'quiet', milestone: nextMilestone(visits) }
+  })
+})
+
+/** Who WhatsApp messages are signed by: the team member herself, or the owner. */
+export const senderName = computed(() => {
+  if (state.role === 'staff') return (state.me?.name || '').split(' ')[0]
+  return (state.employees.find((e) => e.pay?.owner)?.name || '').split(' ')[0]
+})
+
+/** A client's cell number, if saved. */
+export const phoneOf = (c) => state.clientPhones[c?.key] || ''
+export async function saveClientPhone(client, phone) {
+  state.clientPhones = await api('saveClientPhone', client, phone)
+}
 
 /** Every service (her list + names used on past appointments) with usage stats. */
 export const serviceCatalog = computed(() => buildServices(all.value, state.services))
@@ -226,9 +257,11 @@ export function openHash(hash) {
   if (state.role === 'staff') {
     if (h === 'leave') setView('my-leave')
     if (h === 'payslips') setView('my-payslips')
+    if (h === 'clients') setView('my-clients')
   } else {
     if (h === 'leave' || h === 'payslips') setView('payroll', { payrollTab: h })
     if (h === 'team') setView('team')
+    if (h === 'clients') setView('clients')
   }
   if (location.hash) history.replaceState(null, '', location.pathname + location.search)
 }
@@ -338,6 +371,8 @@ function applyData(data) {
   state.leave = data.leave || []
   state.payslips = data.payslips || []
   state.company = data.company || {}
+  state.clientPhones = data.clientPhones || {}
+  state.clientStats = data.clientStats || null
 }
 
 async function loadAll() {

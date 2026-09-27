@@ -892,3 +892,36 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .appearance-row { flex-wrap: wrap; }
 .appearance-row .segmented button { padding: 7px 11px; }
 @media (max-width: 380px) { .appearance-row .segmented { width: 100%; } .appearance-row .segmented button { flex: 1; } }
+/* Rows with a main tap area and a side button (e.g. WhatsApp) */
+.list-row.with-action { padding: 0; gap: 6px; }
+.list-row .row-main {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 12px 2px;
+  border: 0; background: none; text-align: left; color: inherit; font: inherit; cursor: pointer;
+}
+.wa-btn {
+  width: 38px; height: 38px; flex: none; border-radius: 50%; border: 1px solid var(--line); background: var(--card);
+  display: grid; place-items: center; color: #1f9d55;
+}
+.wa-btn:hover, .wa-btn:focus-visible { background: #e7f7ee; border-color: #bfe8cf; }
+/* Client contact: cell number and WhatsApp messages */
+.contact { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin: 0 0 14px; }
+.contact-phone { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14.5px; }
+.contact-phone a { color: var(--ink); font-weight: 500; text-decoration: none; }
+.contact-phone .link-btn { margin-left: auto; }
+.contact-edit { display: flex; gap: 6px; }
+.contact-edit input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); font-size: 16px; color: var(--ink); }
+.wa-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.btn.wa { background: var(--card); color: #177a43; border: 1px solid #bfe8cf; }
+.muted { color: var(--muted); }
+.milestone-note { margin: 0 0 8px; font-size: 13.5px; color: var(--rose-ink); }
+.badge.quiet { background: var(--line); color: var(--ink-2); }
+.badge.milestone { background: var(--rose-soft); color: var(--rose-ink); }
+.client-visits > .contact { display: block; margin-top: 4px; padding: 10px 12px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.client-visits > .contact > div { display: flex; }
+.client-visits > .contact > .wa-row { flex-wrap: wrap; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .wa-btn, :root:not([data-theme="light"]) .btn.wa { color: #5fd38f; border-color: #28503a; }
+  :root:not([data-theme="light"]) .wa-btn:hover { background: #173022; }
+}
+:root[data-theme="dark"] .wa-btn, :root[data-theme="dark"] .btn.wa { color: #5fd38f; border-color: #28503a; }
+:root[data-theme="dark"] .wa-btn:hover { background: #173022; }

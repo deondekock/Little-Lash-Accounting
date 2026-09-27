@@ -10,10 +10,12 @@ export const TABLES = {
   leave: ['id', 'employee_id', 'employee_name', 'type', 'from_date', 'to_date', 'hours', 'notes', 'created_at', 'updated_at', 'status'],
   payslips: ['id', 'employee_id', 'employee_name', 'month', 'pay_date', 'gross', 'paye', 'uif', 'deductions', 'net', 'details',
     'created_at', 'updated_at'],
+  // Clients' cell numbers; id = the client's name key (clientKey in stats.js).
+  client_info: ['id', 'name', 'phone', 'created_at', 'updated_at', 'updated_by'],
 }
 
 /** History entries keep the records as they were before each change, by kind. */
-export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips' }
+export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', cinfo: 'client_info' }
 
 /** Payslip details kept per employee: [key, label, kind]. */
 export const PAY_FIELDS = [
@@ -44,3 +46,6 @@ export const METHODS = ['Cash', 'Card', 'EFT']
 
 /** What staff may change about themselves. */
 export const STAFF_EDITABLE = ['phone', 'address']
+
+/** Visit numbers worth celebrating. Staff are told on the visit before, so they can plan a treat. */
+export const MILESTONES = [10, 25, 50, 75, 100, 150, 200, 250, 300, 400, 500]

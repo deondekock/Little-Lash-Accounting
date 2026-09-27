@@ -1,6 +1,7 @@
 /** Aggregations behind the dashboard, clients and insights screens. */
 import { monthRange, shiftMonth, todayStr } from './format.js'
 import { splitServices, serviceKey } from './services.js'
+import { MILESTONES } from './schema.js'
 
 const DAY = 864e5
 const toTime = (date) => Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10))
@@ -76,6 +77,22 @@ export const clientKey = (name) => name.trim().toLowerCase().replace(/\s+/g, ' '
 /** Looser match for search and duplicate hints: no accents, spaces or punctuation ("Anne-Marie" = "annemarie"). */
 export const looseKey = (name) => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().replace(/[^a-z0-9]/g, '')
 
+/**
+ * Where a regular (3+ visits, usually back within ~2 months) stands, from her usual gap and days since
+ * her last visit: 'due' — a little past her usual time; 'quiet' — gone well past it (twice her usual gap,
+ * and at least 4 weeks over) but within the last year; otherwise null.
+ */
+export function followUp(visits, usualGap, since) {
+  if (visits < 3 || !usualGap || usualGap > 60 || since == null) return null
+  const quietAfter = Math.max(usualGap * 2, usualGap + 28)
+  if (since > quietAfter) return since <= 365 ? 'quiet' : null
+  return since > usualGap + 3 ? 'due' : null
+}
+
+/** The milestone her next visit will be (e.g. 25), or null. */
+export const nextMilestone = (visits) => (MILESTONES.includes(visits + 1) ? visits + 1 : null)
+export const ordinal = (n) => n + (n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th')
+
 function mostCommon(counter) {
   let best = ''
   let n = -1
@@ -112,6 +129,7 @@ export function buildClients(all) {
     const usualGap = recentGaps.length ? recentGaps[Math.floor(recentGaps.length / 2)] : null
     const last = dates[dates.length - 1]
     const since = daysBetween(last, today)
+    const status = followUp(dates.length, usualGap, since)
     out.push({
       key: c.key,
       name: mostCommon(c.spellings),
@@ -125,8 +143,9 @@ export function buildClients(all) {
       staffId: mostCommon(c.staff),
       history: c.visits,
       unpaid: c.visits.filter((v) => v.status !== 'Paid').reduce((s, v) => s + v.amount, 0),
-      // A regular (3+ visits, comes back within ~6 weeks) who is now past her usual time.
-      due: dates.length >= 3 && usualGap && usualGap <= 42 && since > usualGap + 3 && since <= 120,
+      due: status === 'due', // a regular a little past her usual time
+      quiet: status === 'quiet', // a regular who has gone quiet (win-back)
+      milestone: nextMilestone(dates.length), // her next visit is this one (10th, 25th…)
     })
   }
   return out

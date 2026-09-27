@@ -12,6 +12,7 @@ import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES } from './lib/schema.js'
+import { clientKey } from './lib/stats.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const MAX_HISTORY_DATA = 1_900_000 // a database row holds up to 2 MB
@@ -24,6 +25,8 @@ const db = {
   appts: [],
   leave: [],
   payslips: [],
+  clientInfo: [], // clients' cell numbers
+  clientStats: null, // staff: her clients' visits at the salon as a whole { key: [visits, last] }
   company: {},
   settings: {},
 }
@@ -178,6 +181,8 @@ const toPayslip = (r) => ({
   net: Number(r.net) || 0, details: parse(r.details, null), updatedAt: clean(r.updated_at), rec: r,
 })
 
+const toClientInfo = (r) => ({ id: r.id, name: clean(r.name), phone: clean(r.phone), rec: r })
+
 const strip = ({ rec, ...x }) => x
 const nameOf = (id) => db.employees.find((e) => e.id === id)?.name
 const publicAppt = (a) => ({ ...strip(a), employeeName: nameOf(a.employeeId) || a.employeeName })
@@ -186,8 +191,10 @@ const publicServices = () => db.services.map(strip).sort((a, b) => a.name.locale
 const publicLeave = () => db.leave.map(strip).sort((a, b) => (a.from < b.from ? 1 : -1))
 const publicPayslips = () => db.payslips.map(strip)
 
-const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips' }
-const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip }
+const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', client_info: 'clientInfo' }
+const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, client_info: toClientInfo }
+/** { clientKey: cell number } */
+const clientPhones = () => Object.fromEntries(db.clientInfo.filter((c) => c.phone).map((c) => [c.id, c.phone]))
 
 /** Updates the in-memory lists after a successful write. */
 function applyLocal(put = {}, del = {}) {
@@ -288,6 +295,8 @@ async function load() {
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
+  db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
+  db.clientStats = null
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
@@ -308,6 +317,7 @@ export function getInitialData() {
   return {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
+    clientPhones: clientPhones(), clientStats: db.clientStats,
   }
 }
 
@@ -354,7 +364,7 @@ export async function saveAppointment(input) {
 }
 
 /** Changes several appointments at once; `change(a)` edits a copy. Returns the new public objects. */
-async function changeAppts(items, change, action, summary) {
+async function changeAppts(items, change, action, summary, extra = null) {
   if (!items.length) return []
   const now = new Date().toISOString()
   const before = Object.fromEntries(items.map((a) => [a.id, a.rec]))
@@ -363,7 +373,10 @@ async function changeAppts(items, change, action, summary) {
     change(copy)
     return apptRec(copy, a.rec.created_at, now)
   })
-  await commit(action, summary, { put: { appointments: recs }, before: { appts: before }, expect: items.length <= 50 ? expectOf('appointments', items) : undefined })
+  await commit(action, summary, {
+    put: { appointments: recs, ...extra?.put }, del: extra?.del || {}, before: { appts: before, ...extra?.before },
+    expect: items.length <= 50 ? expectOf('appointments', items) : undefined,
+  })
   const ids = new Set(items.map((a) => a.id))
   return db.appts.filter((a) => ids.has(a.id)).map(publicAppt)
 }
@@ -389,7 +402,40 @@ export async function renameClients(ids, name, summary) {
   name = clean(name)
   if (!name) throw new Error('Please enter a name.')
   const wanted = new Set(ids)
-  return changeAppts(db.appts.filter((a) => wanted.has(a.id)), (a) => (a.client = name), 'clients', summary || `Renamed client to ${name}`)
+  const items = db.appts.filter((a) => wanted.has(a.id))
+  // Her cell number goes with her to the new name (unless the new name already has one).
+  const to = clientKey(name)
+  const from = [...new Set(items.map((a) => clientKey(a.client)))].filter((k) => k && k !== to)
+  const moving = db.clientInfo.filter((c) => from.includes(c.id))
+  const target = db.clientInfo.find((c) => c.id === to)
+  const extra = { put: {}, del: {}, before: {} }
+  if (moving.length) {
+    const now = new Date().toISOString()
+    const phone = target?.phone || moving.find((c) => c.phone)?.phone || ''
+    extra.put.client_info = [{ id: to, name, phone, created_at: target?.rec.created_at || now, updated_at: now, updated_by: user || null }]
+    extra.del.client_info = moving.map((c) => c.id)
+    extra.before.cinfo = Object.fromEntries([[to, target?.rec || null], ...moving.map((c) => [c.id, c.rec])])
+  }
+  return changeAppts(items, (a) => (a.client = name), 'clients', summary || `Renamed client to ${name}`, extra)
+}
+
+/** A client's cell number (owner: any client; staff: her own clients, checked by the Worker). */
+export async function saveClientPhone(client, phone) {
+  const name = clean(client)
+  const key = clientKey(name)
+  if (!key) throw new Error('No client name.')
+  const cell = String(phone || '').replace(/[^\d+ ]/g, '').trim()
+  if (cell && cell.replace(/\D/g, '').length < 9) throw new Error('Please check the cell number.')
+  const existing = db.clientInfo.find((c) => c.id === key)
+  const now = new Date().toISOString()
+  if (db.clientStats) {
+    const rec = await request('/api/staff/client-phone', { method: 'POST', body: { client: name, phone: cell } })
+    applyLocal({ client_info: [rec] })
+  } else {
+    const rec = { id: key, name, phone: cell, created_at: existing?.rec.created_at || now, updated_at: now, updated_by: user || null }
+    await commit('clients', cell ? `Saved ${name}'s cell number` : `Removed ${name}'s cell number`, { put: { client_info: [rec] }, before: { cinfo: { [key]: existing?.rec || null } } })
+  }
+  return clientPhones()
 }
 
 export async function deleteAppointment(id) {
@@ -614,6 +660,8 @@ export async function staffLoad() {
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
+  db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
+  db.clientStats = Object.fromEntries((data.client_stats || []).map(([k, visits, last]) => [k, [visits, last]]))
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
