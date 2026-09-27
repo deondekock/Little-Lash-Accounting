@@ -261,17 +261,29 @@ export function openHash(hash) {
   if (state.phase === 'ready') markFirstPage()
   const h = String(hash || '').replace(/^#/, '')
   if (!h || state.phase !== 'ready') return
+  // #add, #owed and #due come from the app icon's long-press shortcuts (manifest).
   if (state.role === 'staff') {
     if (h === 'leave') setView('my-leave')
     if (h === 'payslips') setView('my-payslips')
     if (h === 'clients') setView('my-clients')
+    if (h === 'due') setView('my-clients', { clientFilter: 'due' })
+    if (h === 'owed') setView('my-appointments')
+    if (h === 'add') {
+      setView('my-appointments')
+      openMyAppointment(null, { date: todayStr() })
+    }
   } else {
     if (h === 'leave' || h === 'payslips') setView('payroll', { payrollTab: h })
     if (h === 'team') setView('team')
     if (h === 'clients') setView('clients')
+    if (h === 'due') setView('clients', { clientFilter: 'due' })
+    if (h === 'owed') setView('clients', { clientFilter: 'owing' })
+    if (h === 'add') openAppointment()
   }
   if (location.hash) history.replaceState(history.state, '', location.pathname + location.search)
 }
+// A shortcut used while the app is already open only changes the #.
+if (typeof window !== 'undefined') window.addEventListener('hashchange', () => openHash(location.hash))
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', (e) => {
     if (e.data?.type === 'open') refresh().then(() => openHash(e.data.hash))

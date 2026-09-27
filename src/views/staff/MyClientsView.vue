@@ -1,14 +1,14 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../../components/Icon.vue'
-import { clients, openMyAppointment } from '../../store.js'
+import { clients, openMyAppointment, state } from '../../store.js'
 import { shortDate } from '../../lib/format.js'
 import { looseKey, ordinal } from '../../lib/stats.js'
 import ClientContact from '../../components/ClientContact.vue'
 
 /** Staff: the clients she has seen, how often, and who is due back (no amounts). */
 const query = ref('')
-const filter = ref('all') // 'all' | 'due' | 'quiet' | 'regulars' | 'milestones'
+const filter = ref(state.clientFilter === 'due' ? 'due' : 'all') // 'all' | 'due' | 'quiet' | 'regulars' | 'milestones'
 const open = ref('')
 const shown = ref(60)
 const counts = computed(() => ({
