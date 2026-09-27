@@ -5,6 +5,7 @@ import { monthLabel, shortDate, todayStr } from '../../lib/format.js'
 import { minutesLabel } from '../../lib/payroll.js'
 import { monthProgress, loyalty, serviceMix, milestones } from '../../lib/staffStats.js'
 import { clients } from '../../store.js'
+import RebookCard from '../RebookCard.vue'
 
 /** Staff: her own month, client loyalty, services and milestones. Counts only — no rands, no comparisons. */
 const today = todayStr()
@@ -52,10 +53,11 @@ const plural = (n, w) => `${n.toLocaleString('en-ZA')} ${w}${n === 1 ? '' : 's'}
       </div>
       <div class="stat-lines">
         <div v-if="l.lastMonthNew">💕 <b>{{ l.cameBack }}</b> of last month's {{ l.lastMonthNew }} new client{{ l.lastMonthNew === 1 ? '' : 's' }} came back</div>
-        <div v-if="l.rebook.pct !== null">🔁 <b>{{ l.rebook.pct }}%</b> of last month's clients have been back ({{ l.rebook.back }} of {{ l.rebook.seen }})</div>
         <button v-if="due" class="link-btn" style="padding: 0" @click="setView('my-clients')">⏰ {{ plural(due, 'client') }} due for a fill →</button>
       </div>
     </section>
+
+    <RebookCard v-if="me" :employee-id="me.id" you />
 
     <section v-if="s.top.length" class="card">
       <div class="card-title"><h3>Your services</h3><span class="hint">{{ monthName }}</span></div>

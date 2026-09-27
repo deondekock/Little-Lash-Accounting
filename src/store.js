@@ -3,6 +3,7 @@ import { newVersionAvailable, updateApp } from './lib/update.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween } from './lib/stats.js'
+import { salonDays } from './lib/rebook.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -50,6 +51,7 @@ export const state = reactive({
   printingReport: null, // a report being printed / saved as PDF
   clientPhones: {}, // { clientKey: cell number }
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
+  clientDays: null, // staff: her clients' visit days at the whole salon { key: [dates…] }
 })
 
 /**
@@ -95,6 +97,9 @@ export const senderName = computed(() => {
   if (state.role === 'staff') return (state.me?.name || '').split(' ')[0]
   return (state.employees.find((e) => e.pay?.owner)?.name || '').split(' ')[0]
 })
+
+/** Every client's visit days at the salon (for rebooking rates). Staff get theirs from the Worker. */
+export const visitDays = computed(() => (state.clientDays ? new Map(Object.entries(state.clientDays)) : salonDays(all.value)))
 
 /** A client's cell number, if saved. */
 export const phoneOf = (c) => state.clientPhones[c?.key] || ''
@@ -375,6 +380,7 @@ function applyData(data) {
   state.company = data.company || {}
   state.clientPhones = data.clientPhones || {}
   state.clientStats = data.clientStats || null
+  state.clientDays = data.clientDays || null
 }
 
 async function loadAll() {

@@ -27,6 +27,7 @@ const db = {
   payslips: [],
   clientInfo: [], // clients' cell numbers
   clientStats: null, // staff: her clients' visits at the salon as a whole { key: [visits, last] }
+  clientDays: null, // staff: her clients' visit days at the salon { key: [dates…] }
   company: {},
   settings: {},
 }
@@ -301,6 +302,7 @@ async function load() {
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
   db.clientStats = null
+  db.clientDays = null
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
@@ -321,7 +323,7 @@ export function getInitialData() {
   return {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
-    clientPhones: clientPhones(), clientStats: db.clientStats,
+    clientPhones: clientPhones(), clientStats: db.clientStats, clientDays: db.clientDays,
   }
 }
 
@@ -665,7 +667,9 @@ export async function staffLoad() {
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
-  db.clientStats = Object.fromEntries((data.client_stats || []).map(([k, visits, last]) => [k, [visits, last]]))
+  const days = data.client_days || []
+  db.clientDays = Object.fromEntries(days)
+  db.clientStats = Object.fromEntries(days.map(([k, dates]) => [k, [dates.length, dates[dates.length - 1]]]))
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1

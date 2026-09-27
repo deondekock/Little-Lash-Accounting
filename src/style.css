@@ -1010,3 +1010,15 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .seg.status button.active[data-v="Written off"] { background: var(--ink-2); border-color: var(--ink-2); color: var(--card); }
 .segmented button { white-space: nowrap; }
 .section-label { flex-wrap: wrap; }
+/* Rebooking rate */
+.rb-hero { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.rb-hero b { font-family: var(--font-serif); font-weight: 400; font-size: 40px; line-height: 1; }
+.rb-hero span { color: var(--ink-2); font-size: 13.5px; }
+.rb-trend { display: flex; align-items: center; gap: 12px; margin-top: 12px; flex-wrap: wrap; }
+.rb-trend small { color: var(--muted); font-size: 12px; }
+.rb-track { display: flex; gap: 2px; background: var(--grid); border-radius: 0 4px 4px 0; }
+.rb-track .fill { border-radius: 0; min-width: 0; }
+.rb-track .fill:last-child { border-radius: 0 4px 4px 0; }
+.rb-other { background: color-mix(in srgb, var(--c) 35%, transparent); }
+.rebook-line { border: 0; background: var(--rose-soft); border-radius: 10px; padding: 8px 10px; text-align: left; font: inherit; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+.rebook-line b { color: var(--ink); }

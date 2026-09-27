@@ -6,6 +6,8 @@ import Columns from '../components/charts/Columns.vue'
 import StackedColumns from '../components/charts/StackedColumns.vue'
 import TotalsTable from '../components/TotalsTable.vue'
 import Icon from '../components/Icon.vue'
+import RebookTeam from '../components/RebookTeam.vue'
+import RebookCard from '../components/RebookCard.vue'
 import { all, state, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview } from '../store.js'
 import { byEmployee, fmt, fmt0, monthName, totals, METHODS } from '../lib/format.js'
 import { compactMoney, monthlyTotals } from '../lib/stats.js'
@@ -123,6 +125,11 @@ function pickEmployee(id) {
           </div>
         </div>
       </section>
+    </div>
+
+    <div style="margin-top: 14px">
+      <RebookTeam v-if="state.employee === 'all'" />
+      <RebookCard v-else :employee-id="state.employee" />
     </div>
 
     <div class="section-label">Month by month <span style="text-transform: none; letter-spacing: 0; font-weight: 500">tap a month to open it</span></div>

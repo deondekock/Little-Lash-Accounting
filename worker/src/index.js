@@ -333,7 +333,7 @@ async function staffLoad(db, me) {
   const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
   const { phones, stats } = await staffClients(db, me)
   return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts},` +
-    `"client_info":${JSON.stringify(phones)},"client_stats":${JSON.stringify(stats)}}`
+    `"client_info":${JSON.stringify(phones)},"client_days":${JSON.stringify(stats)}}`
 }
 
 /** Name keys of the clients she has seen. */
@@ -343,8 +343,8 @@ async function herClientKeys(db, me) {
 }
 
 /**
- * For her clients: their cell numbers, and their visits at the salon as a whole (with anyone) —
- * [key, visits, last visit] — so milestones and "gone quiet" are right. No amounts.
+ * For her clients: their cell numbers, and the days they visited the salon as a whole (with anyone) —
+ * [key, [dates…]] — so milestones, "gone quiet" and her rebooking rate are right. No amounts.
  */
 async function staffClients(db, me) {
   const keys = await herClientKeys(db, me)
@@ -357,7 +357,7 @@ async function staffClients(db, me) {
     if (!days.has(k)) days.set(k, new Set())
     days.get(k).add(r.date)
   }
-  const stats = [...days].map(([k, set]) => [k, set.size, [...set].sort().pop()])
+  const stats = [...days].map(([k, set]) => [k, [...set].sort()])
   return { phones: info.map((r) => TABLES.client_info.map((c) => r[c] ?? null)), stats }
 }
 

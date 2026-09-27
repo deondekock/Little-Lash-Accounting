@@ -2,10 +2,14 @@
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
-import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow, viewAs } from '../store.js'
+import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow, viewAs, visitDays } from '../store.js'
+import { recentRebooking, REBOOK_DAYS } from '../lib/rebook.js'
 import { BACKEND } from '../config.js'
 import { leaveBalance, payDefaults } from '../lib/payroll.js'
 import { todayStr } from '../lib/format.js'
+
+// Rebooking rate per team member (clients back within 6 weeks).
+const rebook = computed(() => Object.fromEntries(state.employees.map((e) => [e.id, recentRebooking(all.value, visitDays.value, { employeeId: e.id, today: todayStr() })])))
 import { fmt, fmt0, initials, monthLabel, shiftMonth, totals } from '../lib/format.js'
 
 const showInactive = ref(false)
@@ -71,6 +75,9 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
           <div><div class="l">Appointments</div><div class="v">{{ m.t.count }}</div></div>
           <div><div class="l">Unpaid</div><div class="v" :class="{ orange: m.t.unpaid }">{{ fmt0(m.t.unpaid) }}</div></div>
         </div>
+        <button v-if="rebook[m.id]?.visits >= 5" class="rebook-line" @click="setView('insights', { employee: m.id })">
+          🔁 <b>{{ rebook[m.id].rate }}%</b> of her clients came back within {{ REBOOK_DAYS / 7 }} weeks · <b>{{ rebook[m.id].herRate }}%</b> to her
+        </button>
         <div class="flow-chips">
           <button v-for="c in FLOW" :key="c.id" class="flow-chip" @click="openFlow(m.id, c.id)">
             <b>{{ (monthFlow[m.id]?.[c.id] || []).length }}</b><span>{{ c.label }}</span>
