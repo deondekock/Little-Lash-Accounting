@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor } from '../store.js'
+import { state, serviceCatalog, openService, openServiceMerge, setView, employeeColor, openPriceCalc } from '../store.js'
 import { fmt0, shortDate } from '../lib/format.js'
 import { looseKey, findServiceDuplicates, priceRange, servicePrice } from '../lib/stats.js'
 
@@ -73,6 +73,11 @@ function meta(s) {
       </div>
       <button class="btn small soft" @click="openService()"><Icon name="plus" :size="16" /> Add</button>
     </div>
+    <button class="card list-row" style="padding: 12px 16px; width: 100%" @click="openPriceCalc()">
+      <div class="history-icon">🧮</div>
+      <div class="grow"><div class="title">Price change calculator</div><div class="meta">What would R20 more on a fill bring in?</div></div>
+      <Icon name="right" />
+    </button>
 
     <label class="search" style="margin-top: 14px">
       <Icon name="search" />

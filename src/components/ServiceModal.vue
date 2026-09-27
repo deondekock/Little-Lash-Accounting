@@ -3,7 +3,8 @@
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { state, closeModal, saveService, openServiceMerge, toastUndo, fail, employeeColor } from '../store.js'
+import { state, closeModal, saveService, openServiceMerge, toastUndo, fail, employeeColor, openPriceCalc } from '../store.js'
+import { serviceKey } from '../lib/services.js'
 import { fmt0 } from '../lib/format.js'
 
 const props = defineProps({ service: Object })
@@ -97,6 +98,7 @@ async function save() {
         <label>In the appointment form</label>
         <SegmentedControl v-model="form.status" :options="['Shown', 'Hidden']" />
       </div>
+      <button v-if="s?.count" type="button" class="link-btn" style="margin-top: 4px" @click="openPriceCalc(serviceKey(s.name))">🧮 What would a price change bring in?</button>
       <div class="modal-actions">
         <button v-if="s" type="button" class="btn ghost" @click="openServiceMerge(s)">Merge…</button>
         <button type="button" class="btn ghost" @click="closeModal">Cancel</button>

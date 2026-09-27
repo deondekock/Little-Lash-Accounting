@@ -21,6 +21,7 @@ import PayslipModal from './components/PayslipModal.vue'
 import PayslipDocument from './components/PayslipDocument.vue'
 import ReportDocument from './components/ReportDocument.vue'
 import MonthEndModal from './components/MonthEndModal.vue'
+import PriceCalcModal from './components/PriceCalcModal.vue'
 import TaxYearModal from './components/TaxYearModal.vue'
 import LeaveModal from './components/LeaveModal.vue'
 import CompanyModal from './components/CompanyModal.vue'
@@ -155,6 +156,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   <MoveModal v-if="state.modal?.type === 'move'" />
   <ExportModal v-if="state.modal?.type === 'export'" />
   <MonthEndModal v-if="state.modal?.type === 'monthEnd'" />
+  <PriceCalcModal v-if="state.modal?.type === 'priceCalc'" :focus="state.modal.data.focus" />
   <TaxYearModal v-if="state.modal?.type === 'taxYear'" />
   <ServiceMergeModal v-if="state.modal?.type === 'serviceMerge'" :key="state.modal.data.service.key" :service="state.modal.data.service" :with="state.modal.data.with" />
 

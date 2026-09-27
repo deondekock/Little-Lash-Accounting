@@ -946,3 +946,17 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
   .report { font-size: 11px; }
   .report th, .report td { white-space: normal; }
 }
+/* Price change calculator */
+.calc-result { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 12px; }
+.calc-result > div { background: var(--rose-soft); border-radius: var(--radius-sm); padding: 10px 12px; display: grid; }
+.calc-result > div:nth-child(3) { grid-column: 1 / -1; background: var(--card-2); border: 1px solid var(--line); }
+.calc-result span { font-size: 12px; color: var(--ink-2); }
+.calc-result b { font-family: var(--font-serif); font-weight: 400; font-size: 22px; }
+.calc-result > div:nth-child(3) b { font-size: 16px; font-family: var(--font-sans); font-weight: 600; }
+.price-calc .list-row.focus { background: var(--rose-soft); border-radius: 10px; padding-left: 8px; padding-right: 8px; }
+.pc-input { display: flex; align-items: center; gap: 4px; flex: none; color: var(--muted); font-size: 13px; }
+.pc-input input { width: 78px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--card-2); font-size: 16px; color: var(--ink); text-align: right; }
+.pc-choose { display: flex; align-items: center; gap: 10px; margin: 6px 0 12px; flex-wrap: wrap; }
+.pc-or { color: var(--muted); font-size: 13px; }
+.pc-input.big input { width: 86px; font-size: 18px; padding: 10px 12px; }
+.pc-input small { color: var(--muted); font-size: 12.5px; }

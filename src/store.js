@@ -590,6 +590,7 @@ export async function printReport(report) {
   window.addEventListener('afterprint', done)
   window.print()
 }
+export const openPriceCalc = (focus = '') => (state.modal = { type: 'priceCalc', data: { focus } })
 export const openMonthEnd = () => (state.modal = { type: 'monthEnd', data: null })
 export const openTaxYear = () => (state.modal = { type: 'taxYear', data: null })
 
