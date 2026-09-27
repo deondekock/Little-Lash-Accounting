@@ -245,7 +245,7 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d <
                 <div class="avatar sm" :style="{ background: employeeColor(c.staffId) }">{{ initials(c.name) }}</div>
                 <div class="grow">
                   <div class="title">{{ c.name }}</div>
-                  <div class="meta">{{ c.history.filter((v) => v.status !== 'Paid').length }} unpaid · last visit {{ weeksAgo(c.daysSince) }}</div>
+                  <div class="meta">{{ c.history.filter((v) => v.status === 'Unpaid').length }} unpaid · last visit {{ weeksAgo(c.daysSince) }}</div>
                 </div>
                 <div class="right"><div class="big orange">{{ fmt0(c.unpaid) }}</div></div>
               </button>

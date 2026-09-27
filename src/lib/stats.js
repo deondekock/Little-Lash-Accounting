@@ -142,7 +142,7 @@ export function buildClients(all) {
       service: mostCommon(c.services),
       staffId: mostCommon(c.staff),
       history: c.visits,
-      unpaid: c.visits.filter((v) => v.status !== 'Paid').reduce((s, v) => s + v.amount, 0),
+      unpaid: c.visits.filter((v) => v.status === 'Unpaid').reduce((s, v) => s + v.amount, 0),
       due: status === 'due', // a regular a little past her usual time
       quiet: status === 'quiet', // a regular who has gone quiet (win-back)
       milestone: nextMilestone(dates.length), // her next visit is this one (10th, 25th…)

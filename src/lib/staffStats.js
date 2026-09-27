@@ -40,7 +40,7 @@ export function monthProgress(appts, startDay, today) {
     change: cur.length - prevSame,
     daysWorked: new Set(cur.map((a) => a.date)).size,
     busiest: top ? WEEKDAYS[perDay.indexOf(top)] : '',
-    unpaid: appts.filter((a) => open.includes(a.month) && a.status !== 'Paid').length,
+    unpaid: appts.filter((a) => open.includes(a.month) && a.status === 'Unpaid').length,
     overtimeMinutes: overtime,
   }
 }

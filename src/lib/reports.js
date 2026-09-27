@@ -45,7 +45,7 @@ export function monthEndReport({ month, appts, employees, payslips, company, sta
     byEmp.get(a.employeeId).push(a)
   }
   const team = [...byEmp].map(([id, xs]) => ({ name: nameOf(employees, id, xs[0].employeeName), t: totals(xs) })).sort((a, b) => b.t.total - a.t.total)
-  const unpaid = list.filter((a) => a.status !== 'Paid').sort((a, b) => (a.date < b.date ? -1 : 1))
+  const unpaid = list.filter((a) => a.status === 'Unpaid').sort((a, b) => (a.date < b.date ? -1 : 1))
   const slips = payslips.filter((p) => p.month === month).sort((a, b) => nameOf(employees, a.employeeId, a.employeeName).localeCompare(nameOf(employees, b.employeeId, b.employeeName)))
   const worked = new Set(list.map((a) => a.employeeId))
   const missing = employees.filter((e) => (e.active || worked.has(e.id)) && !slips.some((p) => p.employeeId === e.id))
@@ -62,6 +62,7 @@ export function monthEndReport({ month, appts, employees, payslips, company, sta
         ['Total takings', t.count, t.total],
         ['Paid', t.paidCount, t.paid],
         ['Unpaid (owed)', t.unpaidCount, t.unpaid],
+        ...(t.writtenOffCount ? [['Written off (not counted)', t.writtenOffCount, t.writtenOff]] : []),
         ...METHODS.map((m) => [`Paid with ${m}`, list.filter((a) => a.method === m).length, t[m]]),
       ],
     },

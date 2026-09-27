@@ -53,8 +53,8 @@ function book() {
           <div class="meta">{{ employeeById(v.employeeId)?.name || v.employeeName }}<template v-if="v.service"> · {{ v.service }}</template> · {{ v.method }}</div>
         </div>
         <div class="right">
-          <div class="big">{{ fmt(v.amount) }}</div>
-          <div class="meta" :class="v.status === 'Paid' ? 'green' : 'orange'">{{ v.status }}</div>
+          <div class="big" :class="{ 'written-off': v.status === 'Written off' }">{{ fmt(v.writtenOff ?? v.amount) }}</div>
+          <div class="meta" :class="{ Paid: 'green', Unpaid: 'orange' }[v.status]">{{ v.status }}</div>
         </div>
       </button>
     </div>

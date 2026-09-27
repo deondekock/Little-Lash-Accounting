@@ -113,6 +113,7 @@ async function remove() {
         <div class="field">
           <label>Status</label>
           <SegmentedControl v-model="form.status" :options="['Unpaid', 'Paid']" variant="status" />
+          <div v-if="form.status === 'Written off'" class="field-hint">The owner wrote this one off (not paid, not owed). Tap Paid if the client paid after all.</div>
         </div>
         <div class="field">
           <label>Done in overtime?</label>

@@ -568,8 +568,11 @@ const SUMMARY_CRON = '0 5 * * *' // 07:00 in South Africa
 const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10)
 
 async function takingsBetween(db, from, to) {
-  const { results } = await db.prepare(`SELECT a.employee_id AS id, COALESCE(e.name, a.employee_name) AS name, COUNT(*) AS n, SUM(a.amount) AS total,
-      SUM(CASE WHEN a.status = 'Paid' THEN 0 ELSE 1 END) AS unpaidN, SUM(CASE WHEN a.status = 'Paid' THEN 0 ELSE a.amount END) AS unpaid
+  // Written-off visits count as R0 (as in the app).
+  const { results } = await db.prepare(`SELECT a.employee_id AS id, COALESCE(e.name, a.employee_name) AS name, COUNT(*) AS n,
+      SUM(CASE WHEN a.status = 'Written off' THEN 0 ELSE a.amount END) AS total,
+      SUM(CASE WHEN COALESCE(a.status, '') IN ('Paid', 'Written off') THEN 0 ELSE 1 END) AS unpaidN,
+      SUM(CASE WHEN COALESCE(a.status, '') IN ('Paid', 'Written off') THEN 0 ELSE a.amount END) AS unpaid
     FROM appointments a LEFT JOIN employees e ON e.id = a.employee_id WHERE a.date BETWEEN ?1 AND ?2 GROUP BY a.employee_id ORDER BY total DESC`).bind(from, to).all()
   const sum = (k) => results.reduce((s, r) => s + (Number(r[k]) || 0), 0)
   return { people: results, n: sum('n'), total: sum('total'), unpaidN: sum('unpaidN'), unpaid: sum('unpaid') }
@@ -589,7 +592,7 @@ export async function buildSummary(db, kind, today = saToday()) {
     const to = addDays(today, -1)
     const week = await takingsBetween(db, from, to)
     const before = await takingsBetween(db, addDays(from, -7), addDays(to, -7))
-    const owed = await db.prepare(`SELECT COUNT(*) AS n, SUM(amount) AS total FROM appointments WHERE status != 'Paid'`).first()
+    const owed = await db.prepare(`SELECT COUNT(*) AS n, SUM(amount) AS total FROM appointments WHERE COALESCE(status, '') NOT IN ('Paid', 'Written off')`).first()
     const change = before.total ? Math.round(((week.total - before.total) / before.total) * 100) : null
     return {
       title: `📊 Last week: ${fmt0(week.total)} from ${week.n} appointment${week.n === 1 ? '' : 's'}`,
@@ -655,7 +658,9 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   const service = String(b.service || '').trim().slice(0, 200)
   if (!client) throw new HttpError(400, 'Please enter the client\'s name.')
   if (!METHODS.includes(b.method)) throw new HttpError(400, 'Please choose Cash, Card or EFT.')
-  const status = b.status === 'Paid' ? 'Paid' : 'Unpaid'
+  const existing0 = b.id ? await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
+  // Only the owner writes visits off; a written-off visit stays that way unless she marks it paid.
+  const status = b.status === 'Paid' ? 'Paid' : existing0?.status === 'Written off' ? 'Written off' : 'Unpaid'
   const notes = String(b.notes || '').trim().slice(0, 300)
   const overtime = String(b.overtime ?? '').toLowerCase() === 'all' ? 'All' : Number(b.overtime) > 0 && Number(b.overtime) <= 600 ? String(Math.round(Number(b.overtime))) : ''
   const length = overtime && Number(b.length) > 0 && Number(b.length) <= 720 ? Math.round(Number(b.length)) : null

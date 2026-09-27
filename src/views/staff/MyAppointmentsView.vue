@@ -32,7 +32,7 @@ const long = computed(() => new Date(day.value + 'T12:00:00').toLocaleDateString
 const list = computed(() => all.value
   .filter((a) => a.date === day.value)
   .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || '') || a.client.localeCompare(b.client)))
-const unpaid = computed(() => list.value.filter((a) => a.status !== 'Paid').length)
+const unpaid = computed(() => list.value.filter((a) => a.status === 'Unpaid').length)
 const locked = computed(() => lockedReason({ month: businessMonth(day.value, state.monthStartDay) }, state.monthStartDay, state.payslips))
 const month = computed(() => monthProgress(all.value, state.monthStartDay, today))
 const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' }) : '')
@@ -68,7 +68,7 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
           <div class="meta">{{ [overtimeLabel(a) && '⏰ ' + overtimeLabel(a), a.service, a.method, a.notes].filter(Boolean).join(' · ') || ' ' }}</div>
         </div>
         <div class="right">
-          <span class="tag" :class="a.status === 'Paid' ? 'green-tag' : 'orange-tag'">{{ a.status }}</span>
+          <span class="tag" :class="{ Paid: 'green-tag', Unpaid: 'orange-tag' }[a.status]">{{ a.status }}</span>
           <div v-if="added(a)" class="meta" style="margin-top: 4px">added {{ added(a) }}</div>
         </div>
       </button>

@@ -24,6 +24,7 @@ function setMethod(e) {
       <span class="count">{{ state.selected.size }} selected</span>
       <button class="btn small paid" @click="apply({ status: 'Paid' }, (n) => n + ' marked paid')"><Icon name="check" :size="15" :stroke="2.6" />Paid</button>
       <button class="btn small" @click="apply({ status: 'Unpaid' }, (n) => n + ' marked unpaid')">Unpaid</button>
+      <button class="btn small" title="Not paid and not owed any more" @click="apply({ status: 'Written off' }, (n) => n + ' written off')">Write off</button>
       <select aria-label="Set payment method" @change="setMethod">
         <option value="">Method…</option>
         <option v-for="m in METHODS" :key="m">{{ m }}</option>

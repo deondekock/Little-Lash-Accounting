@@ -48,7 +48,7 @@ function fit(ctx, text, width) {
  * @returns Promise<Blob> (PNG)
  */
 export async function invoiceImage(client, company = {}, nameOf = () => '') {
-  const visits = client.history.filter((v) => v.status !== 'Paid').sort((a, b) => (a.date < b.date ? -1 : 1))
+  const visits = client.history.filter((v) => v.status === 'Unpaid').sort((a, b) => (a.date < b.date ? -1 : 1))
   const total = visits.reduce((s, v) => s + v.amount, 0)
   await Promise.all([document.fonts?.load(`40px ${SERIF}`), document.fonts?.load(`400 30px ${SANS}`), document.fonts?.load(`600 30px ${SANS}`)].map((p) => p?.catch?.(() => {})))
   const logo = await loadImage(import.meta.env.BASE_URL + 'brand/logo.png')

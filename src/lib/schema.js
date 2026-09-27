@@ -46,6 +46,13 @@ export const LEAVE_STATUS = { requested: 'Waiting', approved: 'Approved', declin
  * payslip for that month is saved; they can delete ones they added themselves within this many hours. */
 export const STAFF_DELETE_HOURS = 24
 export const METHODS = ['Cash', 'Card', 'EFT']
+/**
+ * Payment status. "Written off": not paid and not owed any more (e.g. a redo, a gift, a client who won't
+ * pay). It stays on record, but counts as R0 everywhere (takings, owed, commission); the amount is kept.
+ */
+export const WRITTEN_OFF = 'Written off'
+export const STATUSES = ['Unpaid', 'Paid', WRITTEN_OFF]
+export const statusOf = (s) => (s === 'Paid' || s === WRITTEN_OFF ? s : 'Unpaid')
 
 /** What staff may change about themselves. */
 export const STAFF_EDITABLE = ['phone', 'address']

@@ -162,7 +162,7 @@ export function commission(appts, pay, { onlyPaid = false } = {}) {
   let overtime = 0
   let unpaid = 0
   let otCount = 0
-  for (const a of appts) if (a.status !== 'Paid') unpaid += a.amount
+  for (const a of appts) if (a.status === 'Unpaid') unpaid += a.amount
   for (const a of list) {
     const share = overtimeShare(a)
     overtime += a.amount * share

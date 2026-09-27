@@ -1004,3 +1004,9 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .invoice-preview { border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; background: #fff; min-height: 160px; display: grid; place-items: center; }
 .invoice-preview img { width: 100%; height: auto; display: block; }
 .btn.wa-send { background: #1f9d55; color: #fff; }
+/* Written off: not paid, not owed */
+.pill.WrittenOff { background: var(--line); color: var(--ink-2); }
+.written-off { text-decoration: line-through; color: var(--muted) !important; }
+.seg.status button.active[data-v="Written off"] { background: var(--ink-2); border-color: var(--ink-2); color: var(--card); }
+.segmented button { white-space: nowrap; }
+.section-label { flex-wrap: wrap; }

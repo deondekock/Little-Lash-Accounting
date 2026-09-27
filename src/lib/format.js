@@ -62,7 +62,7 @@ export function initials(name) {
 }
 
 export function emptyTotals() {
-  return { count: 0, total: 0, paid: 0, unpaid: 0, paidCount: 0, unpaidCount: 0, Cash: 0, Card: 0, EFT: 0 }
+  return { count: 0, total: 0, paid: 0, unpaid: 0, paidCount: 0, unpaidCount: 0, writtenOff: 0, writtenOffCount: 0, Cash: 0, Card: 0, EFT: 0 }
 }
 
 export function totals(list) {
@@ -73,6 +73,9 @@ export function totals(list) {
     if (a.status === 'Paid') {
       t.paid += a.amount
       t.paidCount++
+    } else if (a.status === 'Written off') {
+      t.writtenOff += a.writtenOff || 0
+      t.writtenOffCount++
     } else {
       t.unpaid += a.amount
       t.unpaidCount++

@@ -39,7 +39,7 @@ export const state = reactive({
   month: currentMonth(),
   year: new Date().getFullYear(),
   employee: 'all', // employee filter: 'all' or an employee id
-  status: 'all', // 'all' | 'Paid' | 'Unpaid'
+  status: 'all', // 'all' | 'Paid' | 'Unpaid' | 'Written off'
   selected: new Set(),
   modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
@@ -449,7 +449,10 @@ export async function updateMany(ids, changes) {
     if (changes.method) next.method = changes.method
     if (changes.status) {
       if (changes.status === 'Paid' && a.status !== 'Paid') next.paidOn = today
-      if (changes.status === 'Unpaid') next.paidOn = ''
+      if (changes.status !== 'Paid') next.paidOn = ''
+      // Written off counts as R0 (the amount is kept aside), and back again.
+      if (changes.status === 'Written off' && a.status !== 'Written off') Object.assign(next, { writtenOff: a.amount, amount: 0 })
+      if (changes.status !== 'Written off' && a.status === 'Written off') { next.amount = a.writtenOff || 0; delete next.writtenOff }
       next.status = changes.status
     }
     return next

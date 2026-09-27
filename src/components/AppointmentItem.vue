@@ -27,7 +27,8 @@ const selected = computed({
 })
 
 async function toggleStatus() {
-  const status = props.appt.status === 'Paid' ? 'Unpaid' : 'Paid'
+  // Unpaid ⇄ Paid; a written-off visit goes back to unpaid.
+  const status = props.appt.status === 'Unpaid' ? 'Paid' : 'Unpaid'
   if (await updateMany([props.appt.id], { status })) toastUndo(`${props.appt.client || 'Appointment'} marked ${status.toLowerCase()}`)
 }
 async function setMethod(e) {
@@ -48,12 +49,13 @@ async function setMethod(e) {
       <div class="meta">{{ meta || ' ' }}</div>
     </div>
     <div>
-      <div class="amount">{{ fmt(appt.amount) }}</div>
+      <div v-if="appt.status === 'Written off'" class="amount written-off" title="Written off — counts as R0">{{ fmt(appt.writtenOff) }}</div>
+      <div v-else class="amount">{{ fmt(appt.amount) }}</div>
       <div class="actions">
         <select class="method" :value="appt.method" aria-label="Payment method" @change="setMethod">
           <option v-for="m in METHODS" :key="m">{{ m }}</option>
         </select>
-        <button class="pill" :class="appt.status" @click="toggleStatus">
+        <button class="pill" :class="appt.status === 'Written off' ? 'WrittenOff' : appt.status" :title="appt.status === 'Written off' ? 'Tap to mark unpaid again' : ''" @click="toggleStatus">
           <Icon v-if="appt.status === 'Paid'" name="check" :size="13" :stroke="2.6" />{{ appt.status }}
         </button>
       </div>

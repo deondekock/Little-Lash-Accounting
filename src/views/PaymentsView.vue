@@ -60,7 +60,7 @@ const emptyText = computed(() => {
     <div class="section-label">
       <span>Appointments</span>
       <div class="segmented" role="tablist">
-        <button v-for="s in ['all', 'Unpaid', 'Paid']" :key="s" :class="{ active: state.status === s }" @click="setStatus(s)">
+        <button v-for="s in ['all', 'Unpaid', 'Paid', ...(employeeAppts.some((a) => a.status === 'Written off') ? ['Written off'] : [])]" :key="s" :class="{ active: state.status === s }" @click="setStatus(s)">
           {{ s === 'all' ? 'All' : s }}
         </button>
       </div>

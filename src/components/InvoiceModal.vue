@@ -64,7 +64,7 @@ async function send() {
   <BaseModal :title="`Statement · ${c?.name || ''}`" @close="closeModal">
     <template v-if="c">
       <p class="muted-note" style="margin-top: -6px !important">
-        {{ c.history.filter((v) => v.status !== 'Paid').length }} unpaid visit{{ c.history.filter((v) => v.status !== 'Paid').length === 1 ? '' : 's' }} · {{ fmt0(c.unpaid) }}.
+        {{ c.history.filter((v) => v.status === 'Unpaid').length }} unpaid visit{{ c.history.filter((v) => v.status === 'Unpaid').length === 1 ? '' : 's' }} · {{ fmt0(c.unpaid) }}.
         <template v-if="!state.company.bankAccount">Add your banking details in Settings → Company details so clients can pay by EFT.</template>
       </p>
       <div class="invoice-preview">

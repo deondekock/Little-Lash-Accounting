@@ -1,4 +1,5 @@
 <script setup>
+import { STATUSES } from '../lib/schema.js'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
@@ -46,7 +47,8 @@ function blank() {
   }
 }
 
-const form = reactive(editing ? { ...props.appt } : { ...blank(), ...(props.prefill || {}) })
+// A written-off visit shows its real amount here (it counts as R0 elsewhere).
+const form = reactive(editing ? { ...props.appt, amount: props.appt.writtenOff ?? props.appt.amount } : { ...blank(), ...(props.prefill || {}) })
 const another = ref(false)
 const saving = ref(false)
 const amountInput = ref(null)
@@ -184,7 +186,8 @@ async function remove() {
       </div>
       <div class="field">
         <label>Status</label>
-        <SegmentedControl v-model="form.status" :options="['Unpaid', 'Paid']" variant="status" />
+        <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
+        <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
       </div>
       <div class="field">
         <label for="f-notes">Notes (optional)</label>

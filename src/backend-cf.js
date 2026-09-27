@@ -11,7 +11,7 @@ import { FAKE_API } from './config.js'
 import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
-import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES } from './lib/schema.js'
+import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, WRITTEN_OFF, statusOf } from './lib/schema.js'
 import { clientKey } from './lib/stats.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
@@ -91,11 +91,15 @@ function overtimeValue(v) {
   return n > 0 ? n : 0
 }
 
+/** A written-off appointment counts as R0 everywhere; its amount is kept as `writtenOff`. */
 function toAppt(r) {
+  const status = statusOf(r.status)
+  const amount = Number(r.amount) || 0
   return {
     id: r.id, date: r.date, month: r.month || r.date.slice(0, 7), employeeId: clean(r.employee_id), employeeName: clean(r.employee_name),
-    client: clean(r.client), service: clean(r.service), amount: Number(r.amount) || 0, method: clean(r.method),
-    status: r.status === 'Paid' ? 'Paid' : 'Unpaid', paidOn: clean(r.paid_on), notes: clean(r.notes),
+    client: clean(r.client), service: clean(r.service), amount: status === WRITTEN_OFF ? 0 : amount, method: clean(r.method),
+    ...(status === WRITTEN_OFF ? { writtenOff: amount } : {}),
+    status, paidOn: clean(r.paid_on), notes: clean(r.notes),
     overtime: overtimeValue(r.overtime), length: Number(r.length) > 0 ? Number(r.length) : 0,
     createdBy: clean(r.created_by), updatedBy: clean(r.updated_by), createdAt: clean(r.created_at), rec: r,
   }
@@ -103,7 +107,7 @@ function toAppt(r) {
 function apptRec(a, created, updated, by = user) {
   return {
     id: a.id, date: a.date, month: a.month, employee_id: a.employeeId, employee_name: a.employeeName, client: a.client,
-    service: a.service, amount: a.amount, method: a.method, status: a.status, paid_on: a.paidOn || '', notes: a.notes || '',
+    service: a.service, amount: a.writtenOff ?? a.amount, method: a.method, status: statusOf(a.status), paid_on: a.status === 'Paid' ? a.paidOn || '' : '', notes: a.notes || '',
     overtime: a.overtime === 'all' ? 'All' : a.overtime ? String(a.overtime) : '', length: a.overtime && a.length ? a.length : null,
     created_at: created, updated_at: updated, created_by: a.rec ? a.rec.created_by ?? null : by || null, updated_by: by || a.rec?.updated_by || null,
   }
@@ -337,7 +341,7 @@ function validateAppointment(input) {
   if (!METHODS.includes(input.method)) throw new Error('Please choose Cash, Card or EFT.')
   return {
     date, employeeId: employee.id, employeeName: employee.name, client: clean(input.client), service: clean(input.service), amount,
-    method: input.method, status: input.status === 'Paid' ? 'Paid' : 'Unpaid', notes: clean(input.notes),
+    method: input.method, status: statusOf(input.status), notes: clean(input.notes),
     overtime: overtimeValue(input.overtime), length: Number(input.length) > 0 ? Math.round(Number(input.length)) : 0,
   }
 }
@@ -392,8 +396,8 @@ export async function updateAppointments(ids, changes = {}) {
     if (changes.method) a.method = changes.method
     if (changes.status) {
       if (changes.status === 'Paid' && a.status !== 'Paid') a.paidOn = today
-      if (changes.status === 'Unpaid') a.paidOn = ''
-      a.status = changes.status === 'Paid' ? 'Paid' : 'Unpaid'
+      if (changes.status !== 'Paid') a.paidOn = ''
+      a.status = statusOf(changes.status)
     }
   }, 'update', `${who} ${what}`)
 }
