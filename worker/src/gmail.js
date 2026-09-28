@@ -16,7 +16,8 @@ const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 const enc = new TextEncoder()
 
-export const gmailSetUp = (env) => !!(env.GOOGLE_CLIENT_SECRET && env.GOOGLE_CLIENT_ID)
+const secret = (env) => String(env.GOOGLE_CLIENT_SECRET || '').trim()
+export const gmailSetUp = (env) => !!(secret(env) && env.GOOGLE_CLIENT_ID)
 const redirectUri = (origin) => `${origin}/api/google/callback`
 const account = async (db) => JSON.parse((await getConfig(db, 'gmail')) || 'null')
 
@@ -42,13 +43,16 @@ export async function handleCallback(env, url) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      code: url.searchParams.get('code') || '', client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET,
+      code: url.searchParams.get('code') || '', client_id: env.GOOGLE_CLIENT_ID, client_secret: secret(env),
       redirect_uri: redirectUri(saved.origin), grant_type: 'authorization_code',
     }),
   })
   const t = await res.json().catch(() => ({}))
   if (!res.ok || !t.refresh_token) {
     console.error('gmail connect', res.status, t.error, t.error_description)
+    // Keep Google's reason so the Booksy & Gmail page can show it.
+    const why = !res.ok ? `${t.error || res.status}${t.error_description ? ` — ${t.error_description}` : ''}` : 'Google sent no refresh token'
+    await setConfig(env.DB, 'gmail_error', `Connecting failed: ${why}`)
     return back('failed')
   }
   const claims = JSON.parse(new TextDecoder().decode(unb64url(String(t.id_token || '').split('.')[1] || '')) || '{}')
@@ -71,7 +75,7 @@ async function accessToken(env) {
   const res = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: env.GOOGLE_CLIENT_SECRET, refresh_token: acc.refresh, grant_type: 'refresh_token' }),
+    body: new URLSearchParams({ client_id: env.GOOGLE_CLIENT_ID, client_secret: secret(env), refresh_token: acc.refresh, grant_type: 'refresh_token' }),
   })
   const t = await res.json().catch(() => ({}))
   if (!res.ok) {

@@ -69,6 +69,7 @@ const copy = (x) => navigator.clipboard?.writeText(`${x.subject}\n\n${x.body}`).
       <div v-if="!status.setUp" class="field-hint orange">The Google setup isn't finished yet — Deon needs to add the Google client secret first.</div>
 
       <template v-else-if="!status.connected">
+        <p v-if="status.error" class="field-hint orange">{{ status.error }}</p>
         <button class="btn wide" :disabled="busy === 'connect'" @click="connect">{{ busy === 'connect' ? 'Opening Google…' : 'Connect Gmail' }}</button>
         <p class="muted-note">Pick the salon's Gmail account on the next screen. If Google warns the app isn't verified, tap <b>Advanced → Go to Little Lash Lounge</b> — it's your own app.</p>
       </template>
