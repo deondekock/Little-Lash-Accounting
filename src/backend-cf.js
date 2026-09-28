@@ -804,6 +804,10 @@ export const disconnectGoogle = () => request('/api/google/disconnect', { method
 export const getBooksy = () => request('/api/booksy')
 export const syncBooksyNow = () => request('/api/booksy/sync', { method: 'POST', body: {} })
 export const updateBooksy = (id, changes) => request('/api/booksy/update', { method: 'POST', body: { id, ...changes } })
+/* Reading Booksy's calendar directly (her own account) — owners. */
+export const getBooksyApiStatus = () => request('/api/booksy/status')
+export const connectBooksyApi = (creds) => request('/api/booksy/connect', { method: 'POST', body: creds })
+export const disconnectBooksyApi = () => request('/api/booksy/disconnect', { method: 'POST', body: {} })
 
 /** Owner: the Gmail relay (Apps Script) link and the script to paste. */
 export const getEmailRelay = () => request('/api/notify/email')

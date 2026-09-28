@@ -679,6 +679,9 @@ export async function loadBooksy(sync = false) {
     // Read each email again here, so a smarter reader also fixes emails that came in earlier.
     state.booksy = {
       items: res.items.map((x) => {
+        // Calendar bookings (id 'cal-…') already come parsed from Booksy's API. Email rows are re-read
+        // here, so a smarter reader also fixes emails that came in earlier.
+        if (String(x.id).startsWith('cal-')) return { ...x, data: x.data || {} }
         const data = x.subject || x.body ? parseBooksyEmail(x.subject || '', x.body || '', x.receivedAt) : x.data || {}
         return { ...x, data, kind: data.kind || x.kind }
       }),

@@ -55,6 +55,7 @@ import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
 import { clientKey } from '../../src/lib/stats.js'
 import { gmailSetUp, connectUrl, handleCallback, gmailStatus, disconnectGmail, syncBooksy, gmailCanSend } from './gmail.js'
+import { booksyApiSetUp, connectBooksyApi, disconnectBooksyApi, syncBooksyCalendar, booksyApiStatus } from './booksyApi.js'
 import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
@@ -123,7 +124,10 @@ export default {
   /** 03:00: nightly backup of everything into KV. 07:00: the owners' morning summaries. Every 15 min: Booksy emails. */
   async scheduled(event, env) {
     if (event.cron === SUMMARY_CRON) return sendSummaries(env)
-    if (event.cron === BOOKSY_CRON) return syncBooksy(env).catch((err) => console.error('booksy', err))
+    if (event.cron === BOOKSY_CRON) {
+      const viaApi = await booksyApiSetUp(env.DB)
+      return (viaApi ? syncBooksyCalendar(env) : syncBooksy(env)).catch((err) => console.error('booksy', err))
+    }
     const day = new Date().toISOString().slice(0, 10)
     const body = await loadAll(env.DB, { withHistory: true })
     await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
@@ -677,12 +681,23 @@ async function googleRoute(env, me, route, url, request) {
     await disconnectGmail(env)
     return JSON.stringify({ ok: true })
   }
+  if (route === 'GET /api/booksy/status') return JSON.stringify(await booksyApiStatus(env))
+  if (route === 'POST /api/booksy/connect') {
+    await connectBooksyApi(env, { ...(await request.json()), by: me.email })
+    try { await syncBooksyCalendar(env) } catch { /* status carries any error */ }
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'POST /api/booksy/disconnect') {
+    await disconnectBooksyApi(env)
+    return JSON.stringify({ ok: true })
+  }
   if (route === 'GET /api/booksy' || route === 'POST /api/booksy/sync') {
-    // Opening the list checks for new emails too (if it's been a few minutes).
+    // Prefer the direct calendar sync when it's connected; otherwise read Booksy's emails.
+    const viaApi = await booksyApiSetUp(db)
     const last = Date.parse((await getConfig(db, 'booksy_last_sync')) || 0) || 0
     let error = ''
     if (route === 'POST /api/booksy/sync' || Date.now() - last > 5 * 60000) {
-      try { await syncBooksy(env) } catch (err) { error = String(err.message || err) }
+      try { await (viaApi ? syncBooksyCalendar(env) : syncBooksy(env)) } catch (err) { error = String(err.message || err) }
     }
     return `{"items":${await booksyRows(db)},"error":${JSON.stringify(error)}}`
   }

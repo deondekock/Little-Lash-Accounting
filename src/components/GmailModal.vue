@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import { state, closeModal, loadBooksy, dismissBooksy, recordFromBooksy, booksyEmployee, toast, fail } from '../store.js'
 import { cloudflare as api } from '../api.js'
@@ -17,8 +17,8 @@ async function refreshStatus() {
   }
 }
 onMounted(async () => {
-  await refreshStatus()
-  if (status.value?.connected) loadBooksy()
+  await Promise.all([refreshStatus(), refreshBStatus()])
+  if (status.value?.connected || bStatus.value?.connected) loadBooksy()
 })
 async function connect() {
   busy.value = 'connect'
@@ -51,6 +51,43 @@ async function disconnect() {
     busy.value = ''
   }
 }
+/* Reading Booksy's calendar directly (her own account), which also catches staff-made moves. */
+const bStatus = ref(null)
+const bForm = reactive({ token: '', apiKey: '', businessId: '' })
+const bBusy = ref('')
+const showConnect = ref(false)
+async function refreshBStatus() {
+  try { bStatus.value = await api.getBooksyApiStatus() } catch { bStatus.value = { connected: false } }
+}
+async function connectBooksy() {
+  bBusy.value = 'connect'
+  try {
+    await api.connectBooksyApi({ token: bForm.token.trim(), apiKey: bForm.apiKey.trim(), businessId: bForm.businessId.trim() })
+    bForm.token = bForm.apiKey = bForm.businessId = ''
+    showConnect.value = false
+    await refreshBStatus()
+    await loadBooksy(true)
+    toast('Booksy calendar connected')
+  } catch (err) {
+    fail(err)
+  } finally {
+    bBusy.value = ''
+  }
+}
+async function disconnectBooksy() {
+  if (!confirm('Disconnect the Booksy calendar? Bookings stop coming in directly.')) return
+  bBusy.value = 'off'
+  try {
+    await api.disconnectBooksyApi()
+    await refreshBStatus()
+    toast('Booksy calendar disconnected')
+  } catch (err) {
+    fail(err)
+  } finally {
+    bBusy.value = ''
+  }
+}
+
 const items = computed(() => state.booksy?.items || [])
 const KIND = { new: '📅 New booking', cancelled: '✖️ Cancelled', moved: '🔁 Moved', other: '✉️ Email' }
 const ago = (t) => new Date(t).toLocaleString('en-ZA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -66,6 +103,36 @@ const copy = (x) => navigator.clipboard?.writeText(`${x.subject}\n\n${x.body}`).
         and the app's emails are sent from that account. You sign in on Google's own page — the app never sees the password.
       </p>
 
+      <div class="booksy-api-box">
+        <h4 class="section-label" style="margin-top: 0">Booksy calendar (direct)</h4>
+        <template v-if="bStatus?.connected">
+          <div class="sec-status on">✅ Reading Booksy directly · business {{ bStatus.businessId }}</div>
+          <p v-if="bStatus.error" class="field-hint orange">{{ bStatus.error }} <button class="link-btn" @click="showConnect = true">Reconnect</button></p>
+          <p class="muted-note">Catches bookings staff move or add themselves too. Checks every 15 minutes.</p>
+          <div class="report-actions">
+            <button class="btn soft" :disabled="busy === 'check'" @click="check">{{ busy === 'check' ? 'Checking…' : 'Check now' }}</button>
+            <button class="btn ghost" :disabled="bBusy === 'off'" @click="disconnectBooksy">Disconnect</button>
+          </div>
+        </template>
+        <template v-else>
+          <p class="muted-note" style="margin-top: -2px !important">
+            Reads the salon's Booksy calendar directly, so every booking shows up — including ones staff move or add themselves.
+            Deon sets this up with details from Booksy's calendar page.
+          </p>
+          <button v-if="!showConnect" class="btn soft wide" @click="showConnect = true">Set up Booksy calendar</button>
+          <template v-else>
+            <div class="field"><label for="b-biz">Business ID</label><input id="b-biz" v-model="bForm.businessId" inputmode="numeric" placeholder="e.g. 10818"></div>
+            <div class="field"><label for="b-key">API key (X-Api-Key)</label><input id="b-key" v-model="bForm.apiKey" placeholder="frontdesk-…"></div>
+            <div class="field"><label for="b-tok">Access token (X-Access-Token)</label><input id="b-tok" v-model="bForm.token" placeholder="paste the token"></div>
+            <div class="report-actions">
+              <button class="btn" :disabled="bBusy === 'connect'" @click="connectBooksy">{{ bBusy === 'connect' ? 'Checking…' : 'Connect' }}</button>
+              <button class="btn ghost" @click="showConnect = false">Cancel</button>
+            </div>
+          </template>
+        </template>
+      </div>
+
+      <h4 class="section-label">Gmail (Booksy emails + sending)</h4>
       <div v-if="!status.setUp" class="field-hint orange">The Google setup isn't finished yet — Deon needs to add the Google client secret first.</div>
 
       <template v-else-if="!status.connected">
