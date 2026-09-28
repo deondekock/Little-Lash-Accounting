@@ -23,6 +23,7 @@ migrations_dir = "migrations"
 binding = "BACKUPS"
 id = "__KV_ID__"
 
-# Nightly backup at 03:00 and the owners' morning summaries at 07:00 (South African time).
+# Nightly backup at 03:00, the owners' morning summaries at 07:00 (South African time),
+# and Booksy's emails every 15 minutes (only when the salon's Gmail is connected).
 [triggers]
-crons = ["0 1 * * *", "0 5 * * *"]
+crons = ["0 1 * * *", "0 5 * * *", "*/15 * * * *"]

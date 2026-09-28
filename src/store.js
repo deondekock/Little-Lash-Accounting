@@ -4,7 +4,7 @@ import { shouldLock, markSeen, rememberPinSet } from './lib/lock.js'
 import { PinRequiredError } from './backend-cf.js'
 import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
-import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween } from './lib/stats.js'
+import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween, clientKey } from './lib/stats.js'
 import { salonDays } from './lib/rebook.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
@@ -56,6 +56,7 @@ export const state = reactive({
   clientPhones: {}, // { clientKey: cell number }
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
   clientDays: null, // staff: her clients' visit days at the whole salon { key: [dates…] }
+  booksy: null, // owner: Booksy's booking emails { items, error } (when the salon's Gmail is connected)
 })
 
 /**
@@ -208,7 +209,10 @@ export async function init() {
       return
     }
     await openSheet('cloudflare')
-    if (state.role === 'admin') refreshPin()
+    if (state.role === 'admin') {
+      refreshPin()
+      loadBooksy()
+    }
     return
   }
   const id = savedSheetId() || DEFAULT_SHEET_ID
@@ -316,6 +320,13 @@ export function openHash(hash) {
     if (h === 'due') setView('clients', { clientFilter: 'due' })
     if (h === 'owed') setView('clients', { clientFilter: 'owing' })
     if (h === 'add') openAppointment()
+    // Back from Google after connecting the salon's Gmail.
+    if (h.startsWith('gmail-')) {
+      const msg = { 'gmail-connected': 'Gmail connected 🎉', 'gmail-cancelled': 'Gmail not connected (cancelled)', 'gmail-expired': 'That took too long — please try again', 'gmail-failed': "Google didn't allow it — please try again" }[h]
+      if (msg) toast(msg, h !== 'gmail-connected')
+      openGmail()
+      if (h === 'gmail-connected') loadBooksy(true)
+    }
   }
   if (location.hash) history.replaceState(history.state, '', location.pathname + location.search)
 }
@@ -414,6 +425,7 @@ export async function refresh() {
     applyData(await api('getInitialData'))
     await loadAll()
     state.loadedAt = Date.now()
+    loadBooksy()
     toast('Up to date')
   } catch (err) {
     fail(err)
@@ -655,6 +667,61 @@ export const openInvoice = (client) => (state.modal = { type: 'invoice', data: {
 export const openReview = () => (state.modal = { type: 'review', data: null })
 export const openMonthEnd = () => (state.modal = { type: 'monthEnd', data: null })
 export const openTaxYear = () => (state.modal = { type: 'taxYear', data: null })
+
+/* ---------------- Booksy (via the salon's Gmail) ---------------- */
+
+export async function loadBooksy(sync = false) {
+  if (state.role !== 'admin') return
+  try {
+    const res = await api(sync ? 'syncBooksyNow' : 'getBooksy')
+    state.booksy = { items: res.items.map((x) => ({ ...x, data: x.data || {} })), error: res.error }
+  } catch (err) {
+    if (sync) fail(err)
+  }
+}
+const firstName = (s) => String(s || '').trim().split(/\s+/)[0].toLowerCase()
+/** The team member Booksy named (first name match), or ''. */
+export const booksyEmployee = (name) => state.employees.find((e) => firstName(e.name) && firstName(e.name) === firstName(name))?.id || ''
+
+/**
+ * Booksy bookings still to record: new bookings from the last week up to today that weren't cancelled
+ * later, dismissed, or recorded already (from here, or typed in by hand for that client on that day).
+ */
+export const booksyToDo = computed(() => {
+  const items = state.booksy?.items || []
+  const today = todayStr()
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString().slice(0, 10)
+  const done = new Set(all.value.map((a) => `${clientKey(a.client || '')}|${a.date}`))
+  const cancelled = new Set(items.filter((x) => x.kind === 'cancelled').map((x) => `${clientKey(x.data.client || '')}|${x.data.date}`))
+  return items
+    .filter((x) => x.kind === 'new' && !x.dismissed && !x.appointmentId)
+    .filter((x) => {
+      const date = x.data.date || x.receivedAt.slice(0, 10)
+      const key = `${clientKey(x.data.client || '')}|${x.data.date}`
+      return date >= weekAgo && date <= today && !(x.data.client && (done.has(key) || cancelled.has(key)))
+    })
+    .map((x) => ({ ...x, employeeId: booksyEmployee(x.data.staff) }))
+    .sort((a, b) => `${a.data.date}${a.data.time}`.localeCompare(`${b.data.date}${b.data.time}`))
+})
+
+/** Opens the appointment form filled in from a Booksy booking. */
+export function recordFromBooksy(item) {
+  openAppointment(null, {
+    client: item.data.client || '', service: item.data.service || '', employeeId: item.employeeId || undefined,
+    date: item.data.date || item.receivedAt.slice(0, 10), amount: item.data.price ?? '', booksyId: item.id,
+  })
+}
+export async function booksyDone(id, appointmentId) {
+  const x = state.booksy?.items.find((i) => i.id === id)
+  if (x) x.appointmentId = appointmentId
+  try { await api('updateBooksy', id, { appointmentId }) } catch (err) { fail(err) }
+}
+export async function dismissBooksy(id, dismissed = true) {
+  const x = state.booksy?.items.find((i) => i.id === id)
+  if (x) x.dismissed = dismissed ? 1 : 0
+  try { await api('updateBooksy', id, { dismissed }) } catch (err) { fail(err) }
+}
+export const openGmail = () => (state.modal = { type: 'gmail', data: null })
 
 /* ---------------- the phone's back button ---------------- */
 

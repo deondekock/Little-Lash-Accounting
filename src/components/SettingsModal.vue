@@ -1,7 +1,7 @@
 <script setup>
 import BaseModal from './BaseModal.vue'
 import Icon from './Icon.vue'
-import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openMonthEnd, openTaxYear, openSecurity, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
+import { state, closeModal, signOut, useDifferentSheet, refresh, openHistory, openCompany, openMove, openExport, openMonthEnd, openTaxYear, openSecurity, openGmail, openNotifications, openViewAsPicker, exitViewAs, setView } from '../store.js'
 import { BACKEND } from '../config.js'
 import { theme, setTheme } from '../lib/theme.js'
 
@@ -68,6 +68,10 @@ function run(fn) {
       <button v-else-if="BACKEND === 'cloudflare' && state.role !== 'staff'" class="list-row" @click="openViewAsPicker()">
         <Icon name="users" />
         <div class="grow"><div class="title">View the app as…</div><div class="meta">See exactly what a team member sees</div></div>
+      </button>
+      <button v-if="BACKEND === 'cloudflare' && !state.viewAs && state.role !== 'staff'" class="list-row" @click="openGmail()">
+        <Icon name="bell" />
+        <div class="grow"><div class="title">Booksy &amp; Gmail</div><div class="meta">Bring Booksy's bookings into the app; send emails from the salon's Gmail</div></div>
       </button>
       <button v-if="BACKEND === 'cloudflare' && !state.viewAs && state.role !== 'staff'" class="list-row" @click="openSecurity()">
         <span aria-hidden="true" style="width: 22px; text-align: center">🔒</span>

@@ -40,6 +40,11 @@
  * Loyalty milestones: when an appointment brings a client to one visit short of a milestone (10th, 25th…),
  * the team member who saw her is told, so she can plan a treat for the milestone visit itself.
  *
+ * Owners: the salon's Gmail (connected once with Google's consent screen) sends the app's emails and brings
+ * in Booksy's booking emails ("From Booksy"), checked every 15 minutes and when the list is opened:
+ *   GET /api/google/status | /api/google/connect, POST /api/google/disconnect, GET /api/google/callback (Google)
+ *   GET /api/booksy, POST /api/booksy/sync, POST /api/booksy/update { id, dismissed?, appointmentId? }
+ *
  * Owners can choose a morning summary (Settings → Notifications): daily (yesterday's takings, unpaid, who
  * is off today, leave waiting) or weekly on Mondays (last week against the week before), at 07:00.
  *
@@ -49,6 +54,7 @@
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING, MILESTONES } from '../../src/lib/schema.js'
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
 import { clientKey } from '../../src/lib/stats.js'
+import { gmailSetUp, connectUrl, handleCallback, gmailStatus, disconnectGmail, syncBooksy, gmailCanSend } from './gmail.js'
 import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
 
 const HISTORY_COLS = ['id', 'time', 'who', 'action', 'summary', 'undone_at']
@@ -61,6 +67,7 @@ export default {
     try {
       const url = new URL(request.url)
       if (url.pathname === '/') return text('Little Lash Lounge API', 200, cors)
+      if (url.pathname === '/api/google/callback') return handleCallback(env, url) // Google sends the owner back here
       if (url.pathname === '/api/session' && request.method === 'POST') {
         const email = await authenticate(request, env, ctx, { googleOnly: true })
         await identify(env.DB, email, env) // only people with access get a session
@@ -94,6 +101,7 @@ export default {
         throw new HttpError(403, 'Only the owner can do that.')
       }
       if (route === 'GET /api/load') return json(await loadAll(env.DB), cors)
+      if (url.pathname.startsWith('/api/google/') || url.pathname.startsWith('/api/booksy')) return json(await googleRoute(env, me, route, url, request), cors)
       if (route === 'POST /api/write') {
         const body = await request.json()
         const added = await newAppointments(env.DB, body)
@@ -112,9 +120,10 @@ export default {
     }
   },
 
-  /** 03:00: nightly backup of everything into KV. 07:00: the owners' morning summaries. */
+  /** 03:00: nightly backup of everything into KV. 07:00: the owners' morning summaries. Every 15 min: Booksy emails. */
   async scheduled(event, env) {
     if (event.cron === SUMMARY_CRON) return sendSummaries(env)
+    if (event.cron === BOOKSY_CRON) return syncBooksy(env).catch((err) => console.error('booksy', err))
     const day = new Date().toISOString().slice(0, 10)
     const body = await loadAll(env.DB, { withHistory: true })
     await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
@@ -585,7 +594,7 @@ async function notifyStaff(env, list) {
 
 async function notifyRoute(env, me, route, request) {
   const db = env.DB
-  const relayReady = async () => !!((await getConfig(db, 'email_relay_url')) && (await getConfig(db, 'email_relay_secret')))
+  const relayReady = async () => (await gmailCanSend(env)) || !!((await getConfig(db, 'email_relay_url')) && (await getConfig(db, 'email_relay_secret')))
   if (route === 'GET /api/notify') {
     const pref = await db.prepare('SELECT email_on, summary FROM notify_prefs WHERE email = ?1').bind(me.email).first()
     return JSON.stringify({ emailOn: pref ? !!pref.email_on : true, summary: me.role === 'admin' ? pref?.summary || '' : null, emailReady: await relayReady(), vapidKey: (await vapid(db)).publicKey })
@@ -645,6 +654,46 @@ async function notifyRoute(env, me, route, request) {
 /* ---------------- owners' morning summary ---------------- */
 
 const SUMMARY_CRON = '0 5 * * *' // 07:00 in South Africa
+const BOOKSY_CRON = '*/15 * * * *'
+
+/* ---------------- the salon's Gmail and Booksy's emails (owners) ---------------- */
+
+async function booksyRows(db) {
+  const since = new Date(Date.now() - 21 * 864e5).toISOString()
+  const r = await db.prepare(`SELECT json_group_array(json_object('id', id, 'receivedAt', received_at, 'subject', subject, 'body', body,
+      'kind', kind, 'data', json(data), 'appointmentId', appointment_id, 'dismissed', dismissed))
+    FROM (SELECT * FROM booksy_emails WHERE received_at >= ?1 ORDER BY received_at DESC)`).bind(since).first()
+  return Object.values(r || {})[0] || '[]'
+}
+
+async function googleRoute(env, me, route, url, request) {
+  const db = env.DB
+  if (route === 'GET /api/google/status') return JSON.stringify(await gmailStatus(env))
+  if (route === 'GET /api/google/connect') {
+    if (!gmailSetUp(env)) throw new HttpError(400, "The Google setup isn't finished yet (Deon: add GOOGLE_CLIENT_SECRET).")
+    return JSON.stringify({ url: await connectUrl(env, url.origin, me.email) })
+  }
+  if (route === 'POST /api/google/disconnect') {
+    await disconnectGmail(env)
+    return JSON.stringify({ ok: true })
+  }
+  if (route === 'GET /api/booksy' || route === 'POST /api/booksy/sync') {
+    // Opening the list checks for new emails too (if it's been a few minutes).
+    const last = Date.parse((await getConfig(db, 'booksy_last_sync')) || 0) || 0
+    let error = ''
+    if (route === 'POST /api/booksy/sync' || Date.now() - last > 5 * 60000) {
+      try { await syncBooksy(env) } catch (err) { error = String(err.message || err) }
+    }
+    return `{"items":${await booksyRows(db)},"error":${JSON.stringify(error)}}`
+  }
+  if (route === 'POST /api/booksy/update') {
+    const b = await request.json()
+    if (b.dismissed !== undefined) await db.prepare('UPDATE booksy_emails SET dismissed = ?1 WHERE id = ?2').bind(b.dismissed ? 1 : 0, String(b.id || '')).run()
+    if (b.appointmentId !== undefined) await db.prepare('UPDATE booksy_emails SET appointment_id = ?1 WHERE id = ?2').bind(b.appointmentId || null, String(b.id || '')).run()
+    return JSON.stringify({ ok: true })
+  }
+  throw new HttpError(404, 'Not found')
+}
 const addDays = (date, n) => new Date(Date.parse(date + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10)
 
 async function takingsBetween(db, from, to) {

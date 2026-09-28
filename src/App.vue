@@ -25,6 +25,7 @@ import PriceCalcModal from './components/PriceCalcModal.vue'
 import ReviewModal from './components/ReviewModal.vue'
 import PinScreen from './components/PinScreen.vue'
 import SecurityModal from './components/SecurityModal.vue'
+import GmailModal from './components/GmailModal.vue'
 import { markSeen, shouldLock } from './lib/lock.js'
 import InvoiceModal from './components/InvoiceModal.vue'
 import TaxYearModal from './components/TaxYearModal.vue'
@@ -166,6 +167,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   <MonthEndModal v-if="state.modal?.type === 'monthEnd'" />
   <ReviewModal v-if="state.modal?.type === 'review'" />
   <SecurityModal v-if="state.modal?.type === 'security'" />
+  <GmailModal v-if="state.modal?.type === 'gmail'" />
   <InvoiceModal v-if="state.modal?.type === 'invoice'" :client-key="state.modal.data.key" />
   <PriceCalcModal v-if="state.modal?.type === 'priceCalc'" :focus="state.modal.data.focus" />
   <TaxYearModal v-if="state.modal?.type === 'taxYear'" />

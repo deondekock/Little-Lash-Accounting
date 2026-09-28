@@ -51,6 +51,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ALLOWED_EMAILS: ${{ secrets.ALLOWED_EMAILS }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
     defaults:
       run:
         working-directory: worker
@@ -91,3 +92,6 @@ jobs:
       - if: steps.check.outputs.ready == 'true'
         name: Allowed email addresses
         run: printf '%s' "$ALLOWED_EMAILS" | npx wrangler secret put ALLOWED_EMAILS
+      - if: steps.check.outputs.ready == 'true' && env.GOOGLE_CLIENT_SECRET != ''
+        name: Google client secret (for "Connect Gmail")
+        run: printf '%s' "$GOOGLE_CLIENT_SECRET" | npx wrangler secret put GOOGLE_CLIENT_SECRET

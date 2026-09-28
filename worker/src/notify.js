@@ -6,6 +6,8 @@
  * relay link and its secret. None of it is ever sent to the app (except the public push key).
  */
 
+import { gmailCanSend, gmailSend } from './gmail.js'
+
 const enc = new TextEncoder()
 export const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 export const unb64url = (s) => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((s.length + 3) % 4)), (c) => c.charCodeAt(0))
@@ -104,7 +106,9 @@ function doPost(e) {
 }
 `
 
-export async function sendEmail(db, to, subject, text, html) {
+export async function sendEmail(db, to, subject, text, html, env = null) {
+  // The salon's connected Gmail, when there is one; else the Apps Script relay.
+  if (env && (await gmailCanSend(env))) return gmailSend(env, to, subject, text, html)
   const url = await getConfig(db, 'email_relay_url')
   const secret = await getConfig(db, 'email_relay_secret')
   if (!url || !secret) return 'off'
@@ -151,7 +155,7 @@ export async function notify(env, emails, msg) {
           <p style="font-size:17px;margin:0 0 8px"><b>${escape(msg.title)}</b></p><p style="margin:0 0 16px">${escape(msg.body)}</p>
           <p><a href="${escape(url)}" style="background:#b83f72;color:#fff;padding:10px 16px;border-radius:10px;text-decoration:none">Open the app</a></p>
           <p style="color:#9a8791;font-size:12px">You can turn these emails off in the app: Settings → Notifications.</p></div>`
-        const r = await sendEmail(db, email, msg.title, `${msg.body}\n\nOpen the app: ${url}\n\nTurn these emails off in the app: Settings → Notifications.`, html)
+        const r = await sendEmail(db, email, msg.title, `${msg.body}\n\nOpen the app: ${url}\n\nTurn these emails off in the app: Settings → Notifications.`, html, env)
         results.push({ to: email, via: 'email', result: r })
       } catch (err) {
         console.error('email', err)

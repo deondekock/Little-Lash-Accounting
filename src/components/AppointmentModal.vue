@@ -6,7 +6,7 @@ import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { watch } from 'vue'
-import { all, serviceCatalog } from '../store.js'
+import { all, serviceCatalog, booksyDone } from '../store.js'
 import { OVERTIME_CHOICES, LENGTH_CHOICES, minutesLabel, overtimeShare } from '../lib/payroll.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
@@ -95,11 +95,17 @@ function onPick(c) {
   suggestion.value = `Last visit ${last.date.slice(8)}/${last.date.slice(5, 7)}/${last.date.slice(0, 4)} · ${last.service || 'appointment'} · R ${last.amount} · ${last.method}`
 }
 
+let booksyPending = props.prefill?.booksyId || null // a Booksy booking this records (ticked off once saved)
+
 async function submit() {
   servicePicker.value?.commit()
   saving.value = true
   try {
-    const saved = await saveAppointment({ ...form })
+    const { booksyId, ...data } = form
+    const saved = await saveAppointment(data)
+    // Recorded from a Booksy booking: tick it off.
+    if (booksyPending && !editing) booksyDone(booksyPending, saved.id)
+    booksyPending = null
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
       // Keep employee + date, clear the rest for fast entry of a busy day.
