@@ -1,8 +1,16 @@
 /**
  * Reads a Booksy notification email (subject + text) into a booking: what happened (new / cancelled /
- * moved), the client, service(s), team member, date, time and price — whatever can be found.
- * Booksy's exact wording isn't known for every email type yet, so every field is optional and the
- * raw email is kept too (it can be read again when this gets smarter).
+ * moved), the client and her cell number, service(s), team member, date, time and price.
+ *
+ * Booksy's booking email looks like this (subject, then the text of the email):
+ *   Deon De Kock: new booking Monday, 28 September 2026 10:00
+ *   Deon De Kock
+ *   063 764 0016
+ *   Monday, 28 September 2026, 10:00 - 11:00
+ *   Lash Extensions with Chrisilda: 2 Week Classic Lash Fill
+ *   R365,00, 10:00 - 11:00
+ *   with Chrisilda de Kock
+ * (one service block per service). Every field is optional; looser patterns catch other wordings.
  */
 
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 }
@@ -45,25 +53,72 @@ export function findTime(text) {
   return h < 24 ? `${pad(h)}:${m[2]}` : ''
 }
 
+// A rand amount: R365,00 · R1 365,00 · R1,365.00 · R 365
+const MONEY = /\bR\s?(\d{1,3}(?:[  .,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?!\d)/
+/** '1 365,00' / '1,365.00' / '365' → 1365 / 365. */
+export function randAmount(s) {
+  const t = String(s).replace(/[  ]/g, '')
+  const dec = t.match(/[.,](\d{1,2})$/)
+  const whole = (dec ? t.slice(0, -dec[0].length) : t).replace(/[.,]/g, '')
+  const n = Number(`${whole}${dec ? `.${dec[1]}` : ''}`)
+  return Number.isFinite(n) ? n : null
+}
+
+/** A South African cell / phone number, as written in the email. */
+const PHONE = /(?:\+27|\b0)[\s-]?\d{2}[\s-]?\d{3}[\s-]?\d{4}\b/
+
+/** Booksy's service blocks: "<Category> with <Name>: <Service>" then "R365,00, 10:00 - 11:00" then "with <Name>". */
+function serviceBlocks(lines) {
+  const out = []
+  lines.forEach((line, i) => {
+    const m = line.match(new RegExp(`^${MONEY.source}\\s*,?\\s*(\\d{1,2}[:h]\\d{2})?`))
+    if (!m || i === 0) return
+    let name = lines[i - 1]
+    if (MONEY.test(name) || /^with\s/i.test(name)) return
+    // "Lash Extensions with Chrisilda: 2 Week Classic Lash Fill" → "2 Week Classic Lash Fill"
+    const colon = name.lastIndexOf(':')
+    if (colon > 0 && colon < name.length - 1) name = name.slice(colon + 1)
+    const staff = (lines[i + 1] || '').match(/^with\s+(.+)$/i)?.[1] || (lines[i - 1].match(/\bwith\s+([^:]+):/i)?.[1] ?? '')
+    out.push({ name: clean(name), price: randAmount(m[1]), time: m[2] ? findTime(m[2]) : '', staff: clean(staff) })
+  })
+  return out
+}
+
 export function parseBooksyEmail(subject, body, received) {
   const text = `${subject}\n${body}`
-  const low = text.toLowerCase()
-  const kind = /cancel/.test(low) ? 'cancelled'
-    : /reschedul|has been (moved|changed)|new time|changed (the|their) (appointment|booking)/.test(low) ? 'moved'
-      : /new (appointment|booking)|booked|has made (a|an) (appointment|booking)|confirmed/.test(low) ? 'new'
-        : 'other'
+  const lines = String(body || '').split(/\n+/).map(clean).filter(Boolean)
+  const kindOf = (s) => {
+    const low = s.toLowerCase()
+    return /cancel/.test(low) ? 'cancelled'
+      : /reschedul|has been (moved|changed)|new time|booking (changed|moved|updated)|changed (the|their) (appointment|booking)/.test(low) ? 'moved'
+        : /new (appointment|booking)|booked|has made (a|an) (appointment|booking)|confirmed/.test(low) ? 'new'
+          : ''
+  }
+  // The subject says it best ("Name: new booking …"); the text only when the subject doesn't.
+  const kind = kindOf(subject) || kindOf(body) || 'other'
+
   const client = pick(text, [
+    /^\s*([^:\n]{2,60}?):\s*(?:new booking|booking|appointment|cancel|reschedul)/im, // Booksy's "Deon De Kock: new booking …"
     /\b(?:client|customer)\s*(?:name)?\s*[:\-–]\s*([^\n|]+)/i,
     /\b(?:client|customer)\s+([A-Z][\p{L}'-]+(?:\s+[A-Z][\p{L}'-]+){0,2})/u,
     /\bfrom\s+([A-Z][\p{L}'-]+(?:\s+[A-Z][\p{L}'-]+){0,2})\s+(?:has|for)\b/u,
     /^\s*([A-Z][\p{L}'-]+(?:\s+[A-Z][\p{L}'-]+){0,2})\s+(?:has\s+)?(?:booked|cancel|reschedul|made)/mu,
   ], (name) => !NOT_A_NAME.test(name))
-  const service = pick(text, [/\bservices?\s*[:\-–]\s*([^\n|]+)/i, /\btreatment\s*[:\-–]\s*([^\n|]+)/i])
-  const staff = pick(text, [
-    /\b(?:staff(?:\s*member)?|stylist|specialist|employee|provider|with)\s*[:\-–]\s*([^\n|]+)/i,
+  const phone = (body.match(PHONE)?.[0] || '').replace(/\s+/g, ' ').trim()
+
+  const blocks = serviceBlocks(lines)
+  const service = blocks.length ? blocks.map((b) => b.name).join(', ')
+    : pick(text, [/\bservices?\s*[:\-–]\s*([^\n|]+)/i, /\btreatment\s*[:\-–]\s*([^\n|]+)/i])
+  const staff = blocks.find((b) => b.staff)?.staff || pick(text, [
+    /\b(?:staff(?:\s*member)?|stylist|specialist|employee|provider)\s*[:\-–]\s*([^\n|]+)/i,
+    /^with\s+(.+)$/im,
     /\bwith\s+([A-Z][\p{L}'-]+)\b/u,
   ])
-  const priceText = pick(text, [/\b(?:price|total|amount|cost)\s*[:\-–]?\s*(?:R|ZAR)\s?([\d\s,.]+)/i, /\bR\s?(\d[\d\s,]*(?:\.\d\d)?)\b/])
-  const price = priceText ? Number(priceText.replace(/[\s,]/g, '')) || null : null
-  return { kind, client, service, staff, date: findDate(text, received), time: findTime(text), price }
+  let price = null
+  if (blocks.length && blocks.every((b) => b.price != null)) price = Math.round(blocks.reduce((s, b) => s + b.price, 0) * 100) / 100
+  else {
+    const m = text.match(new RegExp(`\\b(?:price|total|amount|cost)\\s*[:\\-–]?\\s*${MONEY.source.slice(2)}`, 'i')) || text.match(MONEY)
+    if (m) price = randAmount(m[1])
+  }
+  return { kind, client, phone, service, services: blocks.map((b) => b.name), staff, date: findDate(text, received), time: findTime(text), price }
 }

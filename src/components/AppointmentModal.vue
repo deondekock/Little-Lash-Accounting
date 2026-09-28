@@ -6,9 +6,9 @@ import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { watch } from 'vue'
-import { all, serviceCatalog, booksyDone } from '../store.js'
+import { all, serviceCatalog, booksyDone, phoneOf, saveClientPhone } from '../store.js'
 import { OVERTIME_CHOICES, LENGTH_CHOICES, minutesLabel, overtimeShare } from '../lib/payroll.js'
-import { servicePrice } from '../lib/stats.js'
+import { servicePrice, clientKey } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
 import { METHODS, businessMonth, monthRange, todayStr, fmt } from '../lib/format.js'
 import { cloudflare } from '../api.js'
@@ -101,10 +101,13 @@ async function submit() {
   servicePicker.value?.commit()
   saving.value = true
   try {
-    const { booksyId, ...data } = form
+    const { booksyId, booksyPhone, ...data } = form
     const saved = await saveAppointment(data)
-    // Recorded from a Booksy booking: tick it off.
-    if (booksyPending && !editing) booksyDone(booksyPending, saved.id)
+    // Recorded from a Booksy booking: tick it off, and keep her cell number if we didn't have it.
+    if (booksyPending && !editing) {
+      booksyDone(booksyPending, saved.id)
+      if (booksyPhone && saved.client && !phoneOf({ key: clientKey(saved.client) })) saveClientPhone(saved.client, booksyPhone).catch(() => {})
+    }
     booksyPending = null
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {

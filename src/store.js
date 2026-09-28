@@ -6,6 +6,8 @@ import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween, clientKey } from './lib/stats.js'
 import { salonDays } from './lib/rebook.js'
+import { parseBooksyEmail } from './lib/booksy.js'
+import { joinServices, serviceKey } from './lib/services.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -674,7 +676,14 @@ export async function loadBooksy(sync = false) {
   if (state.role !== 'admin') return
   try {
     const res = await api(sync ? 'syncBooksyNow' : 'getBooksy')
-    state.booksy = { items: res.items.map((x) => ({ ...x, data: x.data || {} })), error: res.error }
+    // Read each email again here, so a smarter reader also fixes emails that came in earlier.
+    state.booksy = {
+      items: res.items.map((x) => {
+        const data = x.subject || x.body ? parseBooksyEmail(x.subject || '', x.body || '', x.receivedAt) : x.data || {}
+        return { ...x, data, kind: data.kind || x.kind }
+      }),
+      error: res.error,
+    }
   } catch (err) {
     if (sync) fail(err)
   }
@@ -704,11 +713,28 @@ export const booksyToDo = computed(() => {
     .sort((a, b) => `${a.data.date}${a.data.time}`.localeCompare(`${b.data.date}${b.data.time}`))
 })
 
+const words = (s) => String(s || '').toLowerCase().replace(/lashes/g, 'lash').match(/[a-z0-9]+/g) || []
+/**
+ * Booksy's service name → the matching service in her list ("2 Week Classic Lash Fill" → "Classic Fill"):
+ * the service whose words all appear in Booksy's name, the most specific one first, then her active
+ * and most-done ones. Booksy's own name when nothing matches.
+ */
+export function booksyService(name) {
+  const key = serviceKey(name)
+  const have = new Set(words(name))
+  const best = serviceCatalog.value
+    .filter((s) => s.key === key || (words(s.name).length && words(s.name).every((w) => have.has(w))))
+    .sort((a, b) => (b.key === key) - (a.key === key) || words(b.name).length - words(a.name).length || b.active - a.active || b.count - a.count)[0]
+  return best?.name || name
+}
+
 /** Opens the appointment form filled in from a Booksy booking. */
 export function recordFromBooksy(item) {
+  const d = item.data
   openAppointment(null, {
-    client: item.data.client || '', service: item.data.service || '', employeeId: item.employeeId || undefined,
-    date: item.data.date || item.receivedAt.slice(0, 10), amount: item.data.price ?? '', booksyId: item.id,
+    client: d.client || '', service: joinServices((d.services?.length ? d.services : [d.service]).filter(Boolean).map(booksyService)),
+    employeeId: item.employeeId || undefined, date: d.date || item.receivedAt.slice(0, 10), amount: d.price ?? '',
+    booksyId: item.id, booksyPhone: d.phone || '',
   })
 }
 export async function booksyDone(id, appointmentId) {
