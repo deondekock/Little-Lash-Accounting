@@ -71,7 +71,7 @@ function run(fn) {
       </button>
       <button v-if="BACKEND === 'cloudflare' && !state.viewAs && state.role !== 'staff'" class="list-row" @click="openGmail()">
         <Icon name="bell" />
-        <div class="grow"><div class="title">Booksy &amp; Gmail</div><div class="meta">Bring Booksy's bookings into the app; send emails from the salon's Gmail</div></div>
+        <div class="grow"><div class="title">Gmail</div><div class="meta">Send the app's emails from the salon's Gmail account</div></div>
       </button>
       <button v-if="BACKEND === 'cloudflare' && !state.viewAs && state.role !== 'staff'" class="list-row" @click="openSecurity()">
         <span aria-hidden="true" style="width: 22px; text-align: center">🔒</span>

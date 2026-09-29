@@ -797,17 +797,10 @@ export const setSummaryNotify = (summary) => request('/api/notify/prefs', { meth
 export const addPushSubscription = (sub) => request('/api/notify/subscribe', { method: 'POST', body: sub })
 export const removePushSubscription = (endpoint) => request('/api/notify/unsubscribe', { method: 'POST', body: { endpoint } })
 export const testNotify = () => request('/api/notify/test', { method: 'POST', body: {} })
-/* The salon's Gmail (sends the app's emails, brings in Booksy's booking emails) — owners. */
+/* The salon's Gmail (sends the app's emails) — owners. */
 export const getGoogleStatus = () => request('/api/google/status')
 export const googleConnectUrl = () => request('/api/google/connect')
 export const disconnectGoogle = () => request('/api/google/disconnect', { method: 'POST', body: {} })
-export const getBooksy = () => request('/api/booksy')
-export const syncBooksyNow = () => request('/api/booksy/sync', { method: 'POST', body: {} })
-export const updateBooksy = (id, changes) => request('/api/booksy/update', { method: 'POST', body: { id, ...changes } })
-/* Reading Booksy's calendar directly (her own account) — owners. */
-export const getBooksyApiStatus = () => request('/api/booksy/status')
-export const connectBooksyApi = (creds) => request('/api/booksy/connect', { method: 'POST', body: creds })
-export const disconnectBooksyApi = () => request('/api/booksy/disconnect', { method: 'POST', body: {} })
 
 /** Owner: the Gmail relay (Apps Script) link and the script to paste. */
 export const getEmailRelay = () => request('/api/notify/email')

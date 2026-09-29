@@ -1,17 +1,15 @@
 /**
  * The salon's Gmail account (e.g. littlelashappt@gmail.com), connected once from the app with Google's
  * own consent screen — no password is ever given to the app. The Worker keeps Google's refresh token
- * in `config` and uses the Gmail API to:
- *   - send the app's emails from that account (instead of the Apps Script relay), and
- *   - read Booksy's notification emails, so bookings show up in the app ("From Booksy").
+ * in `config` and uses the Gmail API to send the app's emails from that account (instead of the
+ * Apps Script relay).
  *
  * Needs the GOOGLE_CLIENT_SECRET secret (the same Google OAuth client as the sign-in), the Gmail API
  * enabled, and https://<worker>/api/google/callback as an authorised redirect URI.
  */
 import { getConfig, setConfig, b64url, unb64url } from './notify.js'
-import { parseBooksyEmail } from '../../src/lib/booksy.js'
 
-const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send']
+const SCOPES = ['openid', 'email', 'https://www.googleapis.com/auth/gmail.send']
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me'
 const enc = new TextEncoder()
@@ -50,7 +48,7 @@ export async function handleCallback(env, url) {
   const t = await res.json().catch(() => ({}))
   if (!res.ok || !t.refresh_token) {
     console.error('gmail connect', res.status, t.error, t.error_description)
-    // Keep Google's reason so the Booksy & Gmail page can show it.
+    // Keep Google's reason so the Gmail settings page can show it.
     const why = !res.ok ? `${t.error || res.status}${t.error_description ? ` — ${t.error_description}` : ''}` : 'Google sent no refresh token'
     await setConfig(env.DB, 'gmail_error', `Connecting failed: ${why}`)
     return back('failed')
@@ -59,7 +57,7 @@ export async function handleCallback(env, url) {
   const scope = String(t.scope || '')
   await setConfig(env.DB, 'gmail', JSON.stringify({
     email: String(claims.email || '').toLowerCase(), refresh: t.refresh_token, scope,
-    canRead: scope.includes('gmail.readonly'), canSend: scope.includes('gmail.send'), connectedAt: new Date().toISOString(), by: saved.by,
+    canSend: scope.includes('gmail.send'), connectedAt: new Date().toISOString(), by: saved.by,
   }))
   await setConfig(env.DB, 'gmail_access', JSON.stringify({ token: t.access_token, exp: Date.now() + (t.expires_in - 60) * 1000 }))
   await setConfig(env.DB, 'gmail_error', '')
@@ -98,8 +96,8 @@ async function gmail(env, path, init = {}) {
 export async function gmailStatus(env) {
   const acc = await account(env.DB)
   return {
-    setUp: gmailSetUp(env), connected: !!acc?.refresh, email: acc?.email || '', canRead: !!acc?.canRead, canSend: !!acc?.canSend,
-    lastSync: (await getConfig(env.DB, 'booksy_last_sync')) || '', error: (await getConfig(env.DB, 'gmail_error')) || '',
+    setUp: gmailSetUp(env), connected: !!acc?.refresh, email: acc?.email || '', canSend: !!acc?.canSend,
+    connectedAt: acc?.connectedAt || '', error: (await getConfig(env.DB, 'gmail_error')) || '',
   }
 }
 
@@ -137,52 +135,4 @@ export async function gmailSend(env, to, subject, text, html) {
   ].join('\r\n')
   await gmail(env, '/messages/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ raw: b64url(enc.encode(mime)) }) })
   return 'sent'
-}
-
-/* ---------------- reading Booksy's emails ---------------- */
-
-const decode = (data) => new TextDecoder().decode(unb64url(data || ''))
-const stripHtml = (h) => h.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li|h\d)>/gi, '\n')
-  .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"')
-  .replace(/[ \t]+/g, ' ').replace(/\n\s*\n+/g, '\n').trim()
-
-/** The readable text of an email (plain text if there is one, else the HTML without tags). */
-function bodyText(payload) {
-  const parts = []
-  const walk = (p) => {
-    if (!p) return
-    if (p.parts) p.parts.forEach(walk)
-    else if (p.body?.data) parts.push({ type: p.mimeType, text: decode(p.body.data) })
-  }
-  walk(payload)
-  const plain = parts.find((p) => p.type === 'text/plain')
-  if (plain) return plain.text.trim()
-  const html = parts.find((p) => p.type === 'text/html')
-  return html ? stripHtml(html.text) : ''
-}
-
-/** Fetches Booksy emails from the last week that aren't stored yet. Returns how many were new. */
-export async function syncBooksy(env) {
-  const acc = await account(env.DB)
-  if (!acc?.refresh || !acc.canRead) return 0
-  const list = await gmail(env, `/messages?${new URLSearchParams({ q: 'from:booksy newer_than:7d', maxResults: '100' })}`)
-  const ids = (list.messages || []).map((m) => m.id)
-  let added = 0
-  if (ids.length) {
-    const { results } = await env.DB.prepare('SELECT id FROM booksy_emails WHERE id IN (SELECT value FROM json_each(?1))').bind(JSON.stringify(ids)).all()
-    const known = new Set(results.map((r) => r.id))
-    for (const id of ids.filter((x) => !known.has(x)).slice(0, 40)) {
-      const m = await gmail(env, `/messages/${id}?format=full`)
-      const h = Object.fromEntries((m.payload?.headers || []).map((x) => [x.name.toLowerCase(), x.value]))
-      const received = new Date(Number(m.internalDate) || Date.now()).toISOString()
-      const body = bodyText(m.payload).slice(0, 20000)
-      const parsed = parseBooksyEmail(h.subject || '', body, received)
-      await env.DB.prepare(`INSERT OR IGNORE INTO booksy_emails (id, received_at, subject, from_addr, body, kind, data, appointment_id, dismissed, created_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, 0, ?8)`)
-        .bind(id, received, h.subject || '', h.from || '', body, parsed.kind, JSON.stringify(parsed), new Date().toISOString()).run()
-      added++
-    }
-  }
-  await setConfig(env.DB, 'booksy_last_sync', new Date().toISOString())
-  return added
 }

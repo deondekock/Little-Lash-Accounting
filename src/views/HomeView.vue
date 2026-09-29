@@ -6,7 +6,6 @@ import Columns from '../components/charts/Columns.vue'
 import ClientFlowCard from '../components/ClientFlowCard.vue'
 import TaxNotice from '../components/TaxNotice.vue'
 import WaButton from '../components/WaButton.vue'
-import BooksyCard from '../components/BooksyCard.vue'
 import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth, openReview } from '../store.js'
 import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
@@ -108,7 +107,6 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d <
         <Icon name="right" />
       </button>
 
-      <BooksyCard />
 
       <!-- Hero: this month's takings -->
       <section class="card hero">
