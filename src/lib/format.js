@@ -70,17 +70,24 @@ export function totals(list) {
   for (const a of list) {
     t.count++
     t.total += a.amount
-    if (a.status === 'Paid') {
-      t.paid += a.amount
-      t.paidCount++
-    } else if (a.status === 'Written off') {
+    if (a.status === 'Written off') {
       t.writtenOff += a.writtenOff || 0
       t.writtenOffCount++
-    } else {
-      t.unpaid += a.amount
-      t.unpaidCount++
+      continue
     }
-    if (a.method in t) t[a.method] += a.amount
+    // Paid so far vs still owing (from payment rows; falls back to the status for older data).
+    const paid = a.paid != null ? a.paid : (a.status === 'Paid' ? a.amount : 0)
+    const owing = a.outstanding != null ? a.outstanding : (a.amount - paid)
+    t.paid += paid
+    t.unpaid += owing
+    if (owing > 0.005) t.unpaidCount++
+    else t.paidCount++
+    // How the money was tendered: the payment rows when there are any, else the single method.
+    if (a.tenders && a.tenders.length) {
+      for (const p of a.tenders) if (p.method in t) t[p.method] += p.amount
+    } else if (a.method in t) {
+      t[a.method] += a.amount
+    }
   }
   return t
 }

@@ -12,10 +12,12 @@ export const TABLES = {
     'created_at', 'updated_at'],
   // Clients' cell numbers; id = the client's name key (clientKey in stats.js).
   client_info: ['id', 'name', 'phone', 'created_at', 'updated_at', 'updated_by'],
+  // Payments toward an appointment (partial settlements, split tenders, voucher redemptions).
+  payments: ['id', 'appointment_id', 'date', 'amount', 'method', 'voucher_id', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by'],
 }
 
 /** History entries keep the records as they were before each change, by kind. */
-export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', cinfo: 'client_info' }
+export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', cinfo: 'client_info', pmts: 'payments' }
 
 /** Payslip details kept per employee: [key, label, kind]. */
 export const PAY_FIELDS = [

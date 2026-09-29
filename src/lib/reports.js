@@ -45,7 +45,8 @@ export function monthEndReport({ month, appts, employees, payslips, company, sta
     byEmp.get(a.employeeId).push(a)
   }
   const team = [...byEmp].map(([id, xs]) => ({ name: nameOf(employees, id, xs[0].employeeName), t: totals(xs) })).sort((a, b) => b.t.total - a.t.total)
-  const unpaid = list.filter((a) => a.status === 'Unpaid').sort((a, b) => (a.date < b.date ? -1 : 1))
+  const owing = (a) => (a.outstanding != null ? a.outstanding : (a.status === 'Unpaid' ? a.amount : 0))
+  const unpaid = list.filter((a) => owing(a) > 0.005).sort((a, b) => (a.date < b.date ? -1 : 1))
   const slips = payslips.filter((p) => p.month === month).sort((a, b) => nameOf(employees, a.employeeId, a.employeeName).localeCompare(nameOf(employees, b.employeeId, b.employeeName)))
   const worked = new Set(list.map((a) => a.employeeId))
   const missing = employees.filter((e) => (e.active || worked.has(e.id)) && !slips.some((p) => p.employeeId === e.id))
@@ -75,7 +76,7 @@ export function monthEndReport({ month, appts, employees, payslips, company, sta
     {
       heading: `Unpaid appointments (${unpaid.length})`,
       columns: [{ label: 'Date' }, { label: 'Client' }, { label: 'Team member' }, { label: 'Service' }, { label: 'Amount', num: true }],
-      rows: unpaid.map((a) => [shortDate(a.date), a.client, nameOf(employees, a.employeeId, a.employeeName), a.service, a.amount]),
+      rows: unpaid.map((a) => [shortDate(a.date), a.client, nameOf(employees, a.employeeId, a.employeeName), a.service, owing(a)]),
       foot: unpaid.length ? ['Total', '', '', '', t.unpaid] : null,
       empty: 'Nothing unpaid 🎉',
     },

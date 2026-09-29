@@ -48,8 +48,9 @@ function fit(ctx, text, width) {
  * @returns Promise<Blob> (PNG)
  */
 export async function invoiceImage(client, company = {}, nameOf = () => '') {
-  const visits = client.history.filter((v) => v.status === 'Unpaid').sort((a, b) => (a.date < b.date ? -1 : 1))
-  const total = visits.reduce((s, v) => s + v.amount, 0)
+  const owing = (v) => (v.outstanding != null ? v.outstanding : (v.status === 'Unpaid' ? v.amount : 0))
+  const visits = client.history.filter((v) => owing(v) > 0.005).sort((a, b) => (a.date < b.date ? -1 : 1))
+  const total = visits.reduce((s, v) => s + owing(v), 0)
   await Promise.all([document.fonts?.load(`40px ${SERIF}`), document.fonts?.load(`400 30px ${SANS}`), document.fonts?.load(`600 30px ${SANS}`)].map((p) => p?.catch?.(() => {})))
   const logo = await loadImage(import.meta.env.BASE_URL + 'brand/logo.png')
 
@@ -124,7 +125,7 @@ export async function invoiceImage(client, company = {}, nameOf = () => '') {
     ctx.fillText(fit(ctx, nameOf(v.employeeId) || v.employeeName || '', cols[3] - cols[2] - 190), cols[2], y)
     ctx.textAlign = 'right'
     ctx.fillStyle = INK
-    ctx.fillText(fmt(v.amount), cols[3], y)
+    ctx.fillText(fmt(owing(v)), cols[3], y)
     y += 18
     ctx.fillStyle = LINE
     ctx.fillRect(PAD, y, W - PAD * 2, 2)

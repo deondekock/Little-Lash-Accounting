@@ -170,6 +170,30 @@ const toPayslip = (r) => ({
 
 const toClientInfo = (r) => ({ id: r.id, name: clean(r.name), phone: clean(r.phone), rec: r })
 
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
+function toPayment(r) {
+  return { id: r.id, appointmentId: clean(r.appointment_id), date: r.date, amount: Number(r.amount) || 0, method: clean(r.method), voucherId: clean(r.voucher_id) || null, note: clean(r.note), rec: r }
+}
+/**
+ * Give every appointment its paid amount, what's still owing and how it was tendered, from the payment
+ * rows. An appointment with no payment rows keeps its old meaning (Paid = whole amount, Unpaid = owes it
+ * all), so all existing data reads exactly as before.
+ */
+function attachPayments() {
+  const byAppt = new Map()
+  for (const p of db.payments || []) {
+    if (!byAppt.has(p.appointmentId)) byAppt.set(p.appointmentId, [])
+    byAppt.get(p.appointmentId).push(p)
+  }
+  for (const a of db.appts) {
+    const ps = byAppt.get(a.id)
+    a.tenders = ps ? [...ps].sort((x, y) => (x.date < y.date ? -1 : 1)) : []
+    if (a.status === 'Written off') { a.paid = 0; a.outstanding = 0; continue }
+    a.paid = ps && ps.length ? round2(ps.reduce((s, p) => s + p.amount, 0)) : (a.status === 'Paid' ? a.amount : 0)
+    a.outstanding = round2(Math.max(0, a.amount - a.paid))
+  }
+}
+
 const strip = ({ rec, ...x }) => x
 const nameOf = (id) => db.employees.find((e) => e.id === id)?.name
 const publicAppt = (a) => ({ ...strip(a), employeeName: nameOf(a.employeeId) || a.employeeName })
@@ -178,8 +202,8 @@ const publicServices = () => db.services.map(strip).sort((a, b) => a.name.locale
 const publicLeave = () => db.leave.map(strip).sort((a, b) => (a.from < b.from ? 1 : -1))
 const publicPayslips = () => db.payslips.map(strip)
 
-const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', client_info: 'clientInfo' }
-const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, client_info: toClientInfo }
+const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', client_info: 'clientInfo', payments: 'payments' }
+const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, client_info: toClientInfo, payments: toPayment }
 /** { clientKey: cell number } */
 const clientPhones = () => Object.fromEntries(db.clientInfo.filter((c) => c.phone).map((c) => [c.id, c.phone]))
 
@@ -283,6 +307,8 @@ async function load() {
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
+  db.payments = (data.payments || []).map((a) => toPayment(fromArray('payments', a)))
+  attachPayments()
   db.clientStats = null
   db.clientDays = null
   db.settings = Object.fromEntries(data.settings.map(([k, v]) => [k, v ?? '']))
@@ -427,6 +453,56 @@ export async function saveClientPhone(client, phone) {
     await commit('clients', cell ? `Saved ${name}'s cell number` : `Removed ${name}'s cell number`, { put: { client_info: [rec] }, before: { cinfo: { [key]: existing?.rec || null } } })
   }
   return clientPhones()
+}
+
+/**
+ * Record money a client paid: one or more tenders (amount + method), applied to their outstanding
+ * visits oldest first. Visits that become fully covered are marked Paid. Handles partial payments
+ * (settle part of a debt) and split payments (a visit paid with, say, an EFT deposit then a card).
+ */
+export async function recordPayment(key, { date, lines }) {
+  date = clean(date) || todayStr()
+  const tenders = (lines || [])
+    .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method) }))
+    .filter((l) => l.amount > 0 && METHODS.includes(l.method))
+  if (!tenders.length) throw new Error('Please enter an amount and a payment method.')
+  const visits = db.appts
+    .filter((a) => a.client && clientKey(a.client) === key && a.status !== 'Written off' && (a.outstanding ?? 0) > 0.005)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+  if (!visits.length) throw new Error('This client has nothing outstanding.')
+  const owed = round2(visits.reduce((s, a) => s + a.outstanding, 0))
+  const total = round2(tenders.reduce((s, x) => s + x.amount, 0))
+  if (total > owed + 0.005) throw new Error(`That's more than the ${fmt0(owed)} still owing.`)
+  const now = new Date().toISOString()
+  const remaining = new Map(visits.map((a) => [a.id, a.outstanding]))
+  const payRows = []
+  const touched = new Set()
+  for (const tender of tenders) {
+    let amt = tender.amount
+    for (const a of visits) {
+      if (amt <= 0.005) break
+      const rem = remaining.get(a.id)
+      if (rem <= 0.005) continue
+      const use = round2(Math.min(amt, rem))
+      payRows.push({ id: uuid(), appointment_id: a.id, date, amount: use, method: tender.method, voucher_id: null, note: '', created_at: now, updated_at: now, created_by: user || null, updated_by: user || null })
+      remaining.set(a.id, round2(rem - use))
+      amt = round2(amt - use)
+      touched.add(a.id)
+    }
+  }
+  const before = { appts: {}, pmts: {} }
+  const apptPuts = []
+  for (const a of visits) {
+    if (touched.has(a.id) && remaining.get(a.id) <= 0.005 && a.status !== 'Paid') {
+      before.appts[a.id] = a.rec
+      apptPuts.push(apptRec({ ...a, status: 'Paid', paidOn: date }, a.rec?.created_at, now))
+    }
+  }
+  for (const r of payRows) before.pmts[r.id] = null
+  await commit('payment', `${fmt0(total)} from ${visits[0].client} (${payRows.length === 1 ? '1 payment' : payRows.length + ' payments'})`,
+    { put: { payments: payRows, ...(apptPuts.length ? { appointments: apptPuts } : {}) }, before })
+  attachPayments()
+  return { appts: visits.map((a) => publicAppt(db.appts.find((x) => x.id === a.id))), owed: round2(Math.max(0, owed - total)) }
 }
 
 export async function deleteAppointment(id) {

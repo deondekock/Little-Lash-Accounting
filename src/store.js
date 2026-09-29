@@ -782,6 +782,14 @@ export const openAppointment = (appt, prefill = null) =>
   (state.modal = { type: 'appointment', data: appt ? { ...appt } : null, prefill })
 export const openEmployee = (emp) => (state.modal = { type: 'employee', data: emp ? { ...emp } : null })
 export const openClient = (client) => (state.modal = { type: 'client', data: client })
+export const openPayment = (client) => (state.modal = { type: 'payment', data: client })
+
+/** Record money a client paid (partial and/or split across methods). Returns what's still owed. */
+export async function recordPayment(key, payload) {
+  const res = await api('recordPayment', key, payload)
+  if (res.appts?.length) upsertAppts(res.appts)
+  return res
+}
 export const openSettings = () => (state.modal = { type: 'settings', data: null })
 export const openHistory = () => {
   state.modal = { type: 'history', data: null }

@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import Sparkline from './charts/Sparkline.vue'
 import ClientContact from './ClientContact.vue'
-import { closeModal, openAppointment, employeeById, employeeColor, openMerge } from '../store.js'
+import { closeModal, openAppointment, employeeById, employeeColor, openMerge, openPayment } from '../store.js'
 import { fmt, fmt0, dayLabel, shortDate } from '../lib/format.js'
 
 const props = defineProps({ client: { type: Object, required: true } })
@@ -47,7 +47,10 @@ function book() {
       <div style="font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 4px">Spend per visit (last {{ trend.length }})</div>
       <Sparkline :values="trend" :width="300" :height="40" :color="employeeColor(c.staffId)" label="Spend per visit" />
     </div>
-    <div v-if="c.unpaid" class="delta down" style="margin-bottom: 12px">Owes {{ fmt(c.unpaid) }}</div>
+    <div v-if="c.unpaid > 0.005" class="owes-row">
+      <div class="delta down" style="margin: 0">Owes {{ fmt(c.unpaid) }}</div>
+      <button class="btn small" @click="openPayment(c)">Record payment</button>
+    </div>
 
     <div class="hist-head">
       <div style="font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .1em">History</div>
@@ -65,7 +68,8 @@ function book() {
         </div>
         <div class="right">
           <div class="big" :class="{ 'written-off': v.status === 'Written off' }">{{ fmt(v.writtenOff ?? v.amount) }}</div>
-          <div class="meta" :class="{ Paid: 'green', Unpaid: 'orange' }[v.status]">{{ v.status }}</div>
+          <div v-if="v.outstanding > 0.005 && v.paid > 0.005" class="meta orange">Part · owes {{ fmt(v.outstanding) }}</div>
+          <div v-else class="meta" :class="{ Paid: 'green', Unpaid: 'orange' }[v.status]">{{ v.status }}</div>
         </div>
       </button>
     </div>
