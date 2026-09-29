@@ -101,12 +101,15 @@ export default {
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
-      if (route === 'GET /api/load') return json(await loadAll(env.DB), cors)
+      if (route === 'GET /api/load') return json(await cachedLoad(env), cors)
       if (url.pathname.startsWith('/api/google/')) return json(await googleRoute(env, me, route, url), cors)
       if (route === 'POST /api/write') {
         const body = await request.json()
         const added = await newAppointments(env.DB, body)
         const res = await write(env.DB, body, cors)
+        // Drop the load cache so the next load rebuilds. Covers the full-import path, which changes data
+        // without adding a history row (so the rev key alone wouldn't invalidate it).
+        if (res.ok) ctx.waitUntil(env.BACKUPS.delete('cache:load').catch(() => {}))
         if (res.ok && body.notify?.length) ctx.waitUntil(notifyStaff(env, body.notify))
         if (res.ok && added.length) ctx.waitUntil(milestoneCheck(env, added))
         return res
@@ -278,9 +281,35 @@ async function loadAll(db, { withHistory = false } = {}) {
  * row, and history(time) is indexed, so this reads a single row. The app compares it with what it last
  * loaded and only does a full reload when it differs.
  */
-async function dataRev(db) {
+/** The newest data-change time (one indexed row) — the change signal and the load-cache key. */
+async function newestChange(db) {
   const r = await db.prepare('SELECT time FROM history ORDER BY time DESC LIMIT 1').first()
-  return JSON.stringify({ rev: r?.time || '' })
+  return r?.time || ''
+}
+
+async function dataRev(db) {
+  return JSON.stringify({ rev: await newestChange(db) })
+}
+
+/**
+ * The owner's full load, served from a rev-keyed cache in KV. The whole database is scanned to build it
+ * at most once per change (shared by every device), instead of once per refresh. If nothing has changed
+ * since the cache was built, the cached body is returned with no appointment rows read. On a write the
+ * newest-change time moves, so the next load rebuilds; a stale cache is never served (the rev won't match).
+ */
+async function cachedLoad(env) {
+  const rev = await newestChange(env.DB)
+  try {
+    const raw = await env.BACKUPS.get('cache:load')
+    if (raw) {
+      const c = JSON.parse(raw)
+      if (c.rev === rev) return c.body
+    }
+  } catch { /* cache miss or unreadable — rebuild below */ }
+  const body = await loadAll(env.DB)
+  // Best-effort: a failed cache write just means the next load rebuilds too.
+  try { await env.BACKUPS.put('cache:load', JSON.stringify({ rev, body })) } catch { /* ignore */ }
+  return body
 }
 
 async function history(db, since) {

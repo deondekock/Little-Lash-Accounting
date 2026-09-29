@@ -11,7 +11,8 @@ import { FAKE_API } from './config.js'
 import { AuthError } from './google/sheets.js'
 import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
-import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, WRITTEN_OFF, statusOf } from './lib/schema.js'
+import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, statusOf } from './lib/schema.js'
+import { toAppt, overtimeValue } from './lib/appt.js'
 import { clientKey } from './lib/stats.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
@@ -86,25 +87,6 @@ const parse = (s, fallback) => {
 }
 const fromArray = (table, arr) => Object.fromEntries(TABLES[table].map((c, i) => [c, arr[i] ?? null]))
 
-function overtimeValue(v) {
-  if (String(v ?? '').trim().toLowerCase() === 'all') return 'all'
-  const n = Number(v)
-  return n > 0 ? n : 0
-}
-
-/** A written-off appointment counts as R0 everywhere; its amount is kept as `writtenOff`. */
-function toAppt(r) {
-  const status = statusOf(r.status)
-  const amount = Number(r.amount) || 0
-  return {
-    id: r.id, date: r.date, month: r.month || r.date.slice(0, 7), employeeId: clean(r.employee_id), employeeName: clean(r.employee_name),
-    client: clean(r.client), service: clean(r.service), amount: status === WRITTEN_OFF ? 0 : amount, method: clean(r.method),
-    ...(status === WRITTEN_OFF ? { writtenOff: amount } : {}),
-    status, paidOn: clean(r.paid_on), notes: clean(r.notes),
-    overtime: overtimeValue(r.overtime), length: Number(r.length) > 0 ? Number(r.length) : 0,
-    createdBy: clean(r.created_by), updatedBy: clean(r.updated_by), createdAt: clean(r.created_at), rec: r,
-  }
-}
 function apptRec(a, created, updated, by = user) {
   return {
     id: a.id, date: a.date, month: a.month, employee_id: a.employeeId, employee_name: a.employeeName, client: a.client,
