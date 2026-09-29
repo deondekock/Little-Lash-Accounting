@@ -814,8 +814,13 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   // Only the owner writes visits off; a written-off visit stays that way unless she marks it paid.
   const status = b.status === 'Paid' ? 'Paid' : existing0?.status === 'Written off' ? 'Written off' : 'Unpaid'
   const notes = String(b.notes || '').trim().slice(0, 300)
-  const overtime = String(b.overtime ?? '').toLowerCase() === 'all' ? 'All' : Number(b.overtime) > 0 && Number(b.overtime) <= 600 ? String(Math.round(Number(b.overtime))) : ''
-  const length = overtime && Number(b.length) > 0 && Number(b.length) <= 720 ? Math.round(Number(b.length)) : null
+  const otRaw = String(b.overtime ?? '').trim()
+  const otPct = /^(\d+(?:\.\d+)?)\s*%$/.exec(otRaw)
+  // New: a percentage share ("50%"). Older clients sent minutes; still accepted for back-compat.
+  const overtime = otRaw.toLowerCase() === 'all' ? 'All'
+    : otPct ? `${Math.min(100, Math.round(Number(otPct[1])))}%`
+      : Number(otRaw) > 0 && Number(otRaw) <= 600 ? String(Math.round(Number(otRaw))) : ''
+  const length = overtime && !otPct && Number(b.length) > 0 && Number(b.length) <= 720 ? Math.round(Number(b.length)) : null
   const existing = b.id ? await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
   if (b.id && !existing) throw new HttpError(404, 'That appointment was not found.')
   const given = b.amount !== undefined && b.amount !== null && b.amount !== ''

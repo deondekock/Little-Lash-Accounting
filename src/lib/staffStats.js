@@ -5,6 +5,7 @@
 import { businessMonth, monthRange, shiftMonth } from './format.js'
 import { clientFlow, clientKey, daysBetween, WEEKDAYS } from './stats.js'
 import { splitServices, serviceKey } from './services.js'
+import { overtimeShare } from './payroll.js'
 
 const addDays = (date, n) => {
   const d = new Date(date + 'T12:00:00')
@@ -28,11 +29,7 @@ export function monthProgress(appts, startDay, today) {
   for (const a of cur) perDay[weekday(a.date)]++
   const top = Math.max(...perDay)
   const open = [prev, month]
-  let overtime = 0
-  for (const a of cur) {
-    if (a.overtime === 'all') overtime += a.length || 0
-    else if (a.overtime) overtime += Number(a.overtime) || 0
-  }
+  const overtimeAppts = cur.filter((a) => overtimeShare(a) > 0).length
   return {
     month,
     count: cur.length,
@@ -41,7 +38,7 @@ export function monthProgress(appts, startDay, today) {
     daysWorked: new Set(cur.map((a) => a.date)).size,
     busiest: top ? WEEKDAYS[perDay.indexOf(top)] : '',
     unpaid: appts.filter((a) => open.includes(a.month) && a.status === 'Unpaid').length,
-    overtimeMinutes: overtime,
+    overtimeAppts,
   }
 }
 

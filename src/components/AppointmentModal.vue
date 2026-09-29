@@ -6,8 +6,8 @@ import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { watch } from 'vue'
-import { all, serviceCatalog } from '../store.js'
-import { OVERTIME_CHOICES, LENGTH_CHOICES, minutesLabel, overtimeShare } from '../lib/payroll.js'
+import { serviceCatalog } from '../store.js'
+import { OVERTIME_PCT_CHOICES, overtimeShare } from '../lib/payroll.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
 import { METHODS, businessMonth, monthRange, todayStr, fmt } from '../lib/format.js'
@@ -64,20 +64,17 @@ watch(() => [form.service, form.employeeId], ([svc, emp]) => {
   else if (!prices.length) form.amount = ''
 })
 
-/* Overtime: how much of the appointment was after hours, and how long it took in total. */
-const partial = computed(() => typeof form.overtime === 'number' && form.overtime > 0)
-/** How long this service usually takes (from earlier appointments where it was noted). */
-function usualLength() {
-  const key = serviceKey(form.service || '')
-  const seen = all.value.filter((a) => a.length && serviceKey(a.service) === key).map((a) => a.length).sort((a, b) => a - b)
-  return seen.length ? seen[Math.floor(seen.length / 2)] : 0
-}
-function setOvertime(v) {
-  form.overtime = v
-  if (typeof v === 'number' && v > 0 && !(form.length >= v)) form.length = Math.max(usualLength(), v, 60)
-}
-const lengthOptions = computed(() => [...new Set([...LENGTH_CHOICES, Number(form.length) || 0])].filter((m) => m && m >= (partial.value ? form.overtime : 0)).sort((a, b) => a - b))
-const otPct = computed(() => Math.round(overtimeShare({ overtime: form.overtime, length: Number(form.length) }) * 100))
+/* Overtime: the share of the appointment that fell after hours, as a percentage. */
+const otPct = computed({
+  get: () => Math.round(overtimeShare(form) * 100),
+  set: (p) => {
+    p = Math.max(0, Math.min(100, Math.round(Number(p) || 0)))
+    form.length = 0 // the percentage model doesn't use minutes
+    form.overtime = p <= 0 ? 0 : p >= 100 ? 'all' : `${p}%`
+  },
+})
+const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
+const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
@@ -162,22 +159,19 @@ async function remove() {
         </div>
       </div>
       <div class="field">
-        <label>Done in overtime?</label>
-        <div class="chips inline" role="group" aria-label="Done in overtime">
+        <label>How much was in overtime?</label>
+        <div class="chips inline" role="group" aria-label="Overtime share">
           <button
-            v-for="o in OVERTIME_CHOICES" :key="o.value" type="button" class="chip small"
-            :class="{ active: form.overtime === o.value || (!form.overtime && !o.value) }" :aria-pressed="form.overtime === o.value"
-            @click="setOvertime(o.value)"
+            v-for="o in OVERTIME_PCT_CHOICES" :key="o.label" type="button" class="chip small"
+            :class="{ active: otActive(o.value) }" :aria-pressed="otActive(o.value)" @click="setOt(o.value)"
           >
             {{ o.label }}
           </button>
         </div>
-        <div v-if="partial" class="ot-length">
-          <label for="f-length">of an appointment that took</label>
-          <select id="f-length" v-model.number="form.length">
-            <option v-for="m in lengthOptions" :key="m" :value="m">{{ minutesLabel(m) }}</option>
-          </select>
-          <span class="field-hint" style="margin: 0">→ {{ otPct }}% counts as overtime</span>
+        <div class="ot-length">
+          <label for="f-otpct">or exactly</label>
+          <input id="f-otpct" v-model.number="otPct" type="number" inputmode="numeric" min="0" max="100" style="max-width: 84px">
+          <span class="field-hint" style="margin: 0">% of the appointment</span>
         </div>
       </div>
       <div class="field">

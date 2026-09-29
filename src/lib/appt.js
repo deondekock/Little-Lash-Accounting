@@ -8,8 +8,11 @@ import { statusOf, WRITTEN_OFF } from './schema.js'
 const clean = (v) => (v === null || v === undefined ? '' : String(v).trim())
 
 export function overtimeValue(v) {
-  if (String(v ?? '').trim().toLowerCase() === 'all') return 'all'
-  const n = Number(v)
+  const s = String(v ?? '').trim()
+  if (s.toLowerCase() === 'all') return 'all'
+  const pct = /^(\d+(?:\.\d+)?)\s*%$/.exec(s) // new: share of the appointment (e.g. "50%")
+  if (pct) return `${Math.min(100, Math.round(Number(pct[1])))}%`
+  const n = Number(s) // older: minutes of overtime
   return n > 0 ? n : 0
 }
 

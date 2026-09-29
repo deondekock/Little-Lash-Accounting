@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { all, state, setView, openReview } from '../../store.js'
 import { monthLabel, shortDate, todayStr } from '../../lib/format.js'
-import { minutesLabel } from '../../lib/payroll.js'
 import { monthProgress, loyalty, serviceMix, milestones } from '../../lib/staffStats.js'
 import { clients } from '../../store.js'
 import RebookCard from '../RebookCard.vue'
@@ -40,7 +39,7 @@ const plural = (n, w) => `${n.toLocaleString('en-ZA')} ${w}${n === 1 ? '' : 's'}
         </div>
         <div><b>{{ p.daysWorked }}</b><span>days worked</span><small v-if="p.busiest">busiest: {{ p.busiest }}</small></div>
         <div><b>{{ p.unpaid }}</b><span>still unpaid</span><small>{{ p.unpaid ? 'follow up 💌' : 'all paid ✓' }}</small></div>
-        <div><b>{{ p.overtimeMinutes ? minutesLabel(p.overtimeMinutes) : '0 h' }}</b><span>overtime</span><small>this month</small></div>
+        <div><b>{{ p.overtimeAppts || 0 }}</b><span>in overtime</span><small>appointments</small></div>
       </div>
     </section>
 

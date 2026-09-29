@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import Sparkline from './charts/Sparkline.vue'
 import ClientContact from './ClientContact.vue'
@@ -13,6 +13,11 @@ const since = computed(() => new Date(c.value.first).toLocaleDateString('en-ZA',
 
 // Spend per visit, oldest → newest (last 12 visits) for the little trend line.
 const trend = computed(() => c.value.history.slice(0, 12).reverse().map((v) => v.amount))
+
+// The visit history, optionally narrowed to just the unpaid ones.
+const histFilter = ref('all')
+const unpaidCount = computed(() => c.value.history.filter((v) => v.status === 'Unpaid').length)
+const historyList = computed(() => (histFilter.value === 'unpaid' ? c.value.history.filter((v) => v.status === 'Unpaid') : c.value.history))
 
 function book() {
   const lastVisit = c.value.history[0]
@@ -44,9 +49,15 @@ function book() {
     </div>
     <div v-if="c.unpaid" class="delta down" style="margin-bottom: 12px">Owes {{ fmt(c.unpaid) }}</div>
 
-    <div style="font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 4px">History</div>
+    <div class="hist-head">
+      <div style="font-size: 12px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .1em">History</div>
+      <div v-if="unpaidCount" class="chips inline">
+        <button type="button" class="chip small" :class="{ active: histFilter === 'all' }" @click="histFilter = 'all'">All</button>
+        <button type="button" class="chip small" :class="{ active: histFilter === 'unpaid' }" @click="histFilter = 'unpaid'">Unpaid · {{ unpaidCount }}</button>
+      </div>
+    </div>
     <div class="list">
-      <button v-for="v in c.history.slice(0, 40)" :key="v.id" class="list-row" @click="closeModal(); openAppointment(v)">
+      <button v-for="v in historyList.slice(0, 40)" :key="v.id" class="list-row" @click="closeModal(); openAppointment(v)">
         <i class="swatch-dot" :style="{ background: employeeColor(v.employeeId) }" />
         <div class="grow">
           <div class="title" style="font-weight: 600">{{ dayLabel(v.date) }} {{ v.date.slice(0, 4) }}</div>
@@ -58,7 +69,8 @@ function book() {
         </div>
       </button>
     </div>
-    <p v-if="c.history.length > 40" style="text-align: center; color: var(--muted); font-size: 12.5px">+ {{ c.history.length - 40 }} older visits</p>
+    <p v-if="historyList.length > 40" style="text-align: center; color: var(--muted); font-size: 12.5px">+ {{ historyList.length - 40 }} older visits</p>
+    <p v-else-if="!historyList.length" class="empty" style="padding: 12px">No unpaid visits 🎉</p>
 
     <div class="modal-actions">
       <button class="btn ghost" @click="closeModal">Close</button>

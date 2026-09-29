@@ -583,6 +583,7 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 
 /* client sheet */
 .client-figs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+.hist-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
 .client-figs > div { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
 .client-figs .l { font-size: 11.5px; color: var(--muted); font-weight: 600; }
 .client-figs .v { font-weight: 600; }
