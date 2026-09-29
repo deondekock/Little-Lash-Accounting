@@ -443,7 +443,7 @@ async function staffClientPhone(db, me, b) {
   const now = new Date().toISOString()
   const rec = { id: key, name, phone, created_at: existing?.created_at || now, updated_at: now, updated_by: me.actor || me.email }
   await db.batch([
-    db.prepare(`INSERT INTO client_info (${cols('client_info')}) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+    db.prepare(`INSERT INTO client_info (id, name, phone, created_at, updated_at, updated_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
       ON CONFLICT(id) DO UPDATE SET name = excluded.name, phone = excluded.phone, updated_at = excluded.updated_at, updated_by = excluded.updated_by`)
       .bind(rec.id, rec.name, rec.phone, rec.created_at, rec.updated_at, rec.updated_by),
     logEntry(db, me, 'clients', `${me.name} ${phone ? `saved ${name}'s cell number` : `removed ${name}'s cell number`}`, { cinfo: { [key]: existing || null } }),

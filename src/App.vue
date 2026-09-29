@@ -40,6 +40,7 @@ import AppointmentModal from './components/AppointmentModal.vue'
 import EmployeeModal from './components/EmployeeModal.vue'
 import ClientModal from './components/ClientModal.vue'
 import PaymentModal from './components/PaymentModal.vue'
+import DismissQuietModal from './components/DismissQuietModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import MonthPicker from './components/MonthPicker.vue'
 import MergeModal from './components/MergeModal.vue'
@@ -151,6 +152,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   <EmployeeModal v-if="state.modal?.type === 'employee'" :employee="state.modal.data" />
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <PaymentModal v-if="state.modal?.type === 'payment'" :client="state.modal.data" />
+  <DismissQuietModal v-if="state.modal?.type === 'dismissQuiet'" :client="state.modal.data" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
   <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
   <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />

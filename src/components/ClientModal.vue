@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
 import Sparkline from './charts/Sparkline.vue'
 import ClientContact from './ClientContact.vue'
-import { closeModal, openAppointment, employeeById, employeeColor, openMerge, openPayment } from '../store.js'
+import { closeModal, openAppointment, employeeById, employeeColor, openMerge, openPayment, openDismissQuiet } from '../store.js'
 import { fmt, fmt0, dayLabel, shortDate } from '../lib/format.js'
 
 const props = defineProps({ client: { type: Object, required: true } })
@@ -37,7 +37,9 @@ function book() {
     <div class="client-tools">
       <button class="btn small ghost" @click="openMerge(c, { mode: 'rename' })">Rename</button>
       <button class="btn small ghost" @click="openMerge(c)">Merge with…</button>
+      <button v-if="c.quiet || c.dismissedQuiet" class="btn small ghost" @click="openDismissQuiet(c)">{{ c.dismissedQuiet ? 'On win-back list…' : 'Dismiss from win-back' }}</button>
     </div>
+    <p v-if="c.dismissedQuiet" class="muted-note" style="margin: -4px 0 12px">Off the win-back list<template v-if="c.quietNote"> · {{ c.quietNote }}</template></p>
     <div class="client-figs">
       <div><div class="l">Visits</div><div class="v">{{ c.visits }}</div></div>
       <div><div class="l">Spent</div><div class="v">{{ fmt0(c.spend) }}</div></div>

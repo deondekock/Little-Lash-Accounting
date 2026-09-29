@@ -168,7 +168,7 @@ const toPayslip = (r) => ({
   net: Number(r.net) || 0, details: parse(r.details, null), updatedAt: clean(r.updated_at), rec: r,
 })
 
-const toClientInfo = (r) => ({ id: r.id, name: clean(r.name), phone: clean(r.phone), rec: r })
+const toClientInfo = (r) => ({ id: r.id, name: clean(r.name), phone: clean(r.phone), quietNote: r.quiet_note ?? null, dismissedQuiet: r.quiet_note != null, rec: r })
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
 function toPayment(r) {
@@ -331,7 +331,7 @@ export function getInitialData() {
   return {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
-    clientPhones: clientPhones(), clientStats: db.clientStats, clientDays: db.clientDays,
+    clientPhones: clientPhones(), clientQuiet: clientQuiet(), clientStats: db.clientStats, clientDays: db.clientDays,
   }
 }
 
@@ -429,7 +429,8 @@ export async function renameClients(ids, name, summary) {
   if (moving.length) {
     const now = new Date().toISOString()
     const phone = target?.phone || moving.find((c) => c.phone)?.phone || ''
-    extra.put.client_info = [{ id: to, name, phone, created_at: target?.rec.created_at || now, updated_at: now, updated_by: user || null }]
+    const quietNote = target?.rec.quiet_note ?? moving.find((c) => c.rec.quiet_note != null)?.rec.quiet_note ?? null
+    extra.put.client_info = [{ id: to, name, phone, created_at: target?.rec.created_at || now, updated_at: now, updated_by: user || null, quiet_note: quietNote }]
     extra.del.client_info = moving.map((c) => c.id)
     extra.before.cinfo = Object.fromEntries([[to, target?.rec || null], ...moving.map((c) => [c.id, c.rec])])
   }
@@ -449,10 +450,28 @@ export async function saveClientPhone(client, phone) {
     const rec = await request('/api/staff/client-phone', { method: 'POST', body: { client: name, phone: cell } })
     applyLocal({ client_info: [rec] })
   } else {
-    const rec = { id: key, name, phone: cell, created_at: existing?.rec.created_at || now, updated_at: now, updated_by: user || null }
+    const rec = { id: key, name, phone: cell, created_at: existing?.rec.created_at || now, updated_at: now, updated_by: user || null, quiet_note: existing?.rec.quiet_note ?? null }
     await commit('clients', cell ? `Saved ${name}'s cell number` : `Removed ${name}'s cell number`, { put: { client_info: [rec] }, before: { cinfo: { [key]: existing?.rec || null } } })
   }
   return clientPhones()
+}
+
+/** { clientKey: reason } for clients dismissed from the "gone quiet" list. */
+const clientQuiet = () => Object.fromEntries(db.clientInfo.filter((c) => c.dismissedQuiet).map((c) => [c.id, c.quietNote || '']))
+
+/** Dismiss a client from the win-back list (note = why), or clear the dismissal (note = null). */
+export async function setQuietDismissed(key, name, note) {
+  key = clientKey(name || key)
+  const existing = db.clientInfo.find((c) => c.id === key)
+  const now = new Date().toISOString()
+  const rec = {
+    id: key, name: clean(name) || existing?.name || key, phone: existing?.phone || '',
+    created_at: existing?.rec.created_at || now, updated_at: now, updated_by: user || null,
+    quiet_note: note == null ? null : String(note).slice(0, 200),
+  }
+  await commit('clients', note == null ? `Back on the win-back list: ${rec.name}` : `Dismissed ${rec.name} from win-back`,
+    { put: { client_info: [rec] }, before: { cinfo: { [key]: existing?.rec || null } } })
+  return clientQuiet()
 }
 
 /**

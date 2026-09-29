@@ -10,8 +10,9 @@ export const TABLES = {
   leave: ['id', 'employee_id', 'employee_name', 'type', 'from_date', 'to_date', 'hours', 'notes', 'created_at', 'updated_at', 'status'],
   payslips: ['id', 'employee_id', 'employee_name', 'month', 'pay_date', 'gross', 'paye', 'uif', 'deductions', 'net', 'details',
     'created_at', 'updated_at'],
-  // Clients' cell numbers; id = the client's name key (clientKey in stats.js).
-  client_info: ['id', 'name', 'phone', 'created_at', 'updated_at', 'updated_by'],
+  // Clients' cell numbers; id = the client's name key (clientKey in stats.js). quiet_note, when set,
+  // dismisses the client from the "gone quiet" win-back list (the note says why).
+  client_info: ['id', 'name', 'phone', 'created_at', 'updated_at', 'updated_by', 'quiet_note'],
   // Payments toward an appointment (partial settlements, split tenders, voucher redemptions).
   payments: ['id', 'appointment_id', 'date', 'amount', 'method', 'voucher_id', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by'],
 }

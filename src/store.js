@@ -55,6 +55,7 @@ export const state = reactive({
   printing: null, // payslips being printed / saved as PDF
   printingReport: null, // a report being printed / saved as PDF
   clientPhones: {}, // { clientKey: cell number }
+  clientQuiet: {}, // { clientKey: reason } — clients dismissed from the win-back list
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
   clientDays: null, // staff: her clients' visit days at the whole salon { key: [dates…] }
 })
@@ -85,15 +86,23 @@ export const employeeColor = (id) => {
 export const clients = computed(() => {
   const list = buildClients(all.value)
   const stats = state.clientStats
-  if (!stats) return list
-  const today = todayStr()
-  return list.map((c) => {
-    const s = stats[c.key]
-    if (!s) return c
-    const [visits, last] = s
-    const since = daysBetween(last, today)
-    const status = followUp(visits, c.usualGap, since)
-    return { ...c, salonVisits: visits, salonLast: last, due: status === 'due', quiet: status === 'quiet', milestone: nextMilestone(visits) }
+  const quiet = state.clientQuiet
+  const withStats = !stats ? list : (() => {
+    const today = todayStr()
+    return list.map((c) => {
+      const s = stats[c.key]
+      if (!s) return c
+      const [visits, last] = s
+      const since = daysBetween(last, today)
+      const status = followUp(visits, c.usualGap, since)
+      return { ...c, salonVisits: visits, salonLast: last, due: status === 'due', quiet: status === 'quiet', milestone: nextMilestone(visits) }
+    })
+  })()
+  // A client dismissed from win-back drops off the "gone quiet" list (the note says why).
+  return withStats.map((c) => {
+    const note = quiet[c.key]
+    if (note === undefined) return c
+    return { ...c, dismissedQuiet: true, quietNote: note, quiet: false }
   })
 })
 
@@ -437,6 +446,7 @@ function applyData(data) {
   state.payslips = data.payslips || []
   state.company = data.company || {}
   state.clientPhones = data.clientPhones || {}
+  state.clientQuiet = data.clientQuiet || {}
   state.clientStats = data.clientStats || null
   state.clientDays = data.clientDays || null
 }
@@ -783,6 +793,12 @@ export const openAppointment = (appt, prefill = null) =>
 export const openEmployee = (emp) => (state.modal = { type: 'employee', data: emp ? { ...emp } : null })
 export const openClient = (client) => (state.modal = { type: 'client', data: client })
 export const openPayment = (client) => (state.modal = { type: 'payment', data: client })
+export const openDismissQuiet = (client) => (state.modal = { type: 'dismissQuiet', data: client })
+
+/** Dismiss a client from the win-back list with an optional reason, or put them back (note = null). */
+export async function dismissQuiet(client, note) {
+  state.clientQuiet = await api('setQuietDismissed', client.key, client.name, note)
+}
 
 /** Record money a client paid (partial and/or split across methods). Returns what's still owed. */
 export async function recordPayment(key, payload) {

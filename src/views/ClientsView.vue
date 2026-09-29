@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
-import { all, state, clients, employeeColor, openClient, openAppointment, openMerge } from '../store.js'
+import { all, state, clients, employeeColor, openClient, openAppointment, openMerge, openDismissQuiet } from '../store.js'
 import { findDuplicates, ordinal } from '../lib/stats.js'
 import WaButton from '../components/WaButton.vue'
 import { fmt, fmt0, initials, shortDate } from '../lib/format.js'
@@ -112,6 +112,7 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
               <div class="meta" :class="{ orange: state.clientFilter === 'owing' && !query }">{{ state.clientFilter === 'owing' && !query ? 'owes' : shortDate(c.last) }}</div>
             </div>
           </button>
+          <button v-if="!query && state.clientFilter === 'quiet'" class="icon-btn" aria-label="Not a lost client — dismiss from win-back" title="Dismiss from win-back" @click.stop="openDismissQuiet(c)">✕</button>
           <WaButton v-if="!query && ['due', 'quiet', 'owing'].includes(state.clientFilter)" :client="c" :kind="{ due: 'refill', quiet: 'quiet', owing: 'owed' }[state.clientFilter]" />
         </div>
       </div>
