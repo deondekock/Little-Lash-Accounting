@@ -46,7 +46,8 @@
  * Owners can choose a morning summary (Settings → Notifications): daily (yesterday's takings, unpaid, who
  * is off today, leave waiting) or weekly on Mondays (last week against the week before), at 07:00.
  *
- * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days).
+ * Every night a copy of the whole database goes into the BACKUPS KV store (kept 35 days), then the live
+ * history table is trimmed to today's changes (undo is same-day; older history stays in the backups).
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING, MILESTONES } from '../../src/lib/schema.js'
@@ -120,12 +121,16 @@ export default {
     }
   },
 
-  /** 03:00: nightly backup of everything into KV. 07:00: the owners' morning summaries. */
+  /** 03:00: nightly backup of everything into KV, then trim history to today. 07:00: the owners' morning summaries. */
   async scheduled(event, env) {
     if (event.cron === SUMMARY_CRON) return sendSummaries(env)
     const day = new Date().toISOString().slice(0, 10)
     const body = await loadAll(env.DB, { withHistory: true })
     await env.BACKUPS.put(`backup/${day}`, body, { expirationTtl: 35 * 86400 })
+    // Keep the live history table to today's changes only (undo is same-day). The full history was just
+    // saved in the backup above, kept 35 days, so nothing is truly lost. Cutoff = start of today, SA time.
+    const cutoff = new Date(Date.parse(saToday() + 'T00:00:00Z') - 2 * 3600e3).toISOString()
+    await env.DB.prepare('DELETE FROM history WHERE time < ?1').bind(cutoff).run()
   },
 }
 
