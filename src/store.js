@@ -440,9 +440,35 @@ function applyData(data) {
   state.clientDays = data.clientDays || null
 }
 
+// The newest data change we've loaded (from /api/rev). Used to skip full reloads when nothing changed.
+let lastRev = null
+async function markRev() {
+  try { lastRev = (await call('dataRev')).rev } catch { lastRev = null }
+}
+
 async function loadAll() {
   all.value = await api('getAppointments', '')
   state.selected.clear()
+  await markRev()
+}
+
+/**
+ * Coming back to the app: ask the server (one tiny indexed row) whether anything changed, and only do a
+ * full reload when it has. Keeps the data fresh across devices without re-reading the whole database each
+ * time the tab regains focus.
+ */
+export async function maybeRefresh() {
+  if (state.phase !== 'ready' || state.modal) return
+  try {
+    const { rev } = await call('dataRev')
+    if (lastRev !== null && rev === lastRev) {
+      state.loadedAt = Date.now()
+      return
+    }
+  } catch {
+    // Probe failed — fall through to a normal refresh, which surfaces any real error.
+  }
+  await refresh()
 }
 
 export function changeMonth(month) {

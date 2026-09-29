@@ -47,7 +47,7 @@ import HistoryModal from './components/HistoryModal.vue'
 import SignInScreen from './components/SignInScreen.vue'
 import SheetPicker from './components/SheetPicker.vue'
 import Icon from './components/Icon.vue'
-import { state, init, setView, refresh, useDifferentSheet, openSettings, openHistory, signOut, exitViewAs } from './store.js'
+import { state, init, setView, refresh, maybeRefresh, useDifferentSheet, openSettings, openHistory, signOut, exitViewAs } from './store.js'
 import { BACKEND } from './config.js'
 import { newVersionAvailable, updateApp } from './lib/update.js'
 
@@ -76,7 +76,8 @@ async function onVisible() {
   if (document.visibilityState === 'hidden') return state.locked || markSeen()
   if (shouldLock() && state.phase === 'ready') state.locked = true
   if (!state.modal && (await newVersionAvailable())) return updateApp()
-  if (state.phase === 'ready' && Date.now() - state.loadedAt > 2 * 60_000) refresh()
+  // Been away a bit? Ask the server (one tiny row) if anything changed, and only reload the data if so.
+  if (state.phase === 'ready' && Date.now() - state.loadedAt > 2 * 60_000) maybeRefresh()
 }
 onMounted(() => {
   init()

@@ -331,6 +331,9 @@ export function getAppointments(period) {
   return db.appts.filter((a) => a.month.startsWith(period)).map(publicAppt)
 }
 
+/** A tiny change probe: the newest data-change time on the server (one indexed row). */
+export const dataRev = () => request('/api/rev')
+
 /* ---------------- appointments ---------------- */
 
 function validateAppointment(input) {

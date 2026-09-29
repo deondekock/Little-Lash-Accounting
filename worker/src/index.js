@@ -88,6 +88,8 @@ export default {
       if (route === 'GET /api/me') return json(JSON.stringify(me), cors)
       if (url.pathname.startsWith('/api/notify')) return json(await notifyRoute(env, me, route, request), cors)
       if (url.pathname.startsWith('/api/pin')) return json(await pinRoute(env.DB, me, route, request), cors)
+      // A tiny "did anything change?" probe (one indexed row), so the app can skip a full reload when nothing has.
+      if (route === 'GET /api/rev') return json(await dataRev(env.DB), cors)
       if (me.role === 'staff') {
         if (route === 'GET /api/staff/load') return json(await staffLoad(env.DB, me), cors)
         if (route === 'POST /api/staff/leave') return json(await staffLeave(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
@@ -243,8 +245,13 @@ const arraysOf = (table, where = '') =>
 
 /** Everything as one JSON string: { employees: [[…]], appointments: [[…]], …, settings: [[k, v]] }. */
 async function loadAll(db, { withHistory = false } = {}) {
-  // Appointments come per year so no single result gets too big.
-  const years = (await db.prepare('SELECT DISTINCT substr(month, 1, 4) AS y FROM appointments ORDER BY y').all()).results.map((r) => r.y)
+  // Appointments come per year so no single result gets too big. The year range comes from the month
+  // index (MIN/MAX read a row each) rather than scanning every appointment just to list the years.
+  const span = await db.prepare('SELECT MIN(month) AS lo, MAX(month) AS hi FROM appointments').first()
+  const years = []
+  if (span?.lo && span?.hi) {
+    for (let y = Number(span.lo.slice(0, 4)); y <= Number(span.hi.slice(0, 4)); y++) years.push(String(y))
+  }
   const small = ['employees', 'services', 'leave', 'payslips', 'client_info']
   const stmts = [
     ...small.map((t) => db.prepare(arraysOf(t))),
@@ -259,6 +266,16 @@ async function loadAll(db, { withHistory = false } = {}) {
   let body = '{' + small.map((t, i) => `"${t}":${out[i]}`).join(',') + `,"settings":${out[small.length]},"appointments":[${appts}]`
   if (withHistory) body += `,"history":${out[out.length - 1]}`
   return body + '}'
+}
+
+/**
+ * The newest history time — a cheap change signal. Every data change (owner or staff) writes a history
+ * row, and history(time) is indexed, so this reads a single row. The app compares it with what it last
+ * loaded and only does a full reload when it differs.
+ */
+async function dataRev(db) {
+  const r = await db.prepare('SELECT time FROM history ORDER BY time DESC LIMIT 1').first()
+  return JSON.stringify({ rev: r?.time || '' })
 }
 
 async function history(db, since) {
