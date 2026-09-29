@@ -51,7 +51,7 @@ const bookFor = (c) => openMyAppointment(null, { client: c.name, service: c.serv
 
     <p v-if="filter === 'quiet'" class="muted-note">Regulars who haven't been back to the salon in over twice their usual time.</p>
     <p v-if="filter === 'milestones'" class="muted-note">Their next visit is a milestone (10th, 25th, 50th…). Maybe plan a little treat 💕</p>
-    <div v-if="list.length" class="card" style="padding: 4px 0">
+    <div v-if="list.length" class="card" style="padding: 4px 16px">
       <template v-for="c in list.slice(0, shown)" :key="c.key">
         <button class="list-row" :aria-expanded="open === c.key" @click="open = open === c.key ? '' : c.key">
           <div class="grow">

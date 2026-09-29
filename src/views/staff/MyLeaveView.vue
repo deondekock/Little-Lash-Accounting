@@ -52,7 +52,7 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
 
     <template v-if="waiting.length">
       <h4 class="section-label">Waiting for approval</h4>
-      <div class="list card" style="padding: 4px 0">
+      <div class="list card" style="padding: 4px 16px">
         <button v-for="l in waiting" :key="l.id" class="list-row" @click="openMyLeave(l)">
           <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
           <div class="grow"><div class="title">{{ l.type }} · {{ range(l) }}</div><div class="meta">{{ l.hours }} h{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
@@ -62,7 +62,7 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
     </template>
 
     <h4 class="section-label">Coming up</h4>
-    <div v-if="upcoming.length" class="list card" style="padding: 4px 0">
+    <div v-if="upcoming.length" class="list card" style="padding: 4px 16px">
       <div v-for="l in upcoming" :key="l.id" class="list-row">
         <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
         <div class="grow"><div class="title">{{ l.type }} · {{ range(l) }}</div><div class="meta">{{ l.hours }} h{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
@@ -72,7 +72,7 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
     <div v-else class="card empty" style="padding: 18px">No leave coming up.</div>
 
     <h4 class="section-label">Public holidays coming up</h4>
-    <div class="list card" style="padding: 4px 0">
+    <div class="list card" style="padding: 4px 16px">
       <div v-for="h in holidays" :key="h.date" class="list-row">
         <div class="history-icon">🇿🇦</div>
         <div class="grow"><div class="title">{{ h.name }}</div><div class="meta">{{ weekday(h.date) }} {{ shortDate(h.date) }} {{ h.date.slice(0, 4) }}</div></div>
@@ -81,7 +81,7 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
 
     <template v-if="past.length">
       <h4 class="section-label">Taken</h4>
-      <div class="list card" style="padding: 4px 0">
+      <div class="list card" style="padding: 4px 16px">
         <div v-for="l in past.slice(0, 30)" :key="l.id" class="list-row">
           <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
           <div class="grow"><div class="title">{{ l.type }} · {{ range(l) }} {{ l.from.slice(0, 4) }}</div><div class="meta">{{ l.hours }} h</div></div>

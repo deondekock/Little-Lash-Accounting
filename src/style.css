@@ -501,10 +501,12 @@ a.btn { text-decoration: none; }
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 12px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; letter-spacing: .06em; text-transform: uppercase; }
 .field input, .field select, .field textarea {
-  width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card-2); font-size: 16px; color: var(--ink);
+  width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--card-2); font-size: 16px; color: var(--ink);
 }
+/* iOS gives date/number inputs an intrinsic width that overflows a grid cell; keep them in their column. */
+.field input[type=date], .field input[type=number] { -webkit-appearance: none; appearance: none; }
 .field input:focus, .field select:focus, .field textarea:focus { outline: 2px solid var(--brand-soft); border-color: var(--brand); }
-.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .seg { display: flex; gap: 8px; }
 .seg button { flex: 1; padding: 12px 8px; border-radius: 10px; border: 1px solid var(--line); background: var(--card-2); font-weight: 500; color: var(--ink-2); }
 .seg button.active { background: var(--rose); color: #3b2b2b; border-color: var(--rose); }

@@ -60,7 +60,7 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
     </button>
     <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
 
-    <div v-if="list.length" class="card" style="padding: 4px 0">
+    <div v-if="list.length" class="card" style="padding: 4px 16px">
       <button v-for="(a, i) in list" :key="a.id" class="list-row" @click="openMyAppointment(a)">
         <div class="appt-num">{{ i + 1 }}</div>
         <div class="grow">

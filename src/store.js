@@ -6,6 +6,7 @@ import { call, backend } from './api.js'
 import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween, clientKey } from './lib/stats.js'
 import { salonDays } from './lib/rebook.js'
+import { isIos } from './lib/push.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -655,19 +656,43 @@ export const openMove = () => (state.modal = { type: 'move', data: null })
 export const openExport = () => (state.modal = { type: 'export', data: null })
 
 /** Prints payslips (the phone's print screen also saves them as a PDF). */
+/**
+ * Print / save-as-PDF the hidden `.print-root` document. On iPhone (especially the installed app)
+ * window.print() silently does nothing, so there we render the document into an iframe that carries the
+ * page's styles and print that instead — Safari then shows Print / Save to PDF / share. Android and
+ * desktop keep the normal window.print(), so nothing changes for them.
+ */
+function printPrintRoot(cleanup) {
+  const root = document.querySelector('.print-root')
+  if (isIos() && root) {
+    const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')].map((n) => n.outerHTML).join('')
+    const html = root.outerHTML
+    cleanup() // the document is captured; the app can drop the on-screen copy now
+    const frame = document.createElement('iframe')
+    frame.setAttribute('aria-hidden', 'true')
+    frame.style.cssText = 'position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0; opacity: 0;'
+    document.body.appendChild(frame)
+    const doc = frame.contentWindow.document
+    doc.open()
+    doc.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${styles}<style>.print-root{display:block!important}</style></head><body>${html}</body></html>`)
+    doc.close()
+    frame.contentWindow.addEventListener('afterprint', () => frame.remove())
+    // Give the stylesheet and logo a moment to load, then print.
+    setTimeout(() => { try { frame.contentWindow.focus(); frame.contentWindow.print() } catch { frame.remove() } }, 600)
+    return
+  }
+  const done = () => { cleanup(); window.removeEventListener('afterprint', done) }
+  window.addEventListener('afterprint', done)
+  window.print()
+}
+
 export async function printPayslips(slips) {
   const title = document.title
   const first = slips[0]
   document.title = slips.length === 1 ? `Payslip ${first.name} ${monthLabel(first.month)}` : `Payslips ${monthLabel(first.month)}`
   state.printing = slips
   await nextTick()
-  const done = () => {
-    state.printing = null
-    document.title = title
-    window.removeEventListener('afterprint', done)
-  }
-  window.addEventListener('afterprint', done)
-  window.print()
+  printPrintRoot(() => { state.printing = null; document.title = title })
 }
 
 /** Prints a report (month-end pack, tax year) — the phone's print screen also saves it as a PDF. */
@@ -676,13 +701,7 @@ export async function printReport(report) {
   document.title = report.fileName || report.title
   state.printingReport = report
   await nextTick()
-  const done = () => {
-    state.printingReport = null
-    document.title = title
-    window.removeEventListener('afterprint', done)
-  }
-  window.addEventListener('afterprint', done)
-  window.print()
+  printPrintRoot(() => { state.printingReport = null; document.title = title })
 }
 export const openPriceCalc = (focus = '') => (state.modal = { type: 'priceCalc', data: { focus } })
 export const openInvoice = (client) => (state.modal = { type: 'invoice', data: { key: client.key } })
