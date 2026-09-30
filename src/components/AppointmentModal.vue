@@ -84,10 +84,14 @@ const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 const vouchers = liveVouchers
 const split = ref(false)
 const tenders = reactive([]) // typed lines: { amount, method, voucherId }
+// An edited visit that already has payment rows opens with them loaded, so the owner can change them.
+const hadTenders = editing && !!props.appt.tenders?.length
+if (hadTenders) {
+  split.value = true
+  for (const t of props.appt.tenders) tenders.push({ amount: t.amount, method: t.method, voucherId: t.voucherId || '' })
+}
 const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
-// Split / part-payment is offered on any visit that has no payment rows yet (a new one, or a single-method one).
-const canSplit = computed(() => !(props.appt?.tenders?.length))
-const splitOn = computed(() => split.value && canSplit.value)
+const splitOn = computed(() => split.value)
 const amountNum = computed(() => Math.round((Number(form.amount) || 0) * 100) / 100)
 const paidNum = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
 const owing = computed(() => Math.round((amountNum.value - paidNum.value) * 100) / 100)
@@ -130,8 +134,12 @@ async function submit() {
   saving.value = true
   try {
     const payload = { ...form }
-    // Money actually taken now (may be a part-payment). The Paid/Unpaid status stays under her control.
-    if (splitOn.value && paidNum.value > 0.005) payload.tenders = tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
+    // Money actually taken (may be a part-payment); the Paid/Unpaid status stays under her control.
+    // Editing a visit that had payment rows replaces them outright — even down to none.
+    if (splitOn.value || hadTenders) {
+      payload.tenders = splitOn.value ? tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId })) : []
+      payload.replaceTenders = true
+    }
     const saved = await saveAppointment(payload)
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
@@ -212,12 +220,9 @@ async function remove() {
       </div>
       <div class="field">
         <label>Paid with</label>
-        <div v-if="editing && appt.tenders && appt.tenders.length" class="field-hint" style="margin: 0">
-          {{ appt.tenders.map((p) => `${fmt(p.amount)} ${p.method}`).join(' + ') }}<template v-if="appt.tenders.length > 1"> (split)</template>
-        </div>
-        <template v-else-if="!splitOn">
+        <template v-if="!splitOn">
           <SegmentedControl v-model="form.method" :options="METHODS" />
-          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
+          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
         </template>
         <template v-else>
           <template v-for="(l, i) in tenders" :key="i">

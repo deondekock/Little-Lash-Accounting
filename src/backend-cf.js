@@ -373,7 +373,7 @@ function validateAppointment(input) {
  * Payment tenders for a visit → validated { amount, method, voucherId } lines. Their sum is the money
  * taken now; it may be less than the amount (a deposit — the rest stays owing) but never more.
  */
-function normalizeTenders(raw, amount) {
+function normalizeTenders(raw, amount, restore = null) {
   const tenders = (raw || [])
     .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method), voucherId: clean(l.voucherId) || null }))
     .filter((l) => l.amount > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
@@ -385,7 +385,9 @@ function normalizeTenders(raw, amount) {
   for (const [vid, used] of use) {
     const vch = db.vouchers.find((x) => x.id === vid && x.status !== 'void')
     if (!vch) throw new Error('That voucher could not be found.')
-    if (used > vch.balance + 0.005) throw new Error(`That voucher only has ${fmt0(vch.balance)} left.`)
+    // On an edit, the draw this visit already made against the voucher is freed up before re-charging it.
+    const avail = round2(vch.balance + (restore?.get(vid) || 0))
+    if (used > avail + 0.005) throw new Error(`That voucher only has ${fmt0(avail)} left.`)
   }
   return tenders
 }
@@ -396,10 +398,20 @@ export async function saveAppointment(input) {
   const existing = input.id ? db.appts.find((a) => a.id === input.id) : null
   if (input.id && !existing) throw new Error('This appointment was deleted on another phone.')
   const id = existing?.id || uuid()
-  // Payment lines (split, and/or a part-payment) on a visit that has no payment rows yet (a new visit,
-  // or an existing single-method one being re-tendered). Visits that already have tenders keep them.
-  const tenders = !existing?.tenders?.length && input.tenders?.length ? normalizeTenders(input.tenders, v.amount) : []
-  const method = tenders.length ? (tenders.length > 1 ? 'Split' : tenders[0].method) : v.method
+  // Payment rows. On a new visit they come from the split editor; on an edit the owner can replace the
+  // existing rows outright (replaceTenders). Voucher tenders draw a voucher down, so the visit's old
+  // draw is freed up before its new one is charged. A plain single-method visit keeps no payment rows.
+  const existingTenders = existing?.tenders || []
+  const oldUse = new Map()
+  for (const t of existingTenders) if (t.method === 'Voucher' && t.voucherId) oldUse.set(t.voucherId, round2((oldUse.get(t.voucherId) || 0) + t.amount))
+  const replace = input.replaceTenders === true
+  const tenders = replace
+    ? normalizeTenders(input.tenders || [], v.amount, oldUse)
+    : (!existingTenders.length && input.tenders?.length ? normalizeTenders(input.tenders, v.amount) : null)
+
+  const method = tenders && tenders.length
+    ? (tenders.length > 1 ? 'Split' : tenders[0].method)
+    : (!replace && existingTenders.length ? existing.method : v.method)
   const appt = {
     ...v, method, id,
     month: existing && existing.date === v.date ? existing.month : businessMonth(v.date, db.startDay),
@@ -407,18 +419,29 @@ export async function saveAppointment(input) {
   }
   const rec = apptRec(appt, existing?.rec.created_at || now, now)
   const put = { appointments: [rec] }
+  const del = {}
   const before = { appts: { [id]: existing ? existing.rec : null } }
-  if (tenders.length) {
+  // Replacing the visit's payment rows: drop the old ones first (so undo can put them back).
+  if (replace && existingTenders.length) {
+    del.payments = existingTenders.map((t) => t.id)
+    before.pmts = Object.fromEntries(existingTenders.map((t) => [t.id, t.rec]))
+  }
+  if (tenders && tenders.length) {
     put.payments = tenders.map((tn) => ({ id: uuid(), appointment_id: id, date: appt.date, amount: tn.amount, method: tn.method, voucher_id: tn.method === 'Voucher' ? tn.voucherId : null, note: '', created_at: now, updated_at: now, created_by: user || null, updated_by: user || null }))
-    before.pmts = Object.fromEntries(put.payments.map((r) => [r.id, null]))
-    const use = new Map()
-    for (const tn of tenders) if (tn.method === 'Voucher') use.set(tn.voucherId, round2((use.get(tn.voucherId) || 0) + tn.amount))
-    if (use.size) {
+    before.pmts = { ...(before.pmts || {}), ...Object.fromEntries(put.payments.map((r) => [r.id, null])) }
+  }
+  // Voucher balances: hand back the visit's old draw, then take its new draw.
+  if (tenders !== null) {
+    const newUse = new Map()
+    for (const tn of tenders) if (tn.method === 'Voucher') newUse.set(tn.voucherId, round2((newUse.get(tn.voucherId) || 0) + tn.amount))
+    const affected = new Set([...oldUse.keys(), ...newUse.keys()])
+    if (affected.size) {
       put.vouchers = []
       before.vchr = {}
-      for (const [vid, used] of use) {
+      for (const vid of affected) {
         const vch = db.vouchers.find((x) => x.id === vid)
-        const balance = round2(vch.balance - used)
+        if (!vch) continue
+        const balance = round2(vch.balance + (oldUse.get(vid) || 0) - (newUse.get(vid) || 0))
         before.vchr[vid] = vch.rec
         put.vouchers.push({ ...vch.rec, balance, status: balance <= 0.005 ? 'redeemed' : 'active', updated_at: now, updated_by: user || null })
       }
@@ -426,7 +449,7 @@ export async function saveAppointment(input) {
   }
   const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
   await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : 'Added'} ${label}`,
-    { put, before, expect: existing ? expectOf('appointments', [existing]) : undefined })
+    { put, del, before, expect: existing ? expectOf('appointments', [existing]) : undefined })
   attachPayments()
   return publicAppt(db.appts.find((a) => a.id === id))
 }
