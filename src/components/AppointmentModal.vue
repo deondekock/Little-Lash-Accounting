@@ -93,9 +93,11 @@ const paidNum = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l
 const owing = computed(() => Math.round((amountNum.value - paidNum.value) * 100) / 100)
 const overPaid = computed(() => owing.value < -0.005)
 function addMethod() {
+  // First tap opens split with a single line (seeded with the method already chosen); each further tap adds one more.
   if (!split.value) {
     split.value = true
     tenders.splice(0, tenders.length, { amount: '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
+    return
   }
   const used = new Set(tenders.map((l) => l.method))
   tenders.push({ amount: '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash', voucherId: '' })
@@ -218,7 +220,7 @@ async function remove() {
         </div>
         <template v-else-if="!splitOn">
           <SegmentedControl v-model="form.method" :options="METHODS" />
-          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add another payment method</button>
+          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
         </template>
         <template v-else>
           <template v-for="(l, i) in tenders" :key="i">
@@ -231,7 +233,7 @@ async function remove() {
               <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
             </select>
           </template>
-          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add another payment method</button>
+          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
           <div class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
             <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
             <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
