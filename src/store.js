@@ -665,53 +665,53 @@ export const openMyLeave = (leave) => (state.modal = { type: 'myLeave', data: le
 export const openMove = () => (state.modal = { type: 'move', data: null })
 export const openExport = () => (state.modal = { type: 'export', data: null })
 
-/** Prints payslips (the phone's print screen also saves them as a PDF). */
 /**
- * Print / save-as-PDF the hidden `.print-root` document. On iPhone (especially the installed app)
- * window.print() silently does nothing, so there we render the document into an iframe that carries the
- * page's styles and print that instead — Safari then shows Print / Save to PDF / share. Android and
- * desktop keep the normal window.print(), so nothing changes for them.
+ * Printing / save-as-PDF. On a computer or Android, window.print() prints the hidden .print-root (the
+ * rest of the page is hidden by @media print). On iPhone that silently fails — worse, calling it after
+ * an await loses the tap, so nothing happens — so there we open the document in a new Safari tab where
+ * Print / Save to PDF / Save to Files work. The tab must be opened *inside the tap* (before any await),
+ * so callers open it first with openPrintWindow() and hand it in.
  */
-function printPrintRoot(cleanup) {
+export const openPrintWindow = () => (isIos() && typeof window !== 'undefined' ? window.open('', '_blank') : null)
+
+const NEW_TAB_STYLE = '<style>.print-root{display:block!important}body{margin:0;padding:16px;background:#fff}'
+  + '.print-bar{position:sticky;top:0;display:flex;gap:10px;justify-content:flex-end;padding:8px 0 12px;background:#fff}'
+  + '.print-bar button{font:600 15px system-ui,sans-serif;background:#a0555c;color:#fff;border:0;border-radius:10px;padding:12px 18px}'
+  + '@media print{.print-bar{display:none}}</style>'
+
+function finishPrint(win, cleanup) {
   const root = document.querySelector('.print-root')
-  if (isIos() && root) {
+  if (win && root) {
     const styles = [...document.querySelectorAll('style, link[rel="stylesheet"]')].map((n) => n.outerHTML).join('')
-    const html = root.outerHTML
-    cleanup() // the document is captured; the app can drop the on-screen copy now
-    const frame = document.createElement('iframe')
-    frame.setAttribute('aria-hidden', 'true')
-    frame.style.cssText = 'position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0; opacity: 0;'
-    document.body.appendChild(frame)
-    const doc = frame.contentWindow.document
-    doc.open()
-    doc.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">${styles}<style>.print-root{display:block!important}</style></head><body>${html}</body></html>`)
-    doc.close()
-    frame.contentWindow.addEventListener('afterprint', () => frame.remove())
-    // Give the stylesheet and logo a moment to load, then print.
-    setTimeout(() => { try { frame.contentWindow.focus(); frame.contentWindow.print() } catch { frame.remove() } }, 600)
+    win.document.open()
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="${location.origin}/"><title>${document.title}</title>${styles}${NEW_TAB_STYLE}</head><body><div class="print-bar"><button type="button" onclick="window.print()">Save as PDF / Print</button></div>${root.outerHTML}</body></html>`)
+    win.document.close()
+    cleanup()
     return
   }
+  if (win) win.close() // iPhone but the payslip wasn't ready — fall back to the normal print below
   const done = () => { cleanup(); window.removeEventListener('afterprint', done) }
   window.addEventListener('afterprint', done)
   window.print()
 }
 
-export async function printPayslips(slips) {
+/** Prints payslips (the phone's print screen also saves them as a PDF). Pass `win` from openPrintWindow(). */
+export async function printPayslips(slips, win = openPrintWindow()) {
   const title = document.title
   const first = slips[0]
   document.title = slips.length === 1 ? `Payslip ${first.name} ${monthLabel(first.month)}` : `Payslips ${monthLabel(first.month)}`
   state.printing = slips
   await nextTick()
-  printPrintRoot(() => { state.printing = null; document.title = title })
+  finishPrint(win, () => { state.printing = null; document.title = title })
 }
 
 /** Prints a report (month-end pack, tax year) — the phone's print screen also saves it as a PDF. */
-export async function printReport(report) {
+export async function printReport(report, win = openPrintWindow()) {
   const title = document.title
   document.title = report.fileName || report.title
   state.printingReport = report
   await nextTick()
-  printPrintRoot(() => { state.printingReport = null; document.title = title })
+  finishPrint(win, () => { state.printingReport = null; document.title = title })
 }
 export const openPriceCalc = (focus = '') => (state.modal = { type: 'priceCalc', data: { focus } })
 export const openInvoice = (client) => (state.modal = { type: 'invoice', data: { key: client.key } })

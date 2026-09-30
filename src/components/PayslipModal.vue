@@ -1,7 +1,7 @@
 <script setup>
 import { computed, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
-import { all, state, closeModal, savePayslip, deletePayslip, printPayslips, openEmployee, toastUndo, fail } from '../store.js'
+import { all, state, closeModal, savePayslip, deletePayslip, printPayslips, openPrintWindow, openEmployee, toastUndo, fail } from '../store.js'
 import { fmt, monthLabel, monthRange, shortDate } from '../lib/format.js'
 import { draftPayslip, leaveText, taxYearLabel } from '../lib/payroll.js'
 
@@ -45,13 +45,16 @@ function snapshot() {
 }
 
 async function save(andPrint = false) {
+  // On iPhone the print tab must be opened inside this tap, before the save's await, or it's blocked.
+  const win = andPrint ? openPrintWindow() : null
   saving.value = true
   try {
     const saved = await savePayslip(snapshot())
     toastUndo(existing.value ? 'Payslip updated' : 'Payslip saved')
-    if (andPrint) printPayslips([saved.details])
+    if (andPrint) printPayslips([saved.details], win)
     closeModal()
   } catch (err) {
+    if (win) win.close()
     fail(err)
   } finally {
     saving.value = false
