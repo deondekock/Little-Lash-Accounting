@@ -77,40 +77,48 @@ const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
 const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 
 /*
- * Paying: a single method, or a split across methods / a voucher. Each line is the money actually taken
- * for that method. The Amount above stays the full charge, so the lines may add up to LESS than it — the
- * rest is left owing (a deposit) — but never more.
+ * Paying: one or more lines, each the money actually taken for that method. The first line opens by
+ * default and carries the full amount; splitting means typing less on it and adding another line, which
+ * pre-fills with whatever is still left. Lines may add up to LESS than the amount (a deposit — the rest
+ * stays owing) but never more. Whether they become payment rows is decided on save (see submit).
  */
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
 const vouchers = liveVouchers
-const split = ref(false)
-const tenders = reactive([]) // typed lines: { amount, method, voucherId }
-// An edited visit that already has payment rows opens with them loaded, so the owner can change them.
+const tenders = reactive([]) // lines: { amount, method, voucherId }
+// An edited visit with payment rows opens with them loaded; anything else opens one line for the amount.
 const hadTenders = editing && !!props.appt.tenders?.length
+const paymentsTouched = ref(false)
+// While untouched, the first line tracks the Amount field (so picking a service keeps it in step).
+const mirrorFirst = ref(!hadTenders)
 if (hadTenders) {
-  split.value = true
   for (const t of props.appt.tenders) tenders.push({ amount: t.amount, method: t.method, voucherId: t.voucherId || '' })
+} else {
+  tenders.push({ amount: form.amount === '' ? '' : r2(form.amount), method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
 }
 const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
-const splitOn = computed(() => split.value)
-const amountNum = computed(() => Math.round((Number(form.amount) || 0) * 100) / 100)
-const paidNum = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
-const owing = computed(() => Math.round((amountNum.value - paidNum.value) * 100) / 100)
+const amountNum = computed(() => r2(form.amount))
+const paidNum = computed(() => r2(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0)))
+const owing = computed(() => r2(amountNum.value - paidNum.value))
 const overPaid = computed(() => owing.value < -0.005)
+watch(() => form.amount, (a) => { if (mirrorFirst.value && tenders.length === 1) tenders[0].amount = a === '' ? '' : r2(a) })
+// Editing an amount or splitting stops the first line from tracking the Amount; changing a method doesn't.
+function editAmount() { mirrorFirst.value = false; paymentsTouched.value = true }
 function addMethod() {
-  // First tap opens split with a single line (seeded with the method already chosen); each further tap adds one more.
-  if (!split.value) {
-    split.value = true
-    tenders.splice(0, tenders.length, { amount: '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
-    return
-  }
+  editAmount()
+  const rest = Math.max(0, r2(amountNum.value - paidNum.value))
   const used = new Set(tenders.map((l) => l.method))
-  tenders.push({ amount: '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash', voucherId: '' })
+  tenders.push({ amount: rest || '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash', voucherId: '' })
 }
 function removeTender(i) {
+  if (i === 0) return // the first line always stays
+  mirrorFirst.value = false
+  paymentsTouched.value = true
   tenders.splice(i, 1)
-  if (!tenders.length) split.value = false // last row removed → back to the single-method picker
 }
-function onTenderMethod(l) { if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = '' }
+function onTenderMethod(l) {
+  paymentsTouched.value = true
+  if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = ''
+}
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
@@ -130,16 +138,26 @@ function onPick(c) {
 
 async function submit() {
   servicePicker.value?.commit()
-  if (splitOn.value && overPaid.value) return fail(new Error('The payments add up to more than the amount.'))
+  if (overPaid.value) return fail(new Error('The payments add up to more than the amount.'))
   saving.value = true
   try {
     const payload = { ...form }
-    // Money actually taken (may be a part-payment); the Paid/Unpaid status stays under her control.
-    // Editing a visit that had payment rows replaces them outright — even down to none.
-    if (splitOn.value || hadTenders) {
-      payload.tenders = splitOn.value ? tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId })) : []
+    const rows = tenders
+      .map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
+      .filter((l) => (Number(l.amount) || 0) > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
+    const paid = r2(rows.reduce((s, l) => s + (Number(l.amount) || 0), 0))
+    const partial = paid > 0.005 && paid < amountNum.value - 0.005
+    const isSplit = rows.length > 1
+    const hasVoucher = rows.some((l) => l.method === 'Voucher')
+    // A plain single method paying the whole amount needs no payment row (the status already says it all).
+    // Record rows only for a split, a voucher, or a part-payment — and only when money was actually taken.
+    const record = paid > 0.005 && (isSplit || hasVoucher || partial) && (form.status === 'Paid' || partial)
+    // Only rewrite payment rows when the owner actually touched them (untouched edits leave rows as they were).
+    if (paymentsTouched.value) {
       payload.replaceTenders = true
+      payload.tenders = record ? rows : []
     }
+    if (!record && rows[0] && METHODS.includes(rows[0].method)) payload.method = rows[0].method
     const saved = await saveAppointment(payload)
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
@@ -220,28 +238,22 @@ async function remove() {
       </div>
       <div class="field">
         <label>Paid with</label>
-        <template v-if="!splitOn">
-          <SegmentedControl v-model="form.method" :options="METHODS" />
-          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
-        </template>
-        <template v-else>
-          <template v-for="(l, i) in tenders" :key="i">
-            <div class="pay-line">
-              <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
-              <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
-              <button type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
-            </div>
-            <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
-              <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
-            </select>
-          </template>
-          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
-          <div class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
-            <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
-            <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
-            <template v-else>Paid in full</template>
+        <template v-for="(l, i) in tenders" :key="i">
+          <div class="pay-line">
+            <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount" @input="editAmount">
+            <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
+            <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
           </div>
+          <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
+            <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
+          </select>
         </template>
+        <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
+        <div v-if="tenders.length > 1 || owing > 0.005 || overPaid" class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
+          <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
+          <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
+          <template v-else>Paid in full</template>
+        </div>
       </div>
       <div class="field">
         <label>Status</label>
