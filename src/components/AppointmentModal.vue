@@ -77,21 +77,22 @@ const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
 const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 
 /*
- * Paying: a single method, or a split across methods / a voucher. The first line auto-carries whatever
- * the other lines don't cover, so adding a second method is one tap and only the extra amount is typed.
+ * Paying: a single method, or a split across methods / a voucher. Each line is the money actually taken
+ * for that method. The Amount above stays the full charge, so the lines may add up to LESS than it — the
+ * rest is left owing (a deposit) — but never more.
  */
 const vouchers = liveVouchers
 const split = ref(false)
-const tenders = reactive([]) // [ primary {method, voucherId}, extra {amount, method, voucherId}… ]
+const tenders = reactive([]) // typed lines: { amount, method, voucherId }
 const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
-// Split is offered on any visit that has no payment rows yet (a new one, or a single-method paid one).
+// Split / part-payment is offered on any visit that has no payment rows yet (a new one, or a single-method one).
 const canSplit = computed(() => !(props.appt?.tenders?.length))
-const splitOn = computed(() => split.value && form.status === 'Paid' && canSplit.value)
-const othersTotal = computed(() => Math.round(tenders.slice(1).reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
-const primaryAmount = computed(() => Math.round(((Number(form.amount) || 0) - othersTotal.value) * 100) / 100)
-const splitBad = computed(() => primaryAmount.value < -0.005)
+const splitOn = computed(() => split.value && canSplit.value)
+const amountNum = computed(() => Math.round((Number(form.amount) || 0) * 100) / 100)
+const paidNum = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
+const owing = computed(() => Math.round((amountNum.value - paidNum.value) * 100) / 100)
+const overPaid = computed(() => owing.value < -0.005)
 function addMethod() {
-  form.status = 'Paid' // paying it now
   if (!split.value) {
     split.value = true
     tenders.splice(0, tenders.length, { amount: '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
@@ -104,7 +105,6 @@ function removeTender(i) {
   if (tenders.length <= 1) { if (tenders[0]) form.method = tenders[0].method; split.value = false }
 }
 function onTenderMethod(l) { if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = '' }
-watch(() => form.status, (s) => { if (s !== 'Paid') split.value = false })
 
 const employeeOptions = computed(() => state.employees.filter((e) => e.active || e.id === form.employeeId))
 
@@ -124,11 +124,15 @@ function onPick(c) {
 
 async function submit() {
   servicePicker.value?.commit()
-  if (splitOn.value && splitBad.value) return fail(new Error('The extra payments add up to more than the amount.'))
+  if (splitOn.value && overPaid.value) return fail(new Error('The payments add up to more than the amount.'))
   saving.value = true
   try {
     const payload = { ...form }
-    if (splitOn.value) payload.tenders = tenders.map((l, i) => ({ amount: i === 0 ? primaryAmount.value : l.amount, method: l.method, voucherId: l.voucherId }))
+    if (splitOn.value && paidNum.value > 0.005) {
+      payload.tenders = tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
+      // Fully covered → Paid; a partial deposit leaves it Unpaid with the rest owing.
+      payload.status = owing.value > 0.005 ? 'Unpaid' : 'Paid'
+    }
     const saved = await saveAppointment(payload)
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
@@ -219,8 +223,7 @@ async function remove() {
         <template v-else>
           <template v-for="(l, i) in tenders" :key="i">
             <div class="pay-line">
-              <div v-if="i === 0" class="pay-primary" :class="{ orange: splitBad }" title="the rest">{{ fmt(primaryAmount) }}</div>
-              <input v-else v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
+              <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
               <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
               <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
             </div>
@@ -229,12 +232,22 @@ async function remove() {
             </select>
           </template>
           <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add another payment method</button>
+          <div class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
+            <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
+            <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
+            <template v-else>Paid in full</template>
+          </div>
         </template>
       </div>
       <div class="field">
         <label>Status</label>
-        <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
-        <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
+        <div v-if="splitOn && paidNum > 0.005" class="field-hint" style="margin: 0">
+          {{ owing > 0.005 ? `Partly paid — ${fmt(owing)} still owing` : 'Paid in full' }}
+        </div>
+        <template v-else>
+          <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
+          <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
+        </template>
       </div>
       <div class="field">
         <label for="f-notes">Notes (optional)</label>

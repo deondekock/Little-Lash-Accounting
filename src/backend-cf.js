@@ -369,14 +369,17 @@ function validateAppointment(input) {
   }
 }
 
-/** Split tenders for a fully-paid visit → validated { amount, method, voucherId } lines summing to the amount. */
+/**
+ * Payment tenders for a visit → validated { amount, method, voucherId } lines. Their sum is the money
+ * taken now; it may be less than the amount (a deposit — the rest stays owing) but never more.
+ */
 function normalizeTenders(raw, amount) {
   const tenders = (raw || [])
     .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method), voucherId: clean(l.voucherId) || null }))
     .filter((l) => l.amount > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
   if (!tenders.length) return []
   const sum = round2(tenders.reduce((s, t) => s + t.amount, 0))
-  if (Math.abs(sum - amount) > 0.05) throw new Error(`The split (${fmt0(sum)}) must add up to the amount (${fmt0(amount)}).`)
+  if (sum > amount + 0.05) throw new Error(`The payments (${fmt0(sum)}) are more than the amount (${fmt0(amount)}).`)
   const use = new Map()
   for (const t of tenders) if (t.method === 'Voucher') use.set(t.voucherId, round2((use.get(t.voucherId) || 0) + t.amount))
   for (const [vid, used] of use) {
@@ -393,9 +396,9 @@ export async function saveAppointment(input) {
   const existing = input.id ? db.appts.find((a) => a.id === input.id) : null
   if (input.id && !existing) throw new Error('This appointment was deleted on another phone.')
   const id = existing?.id || uuid()
-  // Split payment: on a fully-paid visit that has no payment rows yet (a new visit, or an existing
-  // single-method one being re-tendered). Visits that already have tenders keep them (edited elsewhere).
-  const tenders = !existing?.tenders?.length && v.status === 'Paid' ? normalizeTenders(input.tenders, v.amount) : []
+  // Payment lines (split, and/or a part-payment) on a visit that has no payment rows yet (a new visit,
+  // or an existing single-method one being re-tendered). Visits that already have tenders keep them.
+  const tenders = !existing?.tenders?.length && input.tenders?.length ? normalizeTenders(input.tenders, v.amount) : []
   const method = tenders.length ? (tenders.length > 1 ? 'Split' : tenders[0].method) : v.method
   const appt = {
     ...v, method, id,
