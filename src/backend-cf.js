@@ -358,7 +358,10 @@ function validateAppointment(input) {
   if (!employee) throw new Error('Please choose an employee.')
   const amount = Math.round(parseFloat(String(input.amount).replace(',', '.')) * 100) / 100
   if (!Number.isFinite(amount) || amount < 0) throw new Error('Please enter a valid amount.')
-  if (!METHODS.includes(input.method)) throw new Error('Please choose Cash, Card or EFT.')
+  // 'Split' / 'Voucher' are valid stored methods for visits paid across tenders (kept as-is on edit).
+  if (!input.tenders?.length && !METHODS.includes(input.method) && input.method !== 'Split' && input.method !== 'Voucher') {
+    throw new Error('Please choose Cash, Card or EFT.')
+  }
   return {
     date, employeeId: employee.id, employeeName: employee.name, client: clean(input.client), service: clean(input.service), amount,
     method: input.method, status: statusOf(input.status), notes: clean(input.notes),
@@ -366,26 +369,66 @@ function validateAppointment(input) {
   }
 }
 
+/** Split tenders for a fully-paid visit → validated { amount, method, voucherId } lines summing to the amount. */
+function normalizeTenders(raw, amount) {
+  const tenders = (raw || [])
+    .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method), voucherId: clean(l.voucherId) || null }))
+    .filter((l) => l.amount > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
+  if (!tenders.length) return []
+  const sum = round2(tenders.reduce((s, t) => s + t.amount, 0))
+  if (Math.abs(sum - amount) > 0.05) throw new Error(`The split (${fmt0(sum)}) must add up to the amount (${fmt0(amount)}).`)
+  const use = new Map()
+  for (const t of tenders) if (t.method === 'Voucher') use.set(t.voucherId, round2((use.get(t.voucherId) || 0) + t.amount))
+  for (const [vid, used] of use) {
+    const vch = db.vouchers.find((x) => x.id === vid && x.status !== 'void')
+    if (!vch) throw new Error('That voucher could not be found.')
+    if (used > vch.balance + 0.005) throw new Error(`That voucher only has ${fmt0(vch.balance)} left.`)
+  }
+  return tenders
+}
+
 export async function saveAppointment(input) {
   const v = validateAppointment(input)
   const now = new Date().toISOString()
   const existing = input.id ? db.appts.find((a) => a.id === input.id) : null
   if (input.id && !existing) throw new Error('This appointment was deleted on another phone.')
+  const id = existing?.id || uuid()
+  // Split payment: only when adding a new, fully-paid visit (cash + card, a voucher, etc.).
+  const tenders = !existing && v.status === 'Paid' ? normalizeTenders(input.tenders, v.amount) : []
+  const method = tenders.length ? (tenders.length > 1 ? 'Split' : tenders[0].method) : v.method
   const appt = {
-    ...v,
-    id: existing?.id || uuid(),
+    ...v, method, id,
     month: existing && existing.date === v.date ? existing.month : businessMonth(v.date, db.startDay),
     paidOn: v.status === 'Paid' ? (existing?.status === 'Paid' && existing.paidOn) || todayStr() : '',
   }
-  const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
   const rec = apptRec(appt, existing?.rec.created_at || now, now)
-  await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : 'Added'} ${label}`, {
-    put: { appointments: [rec] },
-    before: { appts: { [appt.id]: existing ? existing.rec : null } },
-    expect: existing ? expectOf('appointments', [existing]) : undefined,
-  })
-  return publicAppt(db.appts.find((a) => a.id === appt.id))
+  const put = { appointments: [rec] }
+  const before = { appts: { [id]: existing ? existing.rec : null } }
+  if (tenders.length) {
+    put.payments = tenders.map((tn) => ({ id: uuid(), appointment_id: id, date: appt.date, amount: tn.amount, method: tn.method, voucher_id: tn.method === 'Voucher' ? tn.voucherId : null, note: '', created_at: now, updated_at: now, created_by: user || null, updated_by: user || null }))
+    before.pmts = Object.fromEntries(put.payments.map((r) => [r.id, null]))
+    const use = new Map()
+    for (const tn of tenders) if (tn.method === 'Voucher') use.set(tn.voucherId, round2((use.get(tn.voucherId) || 0) + tn.amount))
+    if (use.size) {
+      put.vouchers = []
+      before.vchr = {}
+      for (const [vid, used] of use) {
+        const vch = db.vouchers.find((x) => x.id === vid)
+        const balance = round2(vch.balance - used)
+        before.vchr[vid] = vch.rec
+        put.vouchers.push({ ...vch.rec, balance, status: balance <= 0.005 ? 'redeemed' : 'active', updated_at: now, updated_by: user || null })
+      }
+    }
+  }
+  const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
+  await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : 'Added'} ${label}`,
+    { put, before, expect: existing ? expectOf('appointments', [existing]) : undefined })
+  attachPayments()
+  return publicAppt(db.appts.find((a) => a.id === id))
 }
+
+/** The current vouchers (after a split payment drew some down). */
+export const currentVouchers = () => db.vouchers.map(strip)
 
 /** Changes several appointments at once; `change(a)` edits a copy. Returns the new public objects. */
 async function changeAppts(items, change, action, summary, extra = null) {

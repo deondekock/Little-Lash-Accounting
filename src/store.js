@@ -532,6 +532,7 @@ function upsertAppts(list) {
 export async function saveAppointment(data) {
   const saved = await api('saveAppointment', data)
   upsertAppts([saved])
+  if (data.tenders?.some?.((t) => t.method === 'Voucher')) state.vouchers = await api('currentVouchers')
   if (saved.month !== state.month) changeMonth(saved.month)
   return saved
 }
