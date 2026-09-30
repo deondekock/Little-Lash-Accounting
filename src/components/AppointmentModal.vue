@@ -85,6 +85,7 @@ const splitOn = computed(() => split.value && form.status === 'Paid' && !editing
 const tenderTotal = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
 const tenderRemaining = computed(() => Math.round(((Number(form.amount) || 0) - tenderTotal.value) * 100) / 100)
 function startSplit() {
+  form.status = 'Paid' // a split means it's being paid now
   split.value = true
   tenders.splice(0, tenders.length, { amount: form.amount || '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
 }
@@ -196,7 +197,7 @@ async function remove() {
       </div>
       <div class="field">
         <label>Paid with
-          <button v-if="!editing && form.status === 'Paid'" type="button" class="link-btn" style="margin-left: 6px" @click="split ? (split = false) : startSplit()">{{ splitOn ? 'one payment' : 'split payment' }}</button>
+          <button v-if="!editing" type="button" class="link-btn" style="margin-left: 6px" @click="split ? (split = false) : startSplit()">{{ splitOn ? 'one payment' : 'split payment' }}</button>
         </label>
         <div v-if="editing && appt.tenders && appt.tenders.length" class="field-hint" style="margin: 0">
           {{ appt.tenders.map((p) => `${fmt(p.amount)} ${p.method}`).join(' + ') }}<template v-if="appt.tenders.length > 1"> (split)</template>
