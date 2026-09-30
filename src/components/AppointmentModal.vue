@@ -76,23 +76,33 @@ const otPct = computed({
 const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
 const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 
-/* Split payment: a new, fully-paid visit tendered across methods (cash + card) or a voucher. */
+/*
+ * Paying: a single method, or a split across methods / a voucher. The first line auto-carries whatever
+ * the other lines don't cover, so adding a second method is one tap and only the extra amount is typed.
+ */
 const vouchers = liveVouchers
 const split = ref(false)
-const tenders = reactive([{ amount: '', method: 'Card', voucherId: '' }])
+const tenders = reactive([]) // [ primary {method, voucherId}, extra {amount, method, voucherId}… ]
 const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
 // Split is offered on any visit that has no payment rows yet (a new one, or a single-method paid one).
 const canSplit = computed(() => !(props.appt?.tenders?.length))
 const splitOn = computed(() => split.value && form.status === 'Paid' && canSplit.value)
-const tenderTotal = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
-const tenderRemaining = computed(() => Math.round(((Number(form.amount) || 0) - tenderTotal.value) * 100) / 100)
-function startSplit() {
-  form.status = 'Paid' // a split means it's being paid now
-  split.value = true
-  tenders.splice(0, tenders.length, { amount: form.amount || '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
+const othersTotal = computed(() => Math.round(tenders.slice(1).reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
+const primaryAmount = computed(() => Math.round(((Number(form.amount) || 0) - othersTotal.value) * 100) / 100)
+const splitBad = computed(() => primaryAmount.value < -0.005)
+function addMethod() {
+  form.status = 'Paid' // paying it now
+  if (!split.value) {
+    split.value = true
+    tenders.splice(0, tenders.length, { amount: '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' })
+  }
+  const used = new Set(tenders.map((l) => l.method))
+  tenders.push({ amount: '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash', voucherId: '' })
 }
-const addTender = () => tenders.push({ amount: tenderRemaining.value > 0 ? tenderRemaining.value : '', method: tenders.some((l) => l.method === 'EFT') ? 'Card' : 'EFT', voucherId: '' })
-const removeTender = (i) => { tenders.splice(i, 1); if (!tenders.length) tenders.push({ amount: '', method: 'Card', voucherId: '' }) }
+function removeTender(i) {
+  tenders.splice(i, 1)
+  if (tenders.length <= 1) { if (tenders[0]) form.method = tenders[0].method; split.value = false }
+}
 function onTenderMethod(l) { if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = '' }
 watch(() => form.status, (s) => { if (s !== 'Paid') split.value = false })
 
@@ -114,11 +124,11 @@ function onPick(c) {
 
 async function submit() {
   servicePicker.value?.commit()
-  if (splitOn.value && Math.abs(tenderRemaining.value) > 0.05) return fail(new Error(`The split must add up to ${fmt(Number(form.amount) || 0)}.`))
+  if (splitOn.value && splitBad.value) return fail(new Error('The extra payments add up to more than the amount.'))
   saving.value = true
   try {
     const payload = { ...form }
-    if (splitOn.value) payload.tenders = tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
+    if (splitOn.value) payload.tenders = tenders.map((l, i) => ({ amount: i === 0 ? primaryAmount.value : l.amount, method: l.method, voucherId: l.voucherId }))
     const saved = await saveAppointment(payload)
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
@@ -204,24 +214,21 @@ async function remove() {
         </div>
         <template v-else-if="!splitOn">
           <SegmentedControl v-model="form.method" :options="METHODS" />
-          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="startSplit">⇄ Split across methods (cash + card…)</button>
+          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add another payment method</button>
         </template>
         <template v-else>
           <template v-for="(l, i) in tenders" :key="i">
             <div class="pay-line">
-              <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
+              <div v-if="i === 0" class="pay-primary" :class="{ orange: splitBad }" title="the rest">{{ fmt(primaryAmount) }}</div>
+              <input v-else v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
               <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
-              <button v-if="tenders.length > 1" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
+              <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
             </div>
             <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
               <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
             </select>
           </template>
-          <div class="report-actions" style="justify-content: space-between; align-items: center">
-            <button type="button" class="btn small ghost" @click="addTender">+ Another method</button>
-            <span class="field-hint" :class="{ orange: Math.abs(tenderRemaining) > 0.05 }" style="margin: 0">{{ tenderRemaining === 0 ? 'adds up ✓' : tenderRemaining > 0 ? `${fmt(tenderRemaining)} left` : `${fmt(-tenderRemaining)} over` }}</span>
-          </div>
-          <button type="button" class="link-btn" style="margin-top: 8px" @click="split = false">← back to one payment</button>
+          <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add another payment method</button>
         </template>
       </div>
       <div class="field">
