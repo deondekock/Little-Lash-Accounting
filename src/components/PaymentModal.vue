@@ -39,6 +39,9 @@ function onMethod(l) {
   }
 }
 
+// Entering an amount field selects what's there, so typing replaces it; tapping again just moves the caret.
+function selectAmount(e) { const el = e.target; requestAnimationFrame(() => { try { el.select() } catch { /* ignore */ } }) }
+
 async function submit() {
   if (!total.value || over.value) return
   // A voucher tender can't draw more than the voucher's balance.
@@ -82,7 +85,7 @@ async function submit() {
         <label>How they paid <button type="button" class="link-btn" style="margin-left: 6px" @click="fillFirst">pay it all</button></label>
         <template v-for="(l, i) in lines" :key="i">
           <div class="pay-line">
-            <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
+            <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount" @focus="selectAmount">
             <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onMethod(l) }" />
             <button v-if="lines.length > 1" type="button" class="icon-btn" aria-label="Remove" @click="removeLine(i)">✕</button>
           </div>

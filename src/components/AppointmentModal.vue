@@ -103,6 +103,8 @@ const overPaid = computed(() => owing.value < -0.005)
 watch(() => form.amount, (a) => { if (mirrorFirst.value && tenders.length === 1) tenders[0].amount = a === '' ? '' : r2(a) })
 // Editing an amount or splitting stops the first line from tracking the Amount; changing a method doesn't.
 function editAmount() { mirrorFirst.value = false; paymentsTouched.value = true }
+// Entering an amount field selects what's there, so typing replaces it; tapping again just moves the caret.
+function selectAmount(e) { const el = e.target; requestAnimationFrame(() => { try { el.select() } catch { /* ignore */ } }) }
 function addMethod() {
   editAmount()
   const rest = Math.max(0, r2(amountNum.value - paidNum.value))
@@ -240,7 +242,7 @@ async function remove() {
         <label>Paid with</label>
         <template v-for="(l, i) in tenders" :key="i">
           <div class="pay-line">
-            <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount" @input="editAmount">
+            <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount" @focus="selectAmount" @input="editAmount">
             <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
             <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
           </div>
