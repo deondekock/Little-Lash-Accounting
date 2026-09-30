@@ -104,7 +104,7 @@ function addMethod() {
 }
 function removeTender(i) {
   tenders.splice(i, 1)
-  if (tenders.length <= 1) { if (tenders[0]) form.method = tenders[0].method; split.value = false }
+  if (!tenders.length) split.value = false // last row removed → back to the single-method picker
 }
 function onTenderMethod(l) { if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = '' }
 
@@ -224,7 +224,7 @@ async function remove() {
             <div class="pay-line">
               <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount">
               <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
-              <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
+              <button type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
             </div>
             <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
               <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
