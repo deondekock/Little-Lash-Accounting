@@ -41,6 +41,7 @@ import EmployeeModal from './components/EmployeeModal.vue'
 import ClientModal from './components/ClientModal.vue'
 import PaymentModal from './components/PaymentModal.vue'
 import DismissQuietModal from './components/DismissQuietModal.vue'
+import VouchersModal from './components/VouchersModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import MonthPicker from './components/MonthPicker.vue'
 import MergeModal from './components/MergeModal.vue'
@@ -153,6 +154,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   <ClientModal v-if="state.modal?.type === 'client'" :client="state.modal.data" />
   <PaymentModal v-if="state.modal?.type === 'payment'" :client="state.modal.data" />
   <DismissQuietModal v-if="state.modal?.type === 'dismissQuiet'" :client="state.modal.data" />
+  <VouchersModal v-if="state.modal?.type === 'vouchers'" />
   <SettingsModal v-if="state.modal?.type === 'settings'" />
   <MyLeaveModal v-if="state.modal?.type === 'myLeave'" :leave="state.modal.data" />
   <MyAppointmentModal v-if="state.modal?.type === 'myAppointment'" :appt="state.modal.data" :prefill="state.modal.prefill" />

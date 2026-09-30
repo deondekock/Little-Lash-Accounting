@@ -56,6 +56,7 @@ export const state = reactive({
   printingReport: null, // a report being printed / saved as PDF
   clientPhones: {}, // { clientKey: cell number }
   clientQuiet: {}, // { clientKey: reason } — clients dismissed from the win-back list
+  vouchers: [], // gift vouchers sold (with remaining balance)
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
   clientDays: null, // staff: her clients' visit days at the whole salon { key: [dates…] }
 })
@@ -447,6 +448,7 @@ function applyData(data) {
   state.company = data.company || {}
   state.clientPhones = data.clientPhones || {}
   state.clientQuiet = data.clientQuiet || {}
+  state.vouchers = data.vouchers || []
   state.clientStats = data.clientStats || null
   state.clientDays = data.clientDays || null
 }
@@ -800,11 +802,25 @@ export async function dismissQuiet(client, note) {
   state.clientQuiet = await api('setQuietDismissed', client.key, client.name, note)
 }
 
-/** Record money a client paid (partial and/or split across methods). Returns what's still owed. */
+/** Record money a client paid (partial and/or split across methods, incl. a voucher). Returns what's owed. */
 export async function recordPayment(key, payload) {
   const res = await api('recordPayment', key, payload)
   if (res.appts?.length) upsertAppts(res.appts)
+  if (res.vouchers) state.vouchers = res.vouchers
   return res
+}
+
+/* ---------------- gift vouchers ---------------- */
+export const openVouchers = () => (state.modal = { type: 'vouchers', data: null })
+/** Vouchers with money still on them, newest first — for the payment picker and the list. */
+export const liveVouchers = computed(() => state.vouchers.filter((v) => v.status === 'active' && v.balance > 0.005).sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)))
+export async function sellVoucher(input) {
+  const v = await api('sellVoucher', input)
+  state.vouchers = [...state.vouchers, v]
+  return v
+}
+export async function voidVoucher(id) {
+  state.vouchers = await api('voidVoucher', id)
 }
 export const openSettings = () => (state.modal = { type: 'settings', data: null })
 export const openHistory = () => {

@@ -7,7 +7,7 @@ import StatCards from '../components/StatCards.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
 import { currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, totals } from '../lib/format.js'
 import { holidayOn } from '../lib/holidays.js'
-import { state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment } from '../store.js'
+import { state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment, openVouchers } from '../store.js'
 
 const monthTotals = computed(() => totals(employeeAppts.value))
 const thisMonth = computed(() => currentMonth(state.monthStartDay))
@@ -56,6 +56,9 @@ const emptyText = computed(() => {
 
     <EmployeeChips />
     <StatCards :t="monthTotals" />
+    <div class="report-actions" style="margin: -4px 0 10px">
+      <button class="btn soft small" @click="openVouchers">🎁 Gift vouchers</button>
+    </div>
 
     <div class="section-label">
       <span>Appointments</span>

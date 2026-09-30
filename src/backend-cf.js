@@ -171,6 +171,11 @@ const toPayslip = (r) => ({
 const toClientInfo = (r) => ({ id: r.id, name: clean(r.name), phone: clean(r.phone), quietNote: r.quiet_note ?? null, dismissedQuiet: r.quiet_note != null, rec: r })
 
 const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
+const toVoucher = (r) => ({
+  id: r.id, code: clean(r.code), amount: Number(r.amount) || 0, balance: Number(r.balance) || 0,
+  buyer: clean(r.buyer), buyerKey: clean(r.buyer_key) || null, soldOn: r.sold_on, method: clean(r.method),
+  status: clean(r.status) || 'active', note: clean(r.note), rec: r,
+})
 function toPayment(r) {
   return { id: r.id, appointmentId: clean(r.appointment_id), date: r.date, amount: Number(r.amount) || 0, method: clean(r.method), voucherId: clean(r.voucher_id) || null, note: clean(r.note), rec: r }
 }
@@ -202,8 +207,8 @@ const publicServices = () => db.services.map(strip).sort((a, b) => a.name.locale
 const publicLeave = () => db.leave.map(strip).sort((a, b) => (a.from < b.from ? 1 : -1))
 const publicPayslips = () => db.payslips.map(strip)
 
-const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', client_info: 'clientInfo', payments: 'payments' }
-const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, client_info: toClientInfo, payments: toPayment }
+const LISTS = { appointments: 'appts', employees: 'employees', services: 'services', leave: 'leave', payslips: 'payslips', client_info: 'clientInfo', payments: 'payments', vouchers: 'vouchers' }
+const MAKE = { appointments: toAppt, employees: toEmployee, services: toService, leave: toLeave, payslips: toPayslip, client_info: toClientInfo, payments: toPayment, vouchers: toVoucher }
 /** { clientKey: cell number } */
 const clientPhones = () => Object.fromEntries(db.clientInfo.filter((c) => c.phone).map((c) => [c.id, c.phone]))
 
@@ -308,6 +313,7 @@ async function load() {
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
   db.payments = (data.payments || []).map((a) => toPayment(fromArray('payments', a)))
+  db.vouchers = (data.vouchers || []).map((a) => toVoucher(fromArray('vouchers', a)))
   attachPayments()
   db.clientStats = null
   db.clientDays = null
@@ -332,6 +338,7 @@ export function getInitialData() {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
     clientPhones: clientPhones(), clientQuiet: clientQuiet(), clientStats: db.clientStats, clientDays: db.clientDays,
+    vouchers: (db.vouchers || []).map(strip),
   }
 }
 
@@ -482,9 +489,17 @@ export async function setQuietDismissed(key, name, note) {
 export async function recordPayment(key, { date, lines }) {
   date = clean(date) || todayStr()
   const tenders = (lines || [])
-    .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method) }))
-    .filter((l) => l.amount > 0 && METHODS.includes(l.method))
+    .map((l) => ({ amount: round2(Number(l.amount) || 0), method: clean(l.method), voucherId: clean(l.voucherId) || null }))
+    .filter((l) => l.amount > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
   if (!tenders.length) throw new Error('Please enter an amount and a payment method.')
+  // Voucher tenders draw down a voucher's balance.
+  const voucherUse = new Map()
+  for (const t of tenders) if (t.method === 'Voucher') voucherUse.set(t.voucherId, round2((voucherUse.get(t.voucherId) || 0) + t.amount))
+  for (const [vid, used] of voucherUse) {
+    const v = db.vouchers.find((x) => x.id === vid && x.status !== 'void')
+    if (!v) throw new Error('That voucher could not be found.')
+    if (used > v.balance + 0.005) throw new Error(`That voucher only has ${fmt0(v.balance)} left.`)
+  }
   const visits = db.appts
     .filter((a) => a.client && clientKey(a.client) === key && a.status !== 'Written off' && (a.outstanding ?? 0) > 0.005)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
@@ -503,13 +518,13 @@ export async function recordPayment(key, { date, lines }) {
       const rem = remaining.get(a.id)
       if (rem <= 0.005) continue
       const use = round2(Math.min(amt, rem))
-      payRows.push({ id: uuid(), appointment_id: a.id, date, amount: use, method: tender.method, voucher_id: null, note: '', created_at: now, updated_at: now, created_by: user || null, updated_by: user || null })
+      payRows.push({ id: uuid(), appointment_id: a.id, date, amount: use, method: tender.method, voucher_id: tender.method === 'Voucher' ? tender.voucherId : null, note: '', created_at: now, updated_at: now, created_by: user || null, updated_by: user || null })
       remaining.set(a.id, round2(rem - use))
       amt = round2(amt - use)
       touched.add(a.id)
     }
   }
-  const before = { appts: {}, pmts: {} }
+  const before = { appts: {}, pmts: {}, vchr: {} }
   const apptPuts = []
   for (const a of visits) {
     if (touched.has(a.id) && remaining.get(a.id) <= 0.005 && a.status !== 'Paid') {
@@ -518,10 +533,46 @@ export async function recordPayment(key, { date, lines }) {
     }
   }
   for (const r of payRows) before.pmts[r.id] = null
+  const voucherPuts = []
+  for (const [vid, used] of voucherUse) {
+    const v = db.vouchers.find((x) => x.id === vid)
+    const balance = round2(v.balance - used)
+    before.vchr[vid] = v.rec
+    voucherPuts.push({ ...v.rec, balance, status: balance <= 0.005 ? 'redeemed' : 'active', updated_at: now, updated_by: user || null })
+  }
   await commit('payment', `${fmt0(total)} from ${visits[0].client} (${payRows.length === 1 ? '1 payment' : payRows.length + ' payments'})`,
-    { put: { payments: payRows, ...(apptPuts.length ? { appointments: apptPuts } : {}) }, before })
+    { put: { payments: payRows, ...(apptPuts.length ? { appointments: apptPuts } : {}), ...(voucherPuts.length ? { vouchers: voucherPuts } : {}) }, before })
   attachPayments()
-  return { appts: visits.map((a) => publicAppt(db.appts.find((x) => x.id === a.id))), owed: round2(Math.max(0, owed - total)) }
+  return { appts: visits.map((a) => publicAppt(db.appts.find((x) => x.id === a.id))), owed: round2(Math.max(0, owed - total)), vouchers: db.vouchers.map(strip) }
+}
+
+/* ---------------- gift vouchers ---------------- */
+
+const voucherCode = () => 'LL-' + Math.random().toString(36).slice(2, 6).toUpperCase()
+const publicVoucher = (id) => strip(db.vouchers.find((v) => v.id === id))
+
+/** Sell a gift voucher — cash in now, redeemable later (possibly by someone else). */
+export async function sellVoucher({ amount, buyer, method, soldOn, code, note }) {
+  amount = round2(Number(amount) || 0)
+  if (!(amount > 0)) throw new Error('Please enter the voucher amount.')
+  const now = new Date().toISOString()
+  const rec = {
+    id: uuid(), code: clean(code) || voucherCode(), amount, balance: amount,
+    buyer: clean(buyer), buyer_key: buyer ? clientKey(buyer) : null, sold_on: clean(soldOn) || todayStr(),
+    method: METHODS.includes(clean(method)) ? clean(method) : 'Cash', status: 'active', note: clean(note),
+    created_at: now, updated_at: now, created_by: user || null, updated_by: user || null,
+  }
+  await commit('voucher', `Sold voucher ${rec.code} · ${fmt0(amount)}${rec.buyer ? ' · ' + rec.buyer : ''}`, { put: { vouchers: [rec] }, before: { vchr: { [rec.id]: null } } })
+  return publicVoucher(rec.id)
+}
+
+/** Void a voucher (a mistake, or refunded). */
+export async function voidVoucher(id) {
+  const v = db.vouchers.find((x) => x.id === id)
+  if (!v) return db.vouchers.map(strip)
+  const rec = { ...v.rec, status: 'void', updated_at: new Date().toISOString(), updated_by: user || null }
+  await commit('voucher', `Voided voucher ${v.code}`, { put: { vouchers: [rec] }, before: { vchr: { [id]: v.rec } } })
+  return db.vouchers.map(strip)
 }
 
 export async function deleteAppointment(id) {

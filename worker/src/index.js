@@ -260,7 +260,7 @@ async function loadAll(db, { withHistory = false } = {}) {
   if (span?.lo && span?.hi) {
     for (let y = Number(span.lo.slice(0, 4)); y <= Number(span.hi.slice(0, 4)); y++) years.push(String(y))
   }
-  const small = ['employees', 'services', 'leave', 'payslips', 'client_info', 'payments']
+  const small = ['employees', 'services', 'leave', 'payslips', 'client_info', 'payments', 'vouchers']
   const stmts = [
     ...small.map((t) => db.prepare(arraysOf(t))),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),

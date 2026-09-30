@@ -35,10 +35,15 @@ function emp201Due(payDate) {
  * Month-end pack for one business month: takings (by method and team member), unpaid visits,
  * the payroll and the EMP201 figures (PAYE + UIF).
  */
-export function monthEndReport({ month, appts, employees, payslips, company, startDay }) {
+export function monthEndReport({ month, appts, employees, payslips, company, startDay, vouchers = [] }) {
   const range = monthRange(month, startDay)
   const list = appts.filter((a) => a.month === month)
   const t = totals(list)
+  // Vouchers sold this month (cash received now, for future visits) and how much of this month's
+  // visits were settled with a voucher (that cash came in when the voucher was sold — not counted twice).
+  const voucherSales = (vouchers || []).filter((v) => v.status !== 'void' && v.soldOn >= range.from && v.soldOn <= range.to)
+  const voucherSold = sum(voucherSales, (v) => v.amount)
+  const settledByVoucher = sum(list.flatMap((a) => a.tenders || []).filter((p) => p.method === 'Voucher'), (p) => p.amount)
   const byEmp = new Map()
   for (const a of list) {
     if (!byEmp.has(a.employeeId)) byEmp.set(a.employeeId, [])
@@ -80,6 +85,15 @@ export function monthEndReport({ month, appts, employees, payslips, company, sta
       foot: unpaid.length ? ['Total', '', '', '', t.unpaid] : null,
       empty: 'Nothing unpaid 🎉',
     },
+    ...(voucherSold || settledByVoucher ? [{
+      heading: 'Gift vouchers',
+      note: 'Voucher sales are cash received now for a future visit. When a voucher is used, that visit still counts in takings, but the voucher part is not counted as cash again (it was banked when sold).',
+      columns: [{ label: '' }, { label: 'Amount', num: true }],
+      rows: [
+        ['Vouchers sold (cash in this month)', voucherSold],
+        ['Visits settled with a voucher', settledByVoucher],
+      ],
+    }] : []),
     {
       heading: 'Payroll',
       note: missing.length ? `No payslip saved yet for ${missing.map((e) => e.name).join(', ')}.` : '',

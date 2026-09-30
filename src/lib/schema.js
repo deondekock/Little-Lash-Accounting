@@ -15,10 +15,12 @@ export const TABLES = {
   client_info: ['id', 'name', 'phone', 'created_at', 'updated_at', 'updated_by', 'quiet_note'],
   // Payments toward an appointment (partial settlements, split tenders, voucher redemptions).
   payments: ['id', 'appointment_id', 'date', 'amount', 'method', 'voucher_id', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by'],
+  // Gift vouchers: sold for cash now, redeemed later (maybe by someone else) as a "Voucher" tender.
+  vouchers: ['id', 'code', 'amount', 'balance', 'buyer', 'buyer_key', 'sold_on', 'method', 'status', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by'],
 }
 
 /** History entries keep the records as they were before each change, by kind. */
-export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', cinfo: 'client_info', pmts: 'payments' }
+export const KIND_TABLE = { appts: 'appointments', emps: 'employees', svcs: 'services', leave: 'leave', pays: 'payslips', cinfo: 'client_info', pmts: 'payments', vchr: 'vouchers' }
 
 /** Payslip details kept per employee: [key, label, kind]. */
 export const PAY_FIELDS = [

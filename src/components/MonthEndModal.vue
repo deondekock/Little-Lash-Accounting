@@ -12,7 +12,7 @@ import { downloadCsv } from '../lib/csv.js'
 const month = ref(state.month)
 const latest = currentMonth(state.monthStartDay)
 const report = computed(() => monthEndReport({
-  month: month.value, appts: all.value, employees: state.employees, payslips: state.payslips, company: state.company, startDay: state.monthStartDay,
+  month: month.value, appts: all.value, employees: state.employees, payslips: state.payslips, company: state.company, startDay: state.monthStartDay, vouchers: state.vouchers,
 }))
 function download() {
   downloadCsv(report.value.fileName, reportRows(report.value))
