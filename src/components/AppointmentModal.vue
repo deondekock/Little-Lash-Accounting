@@ -130,11 +130,8 @@ async function submit() {
   saving.value = true
   try {
     const payload = { ...form }
-    if (splitOn.value && paidNum.value > 0.005) {
-      payload.tenders = tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
-      // Fully covered → Paid; a partial deposit leaves it Unpaid with the rest owing.
-      payload.status = owing.value > 0.005 ? 'Unpaid' : 'Paid'
-    }
+    // Money actually taken now (may be a part-payment). The Paid/Unpaid status stays under her control.
+    if (splitOn.value && paidNum.value > 0.005) payload.tenders = tenders.map((l) => ({ amount: l.amount, method: l.method, voucherId: l.voucherId }))
     const saved = await saveAppointment(payload)
     toastUndo(editing ? 'Saved' : 'Appointment added')
     if (another.value) {
@@ -243,13 +240,8 @@ async function remove() {
       </div>
       <div class="field">
         <label>Status</label>
-        <div v-if="splitOn && paidNum > 0.005" class="field-hint" style="margin: 0">
-          {{ owing > 0.005 ? `Partly paid — ${fmt(owing)} still owing` : 'Paid in full' }}
-        </div>
-        <template v-else>
-          <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
-          <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
-        </template>
+        <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
+        <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
       </div>
       <div class="field">
         <label for="f-notes">Notes (optional)</label>
