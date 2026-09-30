@@ -52,9 +52,10 @@ async function setMethod(e) {
       <div v-if="appt.status === 'Written off'" class="amount written-off" title="Written off — counts as R0">{{ fmt(appt.writtenOff) }}</div>
       <div v-else class="amount">{{ fmt(appt.amount) }}</div>
       <div class="actions">
-        <select class="method" :value="appt.method" aria-label="Payment method" @change="setMethod">
+        <select v-if="METHODS.includes(appt.method)" class="method" :value="appt.method" aria-label="Payment method" @change="setMethod">
           <option v-for="m in METHODS" :key="m">{{ m }}</option>
         </select>
+        <span v-else class="method" :title="(appt.tenders || []).map((t) => `${fmt(t.amount)} ${t.method}`).join(' + ')">{{ appt.method }}</span>
         <button class="pill" :class="appt.status === 'Written off' ? 'WrittenOff' : appt.status" :title="appt.status === 'Written off' ? 'Tap to mark unpaid again' : ''" @click="toggleStatus">
           <Icon v-if="appt.status === 'Paid'" name="check" :size="13" :stroke="2.6" />{{ appt.status }}
         </button>
