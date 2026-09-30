@@ -39,7 +39,9 @@ const results = computed(() => {
 const everyone = computed(() => [props.client, ...selected.value])
 const names = computed(() => [...new Set(everyone.value.map((c) => c.name))])
 const finalName = computed(() => (renaming || choice.value === '__custom' ? custom.value : choice.value).trim())
-const visits = computed(() => everyone.value.reduce((s, c) => s + c.history.length, 0))
+// "Visits" everywhere means distinct visit days (a client seen once a day = one visit), so count the
+// unique days across all the names being merged — this is exactly what the merged client's card shows.
+const visits = computed(() => new Set(everyone.value.flatMap((c) => c.history.map((v) => v.date))).size)
 
 async function save() {
   if (!finalName.value) return
@@ -80,7 +82,7 @@ async function save() {
 
       <div class="merge-picked">
         <div v-for="c in everyone" :key="c.key" class="merge-chip">
-          <b>{{ c.name }}</b> <span>{{ c.history.length }} visits · last {{ shortDate(c.last) }}</span>
+          <b>{{ c.name }}</b> <span>{{ c.visits }} visits · last {{ shortDate(c.last) }}</span>
           <button v-if="c !== client" class="icon-btn" aria-label="Remove" @click="selected = selected.filter((s) => s.key !== c.key)"><Icon name="close" :size="16" /></button>
         </div>
       </div>
