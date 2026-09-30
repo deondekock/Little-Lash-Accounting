@@ -393,8 +393,9 @@ export async function saveAppointment(input) {
   const existing = input.id ? db.appts.find((a) => a.id === input.id) : null
   if (input.id && !existing) throw new Error('This appointment was deleted on another phone.')
   const id = existing?.id || uuid()
-  // Split payment: only when adding a new, fully-paid visit (cash + card, a voucher, etc.).
-  const tenders = !existing && v.status === 'Paid' ? normalizeTenders(input.tenders, v.amount) : []
+  // Split payment: on a fully-paid visit that has no payment rows yet (a new visit, or an existing
+  // single-method one being re-tendered). Visits that already have tenders keep them (edited elsewhere).
+  const tenders = !existing?.tenders?.length && v.status === 'Paid' ? normalizeTenders(input.tenders, v.amount) : []
   const method = tenders.length ? (tenders.length > 1 ? 'Split' : tenders[0].method) : v.method
   const appt = {
     ...v, method, id,

@@ -81,7 +81,9 @@ const vouchers = liveVouchers
 const split = ref(false)
 const tenders = reactive([{ amount: '', method: 'Card', voucherId: '' }])
 const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
-const splitOn = computed(() => split.value && form.status === 'Paid' && !editing)
+// Split is offered on any visit that has no payment rows yet (a new one, or a single-method paid one).
+const canSplit = computed(() => !(props.appt?.tenders?.length))
+const splitOn = computed(() => split.value && form.status === 'Paid' && canSplit.value)
 const tenderTotal = computed(() => Math.round(tenders.reduce((s, l) => s + (Number(l.amount) || 0), 0) * 100) / 100)
 const tenderRemaining = computed(() => Math.round(((Number(form.amount) || 0) - tenderTotal.value) * 100) / 100)
 function startSplit() {
@@ -196,13 +198,14 @@ async function remove() {
         </div>
       </div>
       <div class="field">
-        <label>Paid with
-          <button v-if="!editing" type="button" class="link-btn" style="margin-left: 6px" @click="split ? (split = false) : startSplit()">{{ splitOn ? 'one payment' : 'split payment' }}</button>
-        </label>
+        <label>Paid with</label>
         <div v-if="editing && appt.tenders && appt.tenders.length" class="field-hint" style="margin: 0">
           {{ appt.tenders.map((p) => `${fmt(p.amount)} ${p.method}`).join(' + ') }}<template v-if="appt.tenders.length > 1"> (split)</template>
         </div>
-        <SegmentedControl v-else-if="!splitOn" v-model="form.method" :options="METHODS" />
+        <template v-else-if="!splitOn">
+          <SegmentedControl v-model="form.method" :options="METHODS" />
+          <button v-if="canSplit" type="button" class="btn small ghost" style="margin-top: 8px" @click="startSplit">⇄ Split across methods (cash + card…)</button>
+        </template>
         <template v-else>
           <template v-for="(l, i) in tenders" :key="i">
             <div class="pay-line">
@@ -218,6 +221,7 @@ async function remove() {
             <button type="button" class="btn small ghost" @click="addTender">+ Another method</button>
             <span class="field-hint" :class="{ orange: Math.abs(tenderRemaining) > 0.05 }" style="margin: 0">{{ tenderRemaining === 0 ? 'adds up ✓' : tenderRemaining > 0 ? `${fmt(tenderRemaining)} left` : `${fmt(-tenderRemaining)} over` }}</span>
           </div>
+          <button type="button" class="link-btn" style="margin-top: 8px" @click="split = false">← back to one payment</button>
         </template>
       </div>
       <div class="field">
