@@ -16,11 +16,12 @@ const hidden = computed(() => serviceCatalog.value.filter((s) => !s.active))
 const doneBy = (s, id) => s.countBy?.[id] || (s.prices?.[id] != null ? 0.5 : 0)
 const people = computed(() =>
   state.employees
+    .filter((e) => e.active)
     .map((e) => ({ ...e, n: serviceCatalog.value.filter((s) => s.active && doneBy(s, e.id)).length }))
-    .filter((e) => e.active || e.n)
-    .sort((a, b) => (b.active - a.active) || b.n - a.n),
+    .sort((a, b) => b.n - a.n),
 )
 const person = computed(() => state.employees.find((e) => e.id === filter.value))
+const activeIds = computed(() => new Set(state.employees.filter((e) => e.active).map((e) => e.id)))
 
 // Sort: most done first, or A–Z (remembered on this phone).
 const SORT_KEY = 'llp.serviceSort'
@@ -51,7 +52,7 @@ function priceLabel(s) {
     const own = s.prices?.[person.value.id] != null || s.price != null
     return { value: v != null ? fmt0(v) : '—', note: v == null ? '' : own ? 'her price' : 'usually' }
   }
-  const r = priceRange(s)
+  const r = priceRange(s, activeIds.value)
   if (r) return { value: r.min === r.max ? fmt0(r.min) : `${fmt0(r.min)} – ${r.max}`, note: r.min === r.max ? 'price' : 'by team member' }
   if (s.typical != null) return { value: fmt0(s.typical), note: 'usually' }
   return { value: '—', note: '' }

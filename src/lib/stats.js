@@ -260,8 +260,10 @@ export const servicePrice = (s, employeeId) =>
   s ? (s.prices?.[employeeId] ?? s.price ?? s.typicalBy?.[employeeId] ?? s.typical ?? null) : null
 
 /** Lowest and highest price across the team (for "R 350 – 450" labels). */
-export function priceRange(s) {
-  const set = [s.price, ...Object.values(s.prices || {})].filter((v) => v != null)
+export function priceRange(s, activeIds = null) {
+  // Per-employee prices count only for active staff (a deactivated member's old price shouldn't skew the range).
+  const per = Object.entries(s.prices || {}).filter(([id, v]) => v != null && (!activeIds || activeIds.has(id))).map(([, v]) => v)
+  const set = [s.price, ...per].filter((v) => v != null)
   if (!set.length) return null
   return { min: Math.min(...set), max: Math.max(...set) }
 }

@@ -17,8 +17,8 @@ const form = reactive({
   status: s && !s.active ? 'No longer' : 'Yes',
   prices: { ...(s?.prices || {}) },
 })
-// Everyone active, plus anyone who has a price for this service or has done it before.
-const team = computed(() => state.employees.filter((e) => e.active || form.prices[e.id] != null || s?.countBy?.[e.id]))
+// Active team only. A deactivated member's stored price is kept in the data (it just isn't shown here).
+const team = computed(() => state.employees.filter((e) => e.active))
 const isSet = (v) => v !== '' && v != null
 const same = (a, b) => isSet(a) && isSet(b) && Number(a) === Number(b)
 
