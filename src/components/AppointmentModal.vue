@@ -54,10 +54,10 @@ const saving = ref(false)
 const amountInput = ref(null)
 const suggestion = ref('')
 const servicePicker = ref(null)
-// The amount follows the chosen services until she types her own amount.
-const autoAmount = ref(!editing && !form.amount)
+// The amount follows the chosen services and team member: it recomputes to the sum of their prices
+// whenever a service is added/removed or the team member changes. A manually typed amount stays put
+// until the services or team member change again. (Won't fire just from opening an existing visit.)
 watch(() => [form.service, form.employeeId], ([svc, emp]) => {
-  if (!autoAmount.value) return
   const byKey = new Map(serviceCatalog.value.map((s) => [s.key, s]))
   const prices = splitServices(svc).map((t) => servicePrice(byKey.get(serviceKey(t)), emp))
   if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
@@ -126,14 +126,13 @@ const employeeOptions = computed(() => state.employees.filter((e) => e.active ||
 
 onMounted(() => !editing && !form.client && document.getElementById('f-client')?.focus())
 
-/** Picking a known client fills in her usual service and price (only fields still empty). */
+/** Picking a known client fills in her usual services; the watcher then prices them from the catalogue. */
 function onPick(c) {
   const last = c.history[0]
   if (!last) return
-  if (!form.service && last.service) form.service = last.service
-  if ((!form.amount || autoAmount.value) && last.amount) {
-    form.amount = last.amount
-    autoAmount.value = false
+  if (!form.service && last.service) {
+    form.service = last.service // the watcher recomputes the amount from these services
+    if (!form.amount && last.amount) form.amount = last.amount // fallback if a service has no price to sum
   }
   suggestion.value = `Last visit ${last.date.slice(8)}/${last.date.slice(5, 7)}/${last.date.slice(0, 4)} · ${last.service || 'appointment'} · R ${last.amount} · ${last.method}`
 }
@@ -166,7 +165,6 @@ async function submit() {
       // Keep employee + date, clear the rest for fast entry of a busy day.
       Object.assign(form, blank(), { employeeId: saved.employeeId, date: saved.date })
       suggestion.value = ''
-      autoAmount.value = true
       await nextTick()
       document.getElementById('f-client')?.focus()
     } else {
@@ -218,7 +216,7 @@ async function remove() {
           <label for="f-amount">Amount (R)</label>
           <input
             id="f-amount" ref="amountInput" v-model="form.amount" type="number" inputmode="decimal"
-            step="0.01" min="0" placeholder="0.00" required @input="autoAmount = false"
+            step="0.01" min="0" placeholder="0.00" required
           >
         </div>
       </div>
