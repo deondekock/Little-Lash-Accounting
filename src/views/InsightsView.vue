@@ -44,9 +44,9 @@ const tableRows = computed(() =>
 )
 const teamRows = computed(() => team.value.map((r) => ({ key: r.id, label: r.name, t: r.t, color: employeeColor(r.id) })))
 
-// Smart price nudges — salon-wide, from the last 3 months of volume.
-const nudges = computed(() => priceNudges(serviceCatalog.value, all.value))
-const nudgeTotal = computed(() => nudges.value.reduce((s, n) => s + n.uplift, 0))
+// Smart price nudges — whole team (or the picked member), from the last 3 months of real prices + volume.
+const nudges = computed(() => priceNudges(serviceCatalog.value, all.value, { employeeId: state.employee }))
+const nudgeWho = computed(() => (state.employee === 'all' ? 'whole team' : employeeById(state.employee)?.name || 'this person'))
 function openNudge(n) {
   const s = serviceCatalog.value.find((x) => x.key === n.key)
   if (s) openService(s)
@@ -96,14 +96,14 @@ function pickEmployee(id) {
       </div>
     </section>
 
-    <section v-if="nudges.length" class="card" style="margin-top: 14px">
-      <div class="card-title"><h3>Smart price nudges</h3><span class="hint">biggest impact first</span></div>
-      <p class="muted-note" style="margin: 0 0 10px">A tidy lift on your busiest services. Based on the last 3 months — tap one to set the price.</p>
+    <section v-if="nudges.rows.length" class="card" style="margin-top: 14px">
+      <div class="card-title"><h3>Smart price nudges</h3><span class="hint">{{ nudgeWho }} · last 3 months</span></div>
+      <p class="muted-note" style="margin: 0 0 10px">A ~5% lift on your busiest services, across everyone who does them. Tap one to set the price.</p>
       <div class="list">
-        <button v-for="n in nudges" :key="n.key" type="button" class="list-row" @click="openNudge(n)">
+        <button v-for="n in nudges.rows" :key="n.key" type="button" class="list-row" @click="openNudge(n)">
           <div class="grow">
             <div class="title">{{ n.name }}</div>
-            <div class="meta">{{ Math.round(n.perMonth) }}× / month · now {{ fmt0(n.price) }}</div>
+            <div class="meta">{{ Math.round(n.perMonth) }}× / month · usually {{ fmt0(n.price) }} → {{ fmt0(n.price + n.step) }}</div>
           </div>
           <div class="right">
             <div class="big" style="color: var(--paid)">+{{ fmt0(n.uplift) }}<span class="hint"> /mo</span></div>
@@ -111,7 +111,10 @@ function pickEmployee(id) {
           </div>
         </button>
       </div>
-      <div class="nudge-total">All together ≈ <b style="color: var(--paid)">+{{ fmt0(nudgeTotal) }}/mo</b> · {{ fmt0(nudgeTotal * 12) }}/yr</div>
+      <div class="nudge-total">
+        <span>If you lifted all {{ nudges.count }} services ~5%</span>
+        <b style="color: var(--paid)">+{{ fmt0(nudges.total) }}/mo · {{ fmt0(nudges.total * 12) }}/yr</b>
+      </div>
     </section>
 
     <div style="margin-top: 14px">
