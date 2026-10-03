@@ -328,7 +328,17 @@ function buildDb(data) {
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(db.settings[label] ?? '').trim()]))
 }
 
-async function load() {
+// The on-device recent-slice cache: lets a cold start paint instantly with no network at all.
+const LIGHT_KEY = (u) => (u || 'default') + ':recent'
+function writeLightCache(data, from) {
+  try {
+    const mIdx = TABLES.appointments.indexOf('month')
+    const recent = (data.appointments || []).filter((a) => a[mIdx] >= from)
+    writeLoadCache(LIGHT_KEY(user), 'recent', { ...data, appointments: recent })
+  } catch { /* best-effort */ }
+}
+
+async function load(from = null) {
   // Skip the full history download when our stored copy still matches the server's current revision.
   const cacheKey = user || 'default'
   let data = null
@@ -344,9 +354,10 @@ async function load() {
   }
   loadedRev = rev
   buildDb(data)
+  if (from) writeLightCache(data, from) // keep the recent slice fresh for an instant next open
 }
 
-/** Build straight from the on-device copy with no network — for an instant start when one exists. */
+/** Build straight from the full on-device copy with no network — an instant (complete) start when one exists. */
 async function loadFromCache() {
   const cached = await readLoadCache(user || 'default')
   if (!cached?.data) return false
@@ -355,24 +366,35 @@ async function loadFromCache() {
   return true
 }
 
-/** A small recent-only load (appointments from `from` onwards) for an instant first paint. */
+/** Build from the recent-slice copy with no network — the fastest start (partial; full history fills in after). */
+async function loadLightFromCache() {
+  const cached = await readLoadCache(LIGHT_KEY(user))
+  if (!cached?.data) return false
+  buildDb(cached.data)
+  return true
+}
+
+/** A small recent-only load (appointments from `from` onwards), also cached for an instant next open. */
 async function loadLight(from) {
   const data = await request('/api/load?from=' + encodeURIComponent(from))
   buildDb(data) // loadedRev stays unset — the background full load sets it
+  writeLoadCache(LIGHT_KEY(user), 'recent', data)
 }
 
-/** The full history, cache-aware (used in the background after a light start, or when there's no cache). */
-export async function loadFull() {
-  await load()
+/** The full history, cache-aware; refreshes the recent-slice cache too. */
+export async function loadFull(from = null) {
+  await load(from)
   return loadedRev
 }
 
 /**
- * Cache-first open:
- *  - a current on-device copy → render it instantly (complete), then just revalidate;
- *  - otherwise the recent slice → render it instantly (partial), then pull the full history behind it.
+ * Cache-first open, fastest path first:
+ *  - recent slice on device → paint instantly (partial), full history fills in behind;
+ *  - full copy on device → paint instantly (complete), then just revalidate;
+ *  - otherwise fetch the recent slice (then full in the background).
  */
 export async function openFast(from) {
+  if (await loadLightFromCache()) return { mode: 'instant' }
   if (await loadFromCache()) return { mode: 'cache', rev: loadedRev }
   if (from) {
     try {
@@ -380,7 +402,7 @@ export async function openFast(from) {
       return { mode: 'light' }
     } catch { /* light load failed — fall back to a normal full load */ }
   }
-  await load()
+  await load(from)
   return { mode: 'full', rev: loadedRev }
 }
 

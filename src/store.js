@@ -184,6 +184,7 @@ async function api(fn, ...args) {
 let loadStart = 0
 export async function init() {
   loadStart = (typeof performance !== 'undefined' ? performance : Date).now()
+  try { navigator.storage?.persist?.() } catch { /* keep the on-device cache from being evicted */ }
   if (shouldLock()) state.locked = true // before anything shows
   const redirect = auth.handleRedirect()
   if (!CLIENT_ID && !FAKE_API) {
@@ -297,16 +298,20 @@ export async function openSheet(idOrUrl) {
     if (BACKEND !== 'cloudflare') await markRev()
     const tData = now()
     state.loadedAt = Date.now()
+    // Owner lands on today's Payments page (unless a deep link says otherwise).
+    if (BACKEND === 'cloudflare' && state.role !== 'staff' && !location.hash) state.view = 'payments'
     state.phase = 'ready'
     openHash(location.hash)
     // Temporary: measure where open-time goes (auth → build db → reshape), reported once so we can tune it.
     await nextTick()
+    let persist = ''
+    try { persist = (await navigator.storage?.persisted?.()) ? ' · persist✓' : ' · persist✗' } catch { /* ignore */ }
     const total = Math.round(now() - (loadStart || t0))
-    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms · ${mode}`
+    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms · ${mode}${persist}`
     console.log('[perf] ' + msg)
     toast(msg)
-    if (mode === 'cache') backgroundRefresh() // rendered a stored copy — make sure it's current
-    else if (mode === 'light') backgroundFull() // rendered the recent slice — pull the full history in
+    if (mode === 'cache') backgroundRefresh() // rendered a full stored copy — make sure it's current
+    else if (mode === 'instant' || mode === 'light') backgroundFull() // rendered the recent slice — pull the full history in
     return true
   } catch (err) {
     state.error = String(err?.message || err)
@@ -502,7 +507,7 @@ function recentFrom() {
 async function backgroundFull() {
   try {
     state.updating = true
-    await api('loadFull')
+    await api('loadFull', recentFrom())
     applyData(await api('getInitialData'))
     all.value = await api('getAppointments', '')
     state.selected.clear()
