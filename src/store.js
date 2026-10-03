@@ -496,10 +496,9 @@ async function loadAll() {
   await markRev()
 }
 
-/** The business-month cutoff for the quick first load: the last few months (enough for today's work). */
+/** The business-month cutoff for the quick first load: just this month (today's work). The rest follows. */
 function recentFrom() {
   const d = new Date()
-  d.setMonth(d.getMonth() - 3)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
