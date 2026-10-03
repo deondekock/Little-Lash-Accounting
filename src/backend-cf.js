@@ -307,6 +307,7 @@ export async function rollback(entryId) {
 
 // The data revision currently held in memory (and in the on-device cache). Used to skip needless reloads.
 let loadedRev = null
+let lastPayload = null // the raw /api/load payload last built, so a month-sync can seed its per-month cache
 export const currentRev = () => loadedRev
 
 /** Rebuild the in-memory db from a raw /api/load payload. */
@@ -353,6 +354,7 @@ async function load(from = null) {
     if (rev) writeLoadCache(cacheKey, rev, data) // best-effort; keyed by the revision we just probed
   }
   loadedRev = rev
+  lastPayload = data
   buildDb(data)
   if (from) writeLightCache(data, from) // keep the recent slice fresh for an instant next open
 }
@@ -382,6 +384,7 @@ async function loadLightFromCache() {
 /** A small recent-only load (appointments from `from` onwards), also cached for an instant next open. */
 async function loadLight(from) {
   const data = await request('/api/load?from=' + encodeURIComponent(from))
+  lastPayload = data
   buildDb(data) // loadedRev stays unset — the background full load sets it
   writeLoadCache(LIGHT_KEY(user), 'recent', data)
 }
@@ -411,18 +414,77 @@ export async function openFast(from) {
   return { mode: 'full', rev: loadedRev }
 }
 
+/* ---------------- background month-sync ---------------- */
+
+const monthKey = (m) => (user || 'default') + ':m:' + m
+const thisMonthStr = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` }
+
+/** Cache each month's appointment rows from a raw payload, keyed by that month's manifest version. */
+function seedMonthCache(data, months) {
+  if (!data?.appointments) return
+  const mIdx = TABLES.appointments.indexOf('month')
+  const byMonth = {}
+  for (const row of data.appointments) (byMonth[row[mIdx]] ||= []).push(row)
+  for (const m of Object.keys(months)) writeLoadCache(monthKey(m), months[m], byMonth[m] || [])
+}
+
 /**
- * Background refresh after a cache-first start: probe the tiny /api/rev and only re-download when the
- * server has actually moved on. Returns true if the data changed (so the UI should re-read it).
+ * Background sync that re-downloads only the months whose version changed (plus always-fresh small tables),
+ * instead of the whole history. Returns true if the data changed. Falls back to a full load on the first
+ * run, a large change set, or anything unexpected — so a bug here can only cost a full download, not data.
  */
-export async function revalidate() {
-  const probe = await request('/api/rev').catch(() => null)
-  if (!probe?.rev || probe.rev === loadedRev) return false
-  const data = await request('/api/load')
-  loadedRev = probe.rev
-  writeLoadCache(user || 'default', probe.rev, data)
-  buildDb(data)
-  return true
+export async function syncMonths() {
+  let man
+  try { man = await request('/api/manifest') } catch { await load(thisMonthStr()); return true }
+  const rev = man?.rev || null
+  if (rev && rev === loadedRev) return false // nothing has changed since our last load
+  const months = man?.months || {}
+  const keys = Object.keys(months)
+  try {
+    // Which months do we already hold at the right version?
+    const have = {}
+    const toFetch = []
+    for (const m of keys) {
+      const c = await readLoadCache(monthKey(m))
+      if (c && c.rev === months[m] && Array.isArray(c.data)) have[m] = c.data
+      else toFetch.push(m)
+    }
+    // First run (or a big change set): a full, by-year, KV-cached load, then seed the per-month cache.
+    if (toFetch.length > 6) {
+      await load(thisMonthStr())
+      loadedRev = rev
+      seedMonthCache(lastPayload, months)
+      writeLoadCache(user || 'default', rev, lastPayload)
+      return true
+    }
+    // Otherwise fetch just the changed months (+ fresh small tables) in one slice.
+    const slice = await request('/api/load?months=' + encodeURIComponent(toFetch.join(',')))
+    const mIdx = TABLES.appointments.indexOf('month')
+    const fetched = {}
+    for (const row of (slice.appointments || [])) (fetched[row[mIdx]] ||= []).push(row)
+    for (const m of toFetch) {
+      have[m] = fetched[m] || []
+      writeLoadCache(monthKey(m), months[m], have[m])
+    }
+    // Assemble every month's appointments; sanity-check the total against the manifest before trusting it.
+    const appts = []
+    let expected = 0
+    for (const m of keys) {
+      appts.push(...(have[m] || []))
+      expected += Number(String(months[m]).split(':')[0]) || 0
+    }
+    if (appts.length !== expected) { await load(thisMonthStr()); return true } // cache drift — rebuild cleanly
+    const payload = { ...slice, appointments: appts }
+    loadedRev = rev
+    lastPayload = payload
+    buildDb(payload)
+    writeLoadCache(user || 'default', rev, payload)
+    writeLightCache(payload, thisMonthStr())
+    return true
+  } catch {
+    await load(thisMonthStr())
+    return true
+  }
 }
 
 /** Opens the salon's data (there's only one database, so the argument is ignored). */

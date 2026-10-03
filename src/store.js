@@ -326,8 +326,7 @@ export async function openSheet(idOrUrl) {
     if (BACKEND === 'cloudflare' && state.role !== 'staff' && !location.hash) state.view = 'payments'
     state.phase = 'ready'
     openHash(location.hash)
-    if (mode === 'cache') backgroundRefresh() // rendered a full stored copy — make sure it's current
-    else if (mode === 'instant' || mode === 'light') backgroundFull() // rendered the recent slice — pull the full history in
+    if (mode !== 'full') backgroundSync() // rendered a cache/recent copy — bring it up to date behind the UI
     return true
   } catch (err) {
     state.error = String(err?.message || err)
@@ -476,9 +475,13 @@ export async function refresh() {
     return
   }
   try {
-    await api('reload')
-    applyData(await api('getInitialData'))
-    await loadAll()
+    if (BACKEND === 'cloudflare') {
+      await backgroundSync() // month-synced: only re-pull what changed
+    } else {
+      await api('reload')
+      applyData(await api('getInitialData'))
+      await loadAll()
+    }
     state.loadedAt = Date.now()
     toast('Up to date')
   } catch (err) {
@@ -518,27 +521,15 @@ function recentFrom() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-/** After a recent-only first paint, pull the full history in the background so Clients/Insights fill in. */
-async function backgroundFull() {
-  try {
-    state.updating = true
-    await api('loadFull', recentFrom())
-    applyData(await api('getInitialData'))
-    all.value = await api('getAppointments', '')
-    state.selected.clear()
-    lastRev = await api('currentRev')
-    state.loadedAt = Date.now()
-  } catch { /* keep the recent view; maybeRefresh will retry later */ } finally {
-    state.updating = false
-  }
-}
-
-/** After an instant cache-first start, quietly pull a fresh copy if the server has moved on. */
-async function backgroundRefresh() {
+/**
+ * After the instant first paint, bring the data up to date in the background: pull the full history (first
+ * time) and then only the months that changed, so Clients/Insights fill in and stay current with minimal data.
+ */
+async function backgroundSync() {
   if (BACKEND !== 'cloudflare') return
   try {
     state.updating = true
-    if (await api('revalidate')) {
+    if (await api('syncMonths')) {
       const data = await api('getInitialData')
       applyData(data)
       state.spreadsheetUrl = data.spreadsheetUrl

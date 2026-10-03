@@ -102,11 +102,18 @@ export default {
         throw new HttpError(403, 'Only the owner can do that.')
       }
       if (route === 'GET /api/load') {
-        // ?from=YYYY-MM → a small recent-only payload (instant first paint); no arg → the full, KV-cached load.
+        // ?months=a,b → only those months (the background month-sync); ?from=YYYY-MM → recent-only (instant
+        // first paint); no arg → the full, KV-cached load.
+        const monthsParam = url.searchParams.get('months')
+        if (monthsParam != null) {
+          const months = monthsParam ? monthsParam.split(',').filter((m) => /^\d{4}-\d{2}$/.test(m)) : []
+          return json(await loadAll(env.DB, { months }), cors)
+        }
         const from = url.searchParams.get('from')
         if (from && /^\d{4}-\d{2}$/.test(from)) return json(await loadAll(env.DB, { from }), cors)
         return json(await cachedLoad(env), cors)
       }
+      if (route === 'GET /api/manifest') return json(await buildManifest(env.DB), cors)
       if (url.pathname.startsWith('/api/google/')) return json(await googleRoute(env, me, route, url), cors)
       if (route === 'POST /api/write') {
         const body = await request.json()
@@ -261,9 +268,14 @@ const arraysOf = (table, where = '') =>
  * With `from` ('YYYY-MM'), only appointments in that business month onwards are included — a small, fast
  * payload for an instant first paint; the client then pulls the full history in the background.
  */
-async function loadAll(db, { withHistory = false, from = null } = {}) {
+async function loadAll(db, { withHistory = false, from = null, months = null } = {}) {
   let apptStmts
-  if (from) {
+  if (months) {
+    // A specific set of months (the background month-sync) — one statement, or none when the set is empty.
+    apptStmts = months.length
+      ? [db.prepare(arraysOf('appointments', `WHERE month IN (${months.map((_, i) => `?${i + 1}`).join(',')})`)).bind(...months)]
+      : []
+  } else if (from) {
     // Just the recent slice — no need to read the full year span.
     apptStmts = [db.prepare(arraysOf('appointments', 'WHERE month >= ?1')).bind(from)]
   } else {
@@ -305,6 +317,19 @@ async function newestChange(db) {
 
 async function dataRev(db) {
   return JSON.stringify({ rev: await newestChange(db) })
+}
+
+/**
+ * A per-month version map for the background month-sync: { rev, months: { 'YYYY-MM': 'count:maxUpdatedAt' } }.
+ * The version changes on any add, edit or delete in that month, so the client re-pulls only the months that
+ * moved. Payments are always refreshed whole (a small table), so they don't need to be in the version.
+ */
+async function buildManifest(db) {
+  const rev = await newestChange(db)
+  const { results } = await db.prepare('SELECT month, COUNT(*) AS n, MAX(updated_at) AS u FROM appointments GROUP BY month').all()
+  const months = {}
+  for (const r of results || []) months[r.month] = `${r.n}:${r.u || ''}`
+  return JSON.stringify({ rev, months })
 }
 
 /**
