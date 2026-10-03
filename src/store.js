@@ -181,7 +181,9 @@ async function api(fn, ...args) {
 
 /* ---------------- loading ---------------- */
 
+let loadStart = 0
 export async function init() {
+  loadStart = (typeof performance !== 'undefined' ? performance : Date).now()
   if (shouldLock()) state.locked = true // before anything shows
   const redirect = auth.handleRedirect()
   if (!CLIENT_ID && !FAKE_API) {
@@ -272,6 +274,8 @@ export function signOut() {
 /** Opens (and remembers) a sheet by link or ID. */
 export async function openSheet(idOrUrl) {
   state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
+  const now = () => (typeof performance !== 'undefined' ? performance : Date).now()
+  const t0 = now()
   try {
     // Cloudflare: open from the on-device copy instantly when we have one, then refresh behind the UI.
     let cached = false
@@ -282,6 +286,7 @@ export async function openSheet(idOrUrl) {
     } else {
       savedSheetId(await api('openSheet', idOrUrl))
     }
+    const tOpen = now()
     const data = await api('getInitialData')
     applyData(data)
     state.spreadsheetUrl = data.spreadsheetUrl
@@ -290,9 +295,16 @@ export async function openSheet(idOrUrl) {
     all.value = await api('getAppointments', '')
     state.selected.clear()
     if (BACKEND !== 'cloudflare') await markRev()
+    const tData = now()
     state.loadedAt = Date.now()
     state.phase = 'ready'
     openHash(location.hash)
+    // Temporary: measure where open-time goes (auth → build db → reshape), reported once so we can tune it.
+    await nextTick()
+    const total = Math.round(now() - (loadStart || t0))
+    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms${cached ? ' · cached' : ' · fresh'}`
+    console.log('[perf] ' + msg)
+    toast(msg)
     if (cached) backgroundRefresh() // we rendered a stored copy — make sure it's current
     return true
   } catch (err) {
