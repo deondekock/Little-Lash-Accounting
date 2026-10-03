@@ -181,9 +181,7 @@ async function api(fn, ...args) {
 
 /* ---------------- loading ---------------- */
 
-let loadStart = 0
 export async function init() {
-  loadStart = (typeof performance !== 'undefined' ? performance : Date).now()
   try { navigator.storage?.persist?.() } catch { /* keep the on-device cache from being evicted */ }
   if (shouldLock()) state.locked = true // before anything shows
   const redirect = auth.handleRedirect()
@@ -275,10 +273,8 @@ export function signOut() {
 /** Opens (and remembers) a sheet by link or ID. */
 export async function openSheet(idOrUrl) {
   state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
-  const now = () => (typeof performance !== 'undefined' ? performance : Date).now()
-  const t0 = now()
   try {
-    // Cloudflare: open instantly from the on-device copy, or just the recent months, then fill in behind the UI.
+    // Cloudflare: open instantly from the on-device copy, or just this month, then fill in behind the UI.
     let mode = 'full'
     if (BACKEND === 'cloudflare') {
       const res = await api('openFast', recentFrom())
@@ -287,7 +283,6 @@ export async function openSheet(idOrUrl) {
     } else {
       savedSheetId(await api('openSheet', idOrUrl))
     }
-    const tOpen = now()
     const data = await api('getInitialData')
     applyData(data)
     state.spreadsheetUrl = data.spreadsheetUrl
@@ -296,20 +291,11 @@ export async function openSheet(idOrUrl) {
     all.value = await api('getAppointments', '')
     state.selected.clear()
     if (BACKEND !== 'cloudflare') await markRev()
-    const tData = now()
     state.loadedAt = Date.now()
     // Owner lands on today's Payments page (unless a deep link says otherwise).
     if (BACKEND === 'cloudflare' && state.role !== 'staff' && !location.hash) state.view = 'payments'
     state.phase = 'ready'
     openHash(location.hash)
-    // Temporary: measure where open-time goes (auth → build db → reshape), reported once so we can tune it.
-    await nextTick()
-    let persist = ''
-    try { persist = (await navigator.storage?.persisted?.()) ? ' · persist✓' : ' · persist✗' } catch { /* ignore */ }
-    const total = Math.round(now() - (loadStart || t0))
-    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms · ${mode}${persist}`
-    console.log('[perf] ' + msg)
-    toast(msg)
     if (mode === 'cache') backgroundRefresh() // rendered a full stored copy — make sure it's current
     else if (mode === 'instant' || mode === 'light') backgroundFull() // rendered the recent slice — pull the full history in
     return true
