@@ -355,11 +355,33 @@ async function loadFromCache() {
   return true
 }
 
-/** Cache-first open: render the stored copy instantly when present, else do a normal (networked) load. */
-export async function openFast() {
-  if (await loadFromCache()) return { cached: true, rev: loadedRev }
+/** A small recent-only load (appointments from `from` onwards) for an instant first paint. */
+async function loadLight(from) {
+  const data = await request('/api/load?from=' + encodeURIComponent(from))
+  buildDb(data) // loadedRev stays unset — the background full load sets it
+}
+
+/** The full history, cache-aware (used in the background after a light start, or when there's no cache). */
+export async function loadFull() {
   await load()
-  return { cached: false, rev: loadedRev }
+  return loadedRev
+}
+
+/**
+ * Cache-first open:
+ *  - a current on-device copy → render it instantly (complete), then just revalidate;
+ *  - otherwise the recent slice → render it instantly (partial), then pull the full history behind it.
+ */
+export async function openFast(from) {
+  if (await loadFromCache()) return { mode: 'cache', rev: loadedRev }
+  if (from) {
+    try {
+      await loadLight(from)
+      return { mode: 'light' }
+    } catch { /* light load failed — fall back to a normal full load */ }
+  }
+  await load()
+  return { mode: 'full', rev: loadedRev }
 }
 
 /**

@@ -101,7 +101,12 @@ export default {
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
-      if (route === 'GET /api/load') return json(await cachedLoad(env), cors)
+      if (route === 'GET /api/load') {
+        // ?from=YYYY-MM → a small recent-only payload (instant first paint); no arg → the full, KV-cached load.
+        const from = url.searchParams.get('from')
+        if (from && /^\d{4}-\d{2}$/.test(from)) return json(await loadAll(env.DB, { from }), cors)
+        return json(await cachedLoad(env), cors)
+      }
       if (url.pathname.startsWith('/api/google/')) return json(await googleRoute(env, me, route, url), cors)
       if (route === 'POST /api/write') {
         const body = await request.json()
@@ -251,26 +256,37 @@ const text = (body, status, cors) => new Response(body, { status, headers: cors 
 const arraysOf = (table, where = '') =>
   `SELECT json_group_array(json_array(${TABLES[table].join(', ')})) AS j FROM (SELECT * FROM ${table} ${where})`
 
-/** Everything as one JSON string: { employees: [[…]], appointments: [[…]], …, settings: [[k, v]] }. */
-async function loadAll(db, { withHistory = false } = {}) {
-  // Appointments come per year so no single result gets too big. The year range comes from the month
-  // index (MIN/MAX read a row each) rather than scanning every appointment just to list the years.
-  const span = await db.prepare('SELECT MIN(month) AS lo, MAX(month) AS hi FROM appointments').first()
-  const years = []
-  if (span?.lo && span?.hi) {
-    for (let y = Number(span.lo.slice(0, 4)); y <= Number(span.hi.slice(0, 4)); y++) years.push(String(y))
+/**
+ * Everything as one JSON string: { employees: [[…]], appointments: [[…]], …, settings: [[k, v]] }.
+ * With `from` ('YYYY-MM'), only appointments in that business month onwards are included — a small, fast
+ * payload for an instant first paint; the client then pulls the full history in the background.
+ */
+async function loadAll(db, { withHistory = false, from = null } = {}) {
+  let apptStmts
+  if (from) {
+    // Just the recent slice — no need to read the full year span.
+    apptStmts = [db.prepare(arraysOf('appointments', 'WHERE month >= ?1')).bind(from)]
+  } else {
+    // Appointments come per year so no single result gets too big. The year range comes from the month
+    // index (MIN/MAX read a row each) rather than scanning every appointment just to list the years.
+    const span = await db.prepare('SELECT MIN(month) AS lo, MAX(month) AS hi FROM appointments').first()
+    const years = []
+    if (span?.lo && span?.hi) {
+      for (let y = Number(span.lo.slice(0, 4)); y <= Number(span.hi.slice(0, 4)); y++) years.push(String(y))
+    }
+    apptStmts = years.map((y) => db.prepare(arraysOf('appointments', 'WHERE month >= ?1 AND month < ?2')).bind(y, String(Number(y) + 1)))
   }
   const small = ['employees', 'services', 'leave', 'payslips', 'client_info', 'payments', 'vouchers']
   const stmts = [
     ...small.map((t) => db.prepare(arraysOf(t))),
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
-    ...years.map((y) => db.prepare(arraysOf('appointments', 'WHERE month >= ?1 AND month < ?2')).bind(y, String(Number(y) + 1))),
+    ...apptStmts,
   ]
   if (withHistory) stmts.push(db.prepare(`SELECT json_group_array(json_array(${[...HISTORY_COLS, 'data'].join(', ')})) AS j FROM history`))
   const res = await db.batch(stmts)
   const out = res.map((r) => r.results[0]?.j || '[]')
   const inner = (a) => a.slice(1, -1)
-  const appts = out.slice(small.length + 1, small.length + 1 + years.length).map(inner).filter(Boolean).join(',')
+  const appts = out.slice(small.length + 1, small.length + 1 + apptStmts.length).map(inner).filter(Boolean).join(',')
   let body = '{' + small.map((t, i) => `"${t}":${out[i]}`).join(',') + `,"settings":${out[small.length]},"appointments":[${appts}]`
   if (withHistory) body += `,"history":${out[out.length - 1]}`
   return body + '}'

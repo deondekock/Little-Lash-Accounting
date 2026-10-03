@@ -277,11 +277,11 @@ export async function openSheet(idOrUrl) {
   const now = () => (typeof performance !== 'undefined' ? performance : Date).now()
   const t0 = now()
   try {
-    // Cloudflare: open from the on-device copy instantly when we have one, then refresh behind the UI.
-    let cached = false
+    // Cloudflare: open instantly from the on-device copy, or just the recent months, then fill in behind the UI.
+    let mode = 'full'
     if (BACKEND === 'cloudflare') {
-      const res = await api('openFast')
-      cached = !!res?.cached
+      const res = await api('openFast', recentFrom())
+      mode = res?.mode || 'full'
       lastRev = res?.rev ?? null
     } else {
       savedSheetId(await api('openSheet', idOrUrl))
@@ -302,10 +302,11 @@ export async function openSheet(idOrUrl) {
     // Temporary: measure where open-time goes (auth → build db → reshape), reported once so we can tune it.
     await nextTick()
     const total = Math.round(now() - (loadStart || t0))
-    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms${cached ? ' · cached' : ' · fresh'}`
+    const msg = `Opened in ${(total / 1000).toFixed(1)}s · auth+db ${Math.round(tOpen - t0)}ms · data ${Math.round(tData - tOpen)}ms · paint ${Math.round(now() - tData)}ms · ${mode}`
     console.log('[perf] ' + msg)
     toast(msg)
-    if (cached) backgroundRefresh() // we rendered a stored copy — make sure it's current
+    if (mode === 'cache') backgroundRefresh() // rendered a stored copy — make sure it's current
+    else if (mode === 'light') backgroundFull() // rendered the recent slice — pull the full history in
     return true
   } catch (err) {
     state.error = String(err?.message || err)
@@ -488,6 +489,28 @@ async function loadAll() {
   all.value = await api('getAppointments', '')
   state.selected.clear()
   await markRev()
+}
+
+/** The business-month cutoff for the quick first load: the last few months (enough for today's work). */
+function recentFrom() {
+  const d = new Date()
+  d.setMonth(d.getMonth() - 3)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+/** After a recent-only first paint, pull the full history in the background so Clients/Insights fill in. */
+async function backgroundFull() {
+  try {
+    state.updating = true
+    await api('loadFull')
+    applyData(await api('getInitialData'))
+    all.value = await api('getAppointments', '')
+    state.selected.clear()
+    lastRev = await api('currentRev')
+    state.loadedAt = Date.now()
+  } catch { /* keep the recent view; maybeRefresh will retry later */ } finally {
+    state.updating = false
+  }
 }
 
 /** After an instant cache-first start, quietly pull a fresh copy if the server has moved on. */
