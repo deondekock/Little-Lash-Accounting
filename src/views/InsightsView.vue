@@ -3,14 +3,13 @@ import { computed } from 'vue'
 import PeriodNav from '../components/PeriodNav.vue'
 import EmployeeChips from '../components/EmployeeChips.vue'
 import Columns from '../components/charts/Columns.vue'
-import StackedColumns from '../components/charts/StackedColumns.vue'
 import TotalsTable from '../components/TotalsTable.vue'
 import Icon from '../components/Icon.vue'
 import RebookTeam from '../components/RebookTeam.vue'
 import RebookCard from '../components/RebookCard.vue'
-import { all, state, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview } from '../store.js'
-import { byEmployee, fmt, fmt0, monthName, totals, METHODS } from '../lib/format.js'
-import { compactMoney, monthlyTotals } from '../lib/stats.js'
+import { all, state, serviceCatalog, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview, openService } from '../store.js'
+import { byEmployee, fmt, fmt0, monthName, totals } from '../lib/format.js'
+import { compactMoney, monthlyTotals, priceNudges } from '../lib/stats.js'
 
 const forEmployee = (list) => (state.employee === 'all' ? list : list.filter((a) => a.employeeId === state.employee))
 const year = computed(() => forEmployee(all.value.filter((a) => a.month.startsWith(String(state.year)))))
@@ -35,15 +34,6 @@ const months = computed(() => {
 const best = computed(() => months.value.reduce((b, m) => (m.value > b.value ? m : b), months.value[0]))
 
 const team = computed(() => byEmployee(all.value.filter((a) => a.month.startsWith(String(state.year))), state.employees))
-const stackSeries = computed(() => team.value.map((r) => ({ key: r.id, label: r.name, color: employeeColor(r.id) })))
-const stackColumns = computed(() =>
-  Array.from({ length: 12 }, (_, i) => {
-    const key = `${state.year}-${String(i + 1).padStart(2, '0')}`
-    const parts = {}
-    for (const a of all.value) if (a.month === key) parts[a.employeeId] = (parts[a.employeeId] || 0) + a.amount
-    return { label: short(i + 1)[0], title: `${monthName(i + 1)} ${state.year}`, parts }
-  }),
-)
 
 const tableRows = computed(() =>
   Array.from({ length: 12 }, (_, i) => {
@@ -54,10 +44,13 @@ const tableRows = computed(() =>
 )
 const teamRows = computed(() => team.value.map((r) => ({ key: r.id, label: r.name, t: r.t, color: employeeColor(r.id) })))
 
-const methodShare = computed(() => {
-  const total = t.value.total || 1
-  return METHODS.map((m, i) => ({ m, value: t.value[m], pct: Math.round((t.value[m] / total) * 100), color: `var(--series-${i + 1})` }))
-})
+// Smart price nudges — salon-wide, from the last 3 months of volume.
+const nudges = computed(() => priceNudges(serviceCatalog.value, all.value))
+const nudgeTotal = computed(() => nudges.value.reduce((s, n) => s + n.uplift, 0))
+function openNudge(n) {
+  const s = serviceCatalog.value.find((x) => x.key === n.key)
+  if (s) openService(s)
+}
 
 function openMonth(month) {
   changeMonth(month)
@@ -103,29 +96,23 @@ function pickEmployee(id) {
       </div>
     </section>
 
-    <div class="grid two" style="margin-top: 14px">
-      <section v-if="state.employee === 'all' && stackSeries.length" class="card">
-        <div class="card-title"><h3>Who earned what</h3><span class="hint">per month</span></div>
-        <StackedColumns :columns="stackColumns" :series="stackSeries" />
-        <div class="legend" style="margin-top: 8px">
-          <span v-for="s in stackSeries" :key="s.key" class="key"><i class="swatch" :style="{ background: s.color }" />{{ s.label }}</span>
-        </div>
-      </section>
-
-      <section class="card">
-        <div class="card-title"><h3>How clients paid</h3><span class="hint">{{ state.year }}</span></div>
-        <div class="share" role="img" :aria-label="methodShare.map((s) => `${s.m} ${s.pct}%`).join(', ')">
-          <div v-for="s in methodShare.filter((x) => x.value > 0)" :key="s.m" :style="{ flex: s.value, background: s.color }" />
-        </div>
-        <div class="share-legend">
-          <div v-for="s in methodShare" :key="s.m">
-            <div class="name"><i class="swatch" :style="{ background: s.color, width: '10px', height: '10px', borderRadius: '3px', display: 'inline-block' }" />{{ s.m }}</div>
-            <div class="amt">{{ compactMoney(s.value) }}</div>
-            <div class="pct">{{ s.pct }}%</div>
+    <section v-if="nudges.length" class="card" style="margin-top: 14px">
+      <div class="card-title"><h3>Smart price nudges</h3><span class="hint">biggest impact first</span></div>
+      <p class="muted-note" style="margin: 0 0 10px">A tidy lift on your busiest services. Based on the last 3 months — tap one to set the price.</p>
+      <div class="list">
+        <button v-for="n in nudges" :key="n.key" type="button" class="list-row" @click="openNudge(n)">
+          <div class="grow">
+            <div class="title">{{ n.name }}</div>
+            <div class="meta">{{ Math.round(n.perMonth) }}× / month · now {{ fmt0(n.price) }}</div>
           </div>
-        </div>
-      </section>
-    </div>
+          <div class="right">
+            <div class="big" style="color: var(--paid)">+{{ fmt0(n.uplift) }}<span class="hint"> /mo</span></div>
+            <div class="meta">+{{ fmt0(n.step) }} each</div>
+          </div>
+        </button>
+      </div>
+      <div class="nudge-total">All together ≈ <b style="color: var(--paid)">+{{ fmt0(nudgeTotal) }}/mo</b> · {{ fmt0(nudgeTotal * 12) }}/yr</div>
+    </section>
 
     <div style="margin-top: 14px">
       <RebookTeam v-if="state.employee === 'all'" />

@@ -7,7 +7,7 @@ import ClientFlowCard from '../components/ClientFlowCard.vue'
 import TaxNotice from '../components/TaxNotice.vue'
 import WaButton from '../components/WaButton.vue'
 import { all, state, clients, monthAppts, employeeById, employeeColor, setView, openClient, openAppointment, openPicker, changeMonth, openReview } from '../store.js'
-import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth, METHODS } from '../lib/format.js'
+import { fmt, fmt0, monthLabel, monthRange, shortDate, initials, currentMonth } from '../lib/format.js'
 import { monthToDate, byWeekday, buildClients } from '../lib/stats.js'
 import { totals, byEmployee } from '../lib/format.js'
 
@@ -37,11 +37,6 @@ const change = computed(() => {
   return { pct: Math.round(c * 100), dir: c > 0.005 ? 'up' : c < -0.005 ? 'down' : 'flat' }
 })
 const prevName = computed(() => monthLabel(mtd.value.prevMonth).split(' ')[0])
-
-const methodShare = computed(() => {
-  const total = t.value.total || 1
-  return METHODS.map((m, i) => ({ m, value: t.value[m], pct: Math.round((t.value[m] / total) * 100), color: `var(--series-${i + 1})` }))
-})
 
 const team = computed(() => {
   const rows = byEmployee(monthAppts.value, state.employees)
@@ -169,21 +164,9 @@ const weeksAgo = (d) => (d < 0 ? 'booked ahead' : d < 14 ? `${d} days ago` : d <
           <div v-else class="empty">No appointments in {{ monthName }}.</div>
         </section>
 
-        <!-- Payment methods -->
+        <!-- Busiest days -->
         <section class="card">
-          <div class="card-title"><h3>How clients paid</h3><span class="hint">{{ monthName }}</span></div>
-          <div class="share" role="img" :aria-label="methodShare.map((s) => `${s.m} ${s.pct}%`).join(', ')">
-            <div v-for="s in methodShare.filter((x) => x.value > 0)" :key="s.m" :style="{ flex: s.value, background: s.color }" />
-          </div>
-          <div class="share-legend">
-            <div v-for="s in methodShare" :key="s.m">
-              <div class="name"><i class="swatch" :style="{ background: s.color, width: '10px', height: '10px', borderRadius: '3px', display: 'inline-block' }" />{{ s.m }}</div>
-              <div class="amt">{{ fmt0(s.value) }}</div>
-              <div class="pct">{{ s.pct }}%</div>
-            </div>
-          </div>
-
-          <div class="card-title" style="margin-top: 22px"><h3>Busiest days</h3><span class="hint">appointments</span></div>
+          <div class="card-title"><h3>Busiest days</h3><span class="hint">appointments</span></div>
           <Columns :items="weekdays" value-label="appointments" :height="150" />
         </section>
       </div>

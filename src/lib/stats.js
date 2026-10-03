@@ -268,6 +268,37 @@ export function priceRange(s, activeIds = null) {
   return { min: Math.min(...set), max: Math.max(...set) }
 }
 
+/** A tidy price lift: about 5%, at least R10, rounded to a sensible step for the price band. */
+function niceStep(price) {
+  const step = price >= 1000 ? 100 : price >= 500 ? 50 : price >= 200 ? 20 : 10
+  return Math.max(step, Math.round((price * 0.05) / step) * step)
+}
+
+/**
+ * Smart price nudges: for each active service, roughly what a tidy price lift would add per month,
+ * from how often it was done over the last few months. Biggest opportunities first.
+ * `catalog` is buildServices(all, services); `all` is every appointment.
+ */
+export function priceNudges(catalog, all, { months = 3, today = todayStr(), limit = 6 } = {}) {
+  const cut = toDate(toTime(today) - months * 30 * DAY)
+  const recent = new Map()
+  for (const a of all) {
+    if (a.date < cut || a.date > today) continue
+    for (const t of splitServices(a.service)) recent.set(serviceKey(t), (recent.get(serviceKey(t)) || 0) + 1)
+  }
+  const out = []
+  for (const s of catalog) {
+    if (!s.active) continue
+    const price = s.price ?? s.typical
+    if (!price || price <= 0) continue
+    const perMonth = (recent.get(s.key) || 0) / months
+    if (perMonth < 1) continue // too rare to be worth nudging
+    const step = niceStep(price)
+    out.push({ key: s.key, name: s.name, price, step, perMonth, uplift: Math.round(step * perMonth) })
+  }
+  return out.sort((a, b) => b.uplift - a.uplift).slice(0, limit)
+}
+
 /** Service names that only differ by spacing, accents, capitals or a plural "s". */
 export function findServiceDuplicates(services) {
   const groups = new Map()
