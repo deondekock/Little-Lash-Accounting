@@ -14,6 +14,7 @@ import { splitServices, joinServices, serviceKey } from './lib/services.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, statusOf } from './lib/schema.js'
 import { toAppt, overtimeValue } from './lib/appt.js'
 import { clientKey } from './lib/stats.js'
+import { readLoadCache, writeLoadCache } from './lib/loadcache.js'
 
 export const METHODS = ['Cash', 'Card', 'EFT']
 const MAX_HISTORY_DATA = 1_900_000 // a database row holds up to 2 MB
@@ -305,7 +306,19 @@ export async function rollback(entryId) {
 /* ---------------- loading ---------------- */
 
 async function load() {
-  const data = await request('/api/load')
+  // Skip the full history download when our stored copy still matches the server's current revision.
+  const cacheKey = user || 'default'
+  let data = null
+  let rev = null
+  try {
+    const [cached, probe] = await Promise.all([readLoadCache(cacheKey), request('/api/rev').catch(() => null)])
+    rev = probe?.rev || null
+    if (cached && rev && cached.rev === rev) data = cached.data
+  } catch { /* fall through to a normal load */ }
+  if (!data) {
+    data = await request('/api/load')
+    if (rev) writeLoadCache(cacheKey, rev, data) // best-effort; keyed by the revision we just probed
+  }
   db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
   db.services = data.services.map((a) => toService(fromArray('services', a)))
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))

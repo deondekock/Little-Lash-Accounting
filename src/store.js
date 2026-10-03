@@ -7,6 +7,7 @@ import { currentMonth, todayStr, monthLabel } from './lib/format.js'
 import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysBetween, clientKey } from './lib/stats.js'
 import { salonDays } from './lib/rebook.js'
 import { isIos } from './lib/push.js'
+import { clearLoadCache } from './lib/loadcache.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -262,6 +263,7 @@ export const openSecurity = () => (state.modal = { type: 'security', data: null 
 export function signOut() {
   state.locked = false
   auth.signOut()
+  clearLoadCache() // forget the cached data copy on this device
   state.phase = 'signedOut'
   state.email = ''
 }
