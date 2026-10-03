@@ -565,8 +565,6 @@ tr.muted td { color: var(--muted); }
 .sign-in .sign-in-tag { font-family: var(--font-serif); font-style: italic; color: var(--rose-ink); font-size: 15.5px; line-height: 1.6; margin: 0 auto 28px; max-width: 290px; }
 .btn.google { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 13px 22px; box-shadow: var(--shadow); }
 .muted-note { font-size: 13px; margin: 16px 0 8px !important; color: var(--muted) !important; }
-.nudge-total { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
-.nudge-total b { font-size: 15px; white-space: nowrap; }
 code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 
 /* team cards */

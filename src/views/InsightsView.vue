@@ -7,9 +7,9 @@ import TotalsTable from '../components/TotalsTable.vue'
 import Icon from '../components/Icon.vue'
 import RebookTeam from '../components/RebookTeam.vue'
 import RebookCard from '../components/RebookCard.vue'
-import { all, state, serviceCatalog, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview, openService } from '../store.js'
+import { all, state, employeeColor, employeeById, changeYear, changeMonth, setEmployee, setView, openReview } from '../store.js'
 import { byEmployee, fmt, fmt0, monthName, totals } from '../lib/format.js'
-import { compactMoney, monthlyTotals, priceNudges } from '../lib/stats.js'
+import { compactMoney, monthlyTotals } from '../lib/stats.js'
 
 const forEmployee = (list) => (state.employee === 'all' ? list : list.filter((a) => a.employeeId === state.employee))
 const year = computed(() => forEmployee(all.value.filter((a) => a.month.startsWith(String(state.year)))))
@@ -43,14 +43,6 @@ const tableRows = computed(() =>
   }),
 )
 const teamRows = computed(() => team.value.map((r) => ({ key: r.id, label: r.name, t: r.t, color: employeeColor(r.id) })))
-
-// Smart price nudges — whole team (or the picked member), from the last 3 months of real prices + volume.
-const nudges = computed(() => priceNudges(serviceCatalog.value, all.value, { employeeId: state.employee }))
-const nudgeWho = computed(() => (state.employee === 'all' ? 'whole team' : employeeById(state.employee)?.name || 'this person'))
-function openNudge(n) {
-  const s = serviceCatalog.value.find((x) => x.key === n.key)
-  if (s) openService(s)
-}
 
 function openMonth(month) {
   changeMonth(month)
@@ -93,27 +85,6 @@ function pickEmployee(id) {
         <span class="key"><i class="swatch" style="background: var(--series-1)" />{{ state.year }}</span>
         <span class="key"><i class="swatch" style="background: var(--series-ghost)" />{{ state.year - 1 }}</span>
         <span v-if="best?.value" class="key" style="margin-left: auto">Best month: <b style="color: var(--ink)">{{ best.title.split(' ')[0] }}</b></span>
-      </div>
-    </section>
-
-    <section v-if="nudges.rows.length" class="card" style="margin-top: 14px">
-      <div class="card-title"><h3>Smart price nudges</h3><span class="hint">{{ nudgeWho }} · last 3 months</span></div>
-      <p class="muted-note" style="margin: 0 0 10px">A ~5% lift on your busiest services, across everyone who does them. Tap one to set the price.</p>
-      <div class="list">
-        <button v-for="n in nudges.rows" :key="n.key" type="button" class="list-row" @click="openNudge(n)">
-          <div class="grow">
-            <div class="title">{{ n.name }}</div>
-            <div class="meta">{{ Math.round(n.perMonth) }}× / month · usually {{ fmt0(n.price) }} → {{ fmt0(n.price + n.step) }}</div>
-          </div>
-          <div class="right">
-            <div class="big" style="color: var(--paid)">+{{ fmt0(n.uplift) }}<span class="hint"> /mo</span></div>
-            <div class="meta">+{{ fmt0(n.step) }} each</div>
-          </div>
-        </button>
-      </div>
-      <div class="nudge-total">
-        <span>If you lifted all {{ nudges.count }} services ~5%</span>
-        <b style="color: var(--paid)">+{{ fmt0(nudges.total) }}/mo · {{ fmt0(nudges.total * 12) }}/yr</b>
       </div>
     </section>
 

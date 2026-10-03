@@ -268,44 +268,6 @@ export function priceRange(s, activeIds = null) {
   return { min: Math.min(...set), max: Math.max(...set) }
 }
 
-/** A tidy price lift: about `pct` (default 5%), at least R10, rounded to a sensible step for the price band. */
-function niceStep(price, pct = 0.05) {
-  const step = price >= 1000 ? 100 : price >= 500 ? 50 : price >= 200 ? 20 : 10
-  return Math.max(step, Math.round((price * pct) / step) * step)
-}
-
-/**
- * Smart price nudges: for each active service, roughly what a tidy price lift would add per month,
- * from how often it was done over the last few months and what's actually charged for it.
- *
- * Team-wide by default (every staff member's volume, at the price the team typically charges). Pass an
- * employeeId to scope it to one person (her prices, her volume). Returns the top `limit` rows plus the
- * business-wide total across ALL qualifying services (not just the shown rows).
- * `catalog` is buildServices(all, services); `all` is every appointment.
- */
-export function priceNudges(catalog, all, { employeeId = 'all', months = 3, today = todayStr(), limit = 6, pct = 0.05 } = {}) {
-  const appts = employeeId === 'all' ? all : all.filter((a) => a.employeeId === employeeId)
-  const cut = toDate(toTime(today) - months * 30 * DAY)
-  const recent = new Map()
-  for (const a of appts) {
-    if (a.date < cut || a.date > today) continue
-    for (const t of splitServices(a.service)) recent.set(serviceKey(t), (recent.get(serviceKey(t)) || 0) + 1)
-  }
-  const rows = []
-  for (const s of catalog) {
-    if (!s.active) continue
-    // What's actually charged: the team's / her typical price for it, falling back to the set price.
-    const price = employeeId === 'all' ? (s.typical ?? s.price) : servicePrice(s, employeeId)
-    if (!price || price <= 0) continue
-    const perMonth = (recent.get(s.key) || 0) / months
-    if (perMonth < 1) continue // too rare to be worth nudging
-    const step = niceStep(price, pct)
-    rows.push({ key: s.key, name: s.name, price, step, perMonth, uplift: step * perMonth })
-  }
-  rows.sort((a, b) => b.uplift - a.uplift)
-  const total = Math.round(rows.reduce((s, n) => s + n.uplift, 0))
-  return { rows: rows.slice(0, limit).map((n) => ({ ...n, uplift: Math.round(n.uplift) })), total, count: rows.length }
-}
 
 /** Service names that only differ by spacing, accents, capitals or a plural "s". */
 export function findServiceDuplicates(services) {
