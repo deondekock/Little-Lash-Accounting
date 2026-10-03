@@ -105,7 +105,7 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
       <h1 class="wordmark"><img :src="logo" alt="Little Lash Lounge" width="160" height="46"></h1>
       <div v-if="state.phase === 'ready'" class="top-actions">
         <button v-if="state.role !== 'staff'" class="icon-btn" aria-label="History and undo" title="History & undo" @click="openHistory"><Icon name="history" /></button>
-        <button class="icon-btn" aria-label="Refresh" title="Refresh" @click="refresh"><Icon name="refresh" /></button>
+        <button class="icon-btn" :class="{ spinning: state.updating }" aria-label="Refresh" :title="state.updating ? 'Updating…' : 'Refresh'" @click="refresh"><Icon name="refresh" /></button>
         <button class="avatar-btn" aria-label="Settings" @click="openSettings">{{ (state.email || '•')[0].toUpperCase() }}</button>
       </div>
     </div>

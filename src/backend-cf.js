@@ -305,20 +305,12 @@ export async function rollback(entryId) {
 
 /* ---------------- loading ---------------- */
 
-async function load() {
-  // Skip the full history download when our stored copy still matches the server's current revision.
-  const cacheKey = user || 'default'
-  let data = null
-  let rev = null
-  try {
-    const [cached, probe] = await Promise.all([readLoadCache(cacheKey), request('/api/rev').catch(() => null)])
-    rev = probe?.rev || null
-    if (cached && rev && cached.rev === rev) data = cached.data
-  } catch { /* fall through to a normal load */ }
-  if (!data) {
-    data = await request('/api/load')
-    if (rev) writeLoadCache(cacheKey, rev, data) // best-effort; keyed by the revision we just probed
-  }
+// The data revision currently held in memory (and in the on-device cache). Used to skip needless reloads.
+let loadedRev = null
+export const currentRev = () => loadedRev
+
+/** Rebuild the in-memory db from a raw /api/load payload. */
+function buildDb(data) {
   db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
   db.services = data.services.map((a) => toService(fromArray('services', a)))
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
@@ -334,6 +326,54 @@ async function load() {
   const day = parseInt(db.settings[MONTH_START_SETTING], 10)
   db.startDay = day >= 1 && day <= 28 ? day : 1
   db.company = Object.fromEntries(COMPANY_FIELDS.map(([key, label]) => [key, String(db.settings[label] ?? '').trim()]))
+}
+
+async function load() {
+  // Skip the full history download when our stored copy still matches the server's current revision.
+  const cacheKey = user || 'default'
+  let data = null
+  let rev = null
+  try {
+    const [cached, probe] = await Promise.all([readLoadCache(cacheKey), request('/api/rev').catch(() => null)])
+    rev = probe?.rev || null
+    if (cached && rev && cached.rev === rev) data = cached.data
+  } catch { /* fall through to a normal load */ }
+  if (!data) {
+    data = await request('/api/load')
+    if (rev) writeLoadCache(cacheKey, rev, data) // best-effort; keyed by the revision we just probed
+  }
+  loadedRev = rev
+  buildDb(data)
+}
+
+/** Build straight from the on-device copy with no network — for an instant start when one exists. */
+async function loadFromCache() {
+  const cached = await readLoadCache(user || 'default')
+  if (!cached?.data) return false
+  loadedRev = cached.rev || null
+  buildDb(cached.data)
+  return true
+}
+
+/** Cache-first open: render the stored copy instantly when present, else do a normal (networked) load. */
+export async function openFast() {
+  if (await loadFromCache()) return { cached: true, rev: loadedRev }
+  await load()
+  return { cached: false, rev: loadedRev }
+}
+
+/**
+ * Background refresh after a cache-first start: probe the tiny /api/rev and only re-download when the
+ * server has actually moved on. Returns true if the data changed (so the UI should re-read it).
+ */
+export async function revalidate() {
+  const probe = await request('/api/rev').catch(() => null)
+  if (!probe?.rev || probe.rev === loadedRev) return false
+  const data = await request('/api/load')
+  loadedRev = probe.rev
+  writeLoadCache(user || 'default', probe.rev, data)
+  buildDb(data)
+  return true
 }
 
 /** Opens the salon's data (there's only one database, so the argument is ignored). */

@@ -30,6 +30,7 @@ export const state = reactive({
   pinSet: false, // the signed-in owner has a passcode
   email: '',
   loadedAt: 0,
+  updating: false, // a background refresh is running after an instant cache-first start
   pending: 0,
   view: 'home', // 'home' | 'payments' | 'clients' | 'team' | 'insights' | 'services' | 'payroll' (staff: 'my-leave' | 'my-payslips' | 'my-details')
   role: 'admin', // 'admin' (owner: everything) | 'staff' (her own leave, payslips and details)
@@ -272,17 +273,27 @@ export function signOut() {
 export async function openSheet(idOrUrl) {
   state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
   try {
-    const id = await api('openSheet', idOrUrl)
-    if (BACKEND !== 'cloudflare') savedSheetId(id)
+    // Cloudflare: open from the on-device copy instantly when we have one, then refresh behind the UI.
+    let cached = false
+    if (BACKEND === 'cloudflare') {
+      const res = await api('openFast')
+      cached = !!res?.cached
+      lastRev = res?.rev ?? null
+    } else {
+      savedSheetId(await api('openSheet', idOrUrl))
+    }
     const data = await api('getInitialData')
     applyData(data)
     state.spreadsheetUrl = data.spreadsheetUrl
     state.month = currentMonth(state.monthStartDay)
     state.year = Number(state.month.slice(0, 4))
-    await loadAll()
+    all.value = await api('getAppointments', '')
+    state.selected.clear()
+    if (BACKEND !== 'cloudflare') await markRev()
     state.loadedAt = Date.now()
     state.phase = 'ready'
     openHash(location.hash)
+    if (cached) backgroundRefresh() // we rendered a stored copy — make sure it's current
     return true
   } catch (err) {
     state.error = String(err?.message || err)
@@ -465,6 +476,25 @@ async function loadAll() {
   all.value = await api('getAppointments', '')
   state.selected.clear()
   await markRev()
+}
+
+/** After an instant cache-first start, quietly pull a fresh copy if the server has moved on. */
+async function backgroundRefresh() {
+  if (BACKEND !== 'cloudflare') return
+  try {
+    state.updating = true
+    if (await api('revalidate')) {
+      const data = await api('getInitialData')
+      applyData(data)
+      state.spreadsheetUrl = data.spreadsheetUrl
+      all.value = await api('getAppointments', '')
+      state.selected.clear()
+      state.loadedAt = Date.now()
+    }
+    lastRev = await api('currentRev')
+  } catch { /* offline/transient — maybeRefresh reconciles later */ } finally {
+    state.updating = false
+  }
 }
 
 /**
