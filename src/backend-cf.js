@@ -366,6 +366,11 @@ async function loadFromCache() {
   return true
 }
 
+/** Whether we have any on-device copy to render from — lets init render before confirming auth. */
+export async function hasCache() {
+  try { return !!((await readLoadCache(LIGHT_KEY(user))) || (await readLoadCache(user || 'default'))) } catch { return false }
+}
+
 /** Build from the recent-slice copy with no network — the fastest start (partial; full history fills in after). */
 async function loadLightFromCache() {
   const cached = await readLoadCache(LIGHT_KEY(user))

@@ -199,11 +199,20 @@ export async function init() {
   backend.setUser(state.email)
   if (!state.email && BACKEND !== 'cloudflare') auth.fetchEmail().then((e) => { state.email = e; backend.setUser(e) }).catch(() => {})
   if (BACKEND === 'cloudflare') {
+    // Optimistic instant start: a returning owner with a device copy renders now; whoami confirms behind it.
+    if (auth.getToken() && state.email && auth.knownRole() === 'admin' && await api('hasCache')) {
+      state.role = 'admin'
+      await openSheet('cloudflare')
+      refreshPin()
+      validateSession() // confirm the session (and role) in the background
+      return
+    }
     try {
       const me = await api('whoami')
       state.email = me.email
       backend.setUser(me.email)
       auth.rememberEmail(me.email)
+      auth.rememberRole(me.role)
       state.role = me.role
       if (me.role === 'staff') {
         state.me = me
@@ -271,6 +280,27 @@ export function signOut() {
 }
 
 /** Opens (and remembers) a sheet by link or ID. */
+/** Background confirmation after an optimistic (cache-first) start: validate the session and reconcile. */
+async function validateSession() {
+  try {
+    const me = await api('whoami')
+    auth.rememberEmail(me.email)
+    auth.rememberRole(me.role)
+    if (me.email !== state.email || me.role !== state.role) {
+      // A different account or role than we optimistically assumed — reload correctly.
+      state.email = me.email
+      backend.setUser(me.email)
+      state.role = me.role
+      if (me.role === 'staff') { state.me = me; state.view = 'my-appointments'; return openStaff() }
+      return openSheet('cloudflare')
+    }
+  } catch (err) {
+    if (err instanceof PinRequiredError) { state.locked = false; state.phase = 'pin'; return }
+    if (err instanceof AuthError) { state.phase = 'signedOut'; return }
+    // transient network error — keep the cached view; maybeRefresh reconciles later
+  }
+}
+
 export async function openSheet(idOrUrl) {
   state.phase = state.phase === 'pickSheet' ? 'pickSheet' : 'loading'
   try {

@@ -89,6 +89,12 @@ export function rememberEmail(email) {
   write({ ...read(), email })
 }
 
+/** The last known role ('admin' | 'staff'), for an optimistic instant start before whoami confirms it. */
+export const knownRole = () => read().role || ''
+export function rememberRole(role) {
+  write({ ...read(), role })
+}
+
 /** Silent sign-in is attempted at most once per tab, to avoid redirect loops. */
 export const canTrySilent = () => !!knownEmail() && !session(SILENT_KEY)
 
