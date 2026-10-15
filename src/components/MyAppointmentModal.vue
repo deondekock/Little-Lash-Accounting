@@ -4,10 +4,12 @@ import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
-import { state, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
+import { state, serviceCatalog, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
 import { todayStr, shortDate } from '../lib/format.js'
 import { OVERTIME_PCT_CHOICES, overtimeShare } from '../lib/payroll.js'
 import { METHODS } from '../lib/schema.js'
+import { servicePrice } from '../lib/stats.js'
+import { splitServices, serviceKey } from '../lib/services.js'
 import { lockedReason, canDelete } from '../lib/staffRules.js'
 
 /**
@@ -46,6 +48,15 @@ const otPct = computed({
 const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
 const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 watch(changeAmount, (v) => !v && (form.amount = ''))
+
+// The amount follows the chosen services at her own price; she can still type her own (same as the owner's form).
+watch(() => form.service, (svc) => {
+  if (!changeAmount.value) return
+  const byKey = new Map(serviceCatalog.value.map((s) => [s.key, s]))
+  const prices = splitServices(svc).map((t) => servicePrice(byKey.get(serviceKey(t)), me.value?.id))
+  if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
+  else if (!prices.length) form.amount = ''
+})
 
 async function submit() {
   picker.value?.commit()
@@ -88,7 +99,7 @@ async function remove() {
         </div>
         <div class="field">
           <label for="s-service">Services</label>
-          <ServicePicker id="s-service" ref="picker" v-model="form.service" :employee-id="me?.id" hide-prices />
+          <ServicePicker id="s-service" ref="picker" v-model="form.service" :employee-id="me?.id" />
         </div>
         <div class="row2">
           <div class="field">
