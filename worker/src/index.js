@@ -441,7 +441,9 @@ async function staffLoad(db, me) {
     db.prepare('SELECT json_group_array(json_array(key, value)) AS j FROM settings'),
     db.prepare(`SELECT json_group_array(json_array(${STAFF_APPT_COLS})) AS j FROM appointments WHERE employee_id = ?1`).bind(me.employeeId),
     // Service names only (no prices).
-    db.prepare(`SELECT json_group_array(json_array(id, name, NULL, active, NULL, created_at, updated_at)) AS j FROM services`),
+    // Her own price per service (her override, else the general price) — so the amount can auto-fill.
+    // Other staff's per-service prices are never sent (the prices map stays NULL).
+    db.prepare(`SELECT json_group_array(json_array(id, name, COALESCE(CASE WHEN json_valid(prices) THEN json_extract(prices, '$."' || ?1 || '"') END, price), active, NULL, created_at, updated_at)) AS j FROM services`).bind(me.employeeId),
   ])
   const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
   const { phones, stats } = await staffClients(db, me)
