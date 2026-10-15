@@ -1050,7 +1050,8 @@ export async function signOutOthers() {
 export async function staffLoad() {
   const data = await request('/api/staff/load')
   db.employees = data.employees.map((a) => toEmployee(fromArray('employees', a)))
-  db.services = []
+  // Her service list: the server sends only her own price (as `price`), never the team's.
+  db.services = (data.services || []).map((a) => toService(fromArray('services', a)))
   db.appts = data.appointments.map((a) => toAppt(fromArray('appointments', a)))
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))

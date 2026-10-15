@@ -225,7 +225,8 @@ export function buildServices(all, list) {
       if (a.date > (e.lastBy[a.employeeId] || '')) e.lastBy[a.employeeId] = a.date
       e.revenue += a.amount / tokens.length
       if (a.date > e.last) e.last = a.date
-      if (tokens.length === 1) {
+      // Staff never receive amounts (they parse as 0), so a 0 must not become a "typical" price.
+      if (tokens.length === 1 && a.amount > 0) {
         e.solo.push(a.amount)
         ;(e.soloBy[a.employeeId] ||= []).push(a.amount)
       }
