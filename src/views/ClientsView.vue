@@ -43,6 +43,7 @@ const counts = computed(() => ({
   regulars: clients.value.filter((c) => c.visits >= 5 && c.daysSince <= 120).length,
   dupes: dupes.value.length,
 }))
+const owed = computed(() => clients.value.reduce((sum, c) => sum + (c.unpaid > 0 ? c.unpaid : 0), 0))
 
 const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yesterday' : d < 14 ? `${d} days ago` : d < 60 ? `${Math.round(d / 7)} weeks ago` : `${Math.round(d / 30)} months ago`)
 </script>
@@ -71,9 +72,11 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
     <p v-if="state.clientFilter === 'quiet' && !query" class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
       Regulars who haven't been back in more than twice their usual time (in the last year). A "we miss you" might win them back 💌
     </p>
-    <p v-if="state.clientFilter === 'owing' && !query" class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
-      Everyone with unpaid visits, biggest first. Tap 💬 for a friendly payment reminder.
-    </p>
+    <div v-if="state.clientFilter === 'owing' && !query" class="owed-total">
+      <div class="owed-label">Still owed in total</div>
+      <div class="owed-amount">{{ fmt(owed) }}</div>
+      <div class="owed-sub">{{ counts.owing }} client{{ counts.owing === 1 ? '' : 's' }} with unpaid visits, biggest first. Tap 💬 for a friendly payment reminder.</div>
+    </div>
 
     <template v-if="state.clientFilter === 'dupes' && !query">
       <p class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
