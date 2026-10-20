@@ -42,11 +42,11 @@ function toggle() {
       <div class="row2 ot-row">
         <div class="field">
           <label :for="prefix + '-len'">Service duration (min)</label>
-          <input :id="prefix + '-len'" v-model.lazy="length" type="number" inputmode="numeric" min="1" max="720" step="5" placeholder="e.g. 90" :required="minutes > 0">
+          <input :id="prefix + '-len'" v-model.lazy="length" type="number" inputmode="numeric" min="1" max="720" placeholder="e.g. 90" :required="minutes > 0">
         </div>
         <div class="field">
           <label :for="prefix + '-min'">Of which overtime (min)</label>
-          <input :id="prefix + '-min'" v-model.lazy="overtime" type="number" inputmode="numeric" min="0" :max="form.length || 720" step="5" placeholder="e.g. 30">
+          <input :id="prefix + '-min'" v-model.lazy="overtime" type="number" inputmode="numeric" min="0" :max="form.length || 720" placeholder="e.g. 30">
         </div>
       </div>
       <p v-if="legacyPct != null" class="field-hint">Saved earlier as {{ legacyPct }}% overtime — type the minutes to replace that.</p>
