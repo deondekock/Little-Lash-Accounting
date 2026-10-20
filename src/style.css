@@ -732,8 +732,6 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .ot-toggle.active { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
 .ot-row { margin-top: 10px; }
 .ot-row > .field { margin-bottom: 0; }
-.ot-hm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.ot-hm select { min-width: 0; padding-left: 10px !important; padding-right: 26px !important; }
 .calc-box { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13.5px; }
 .calc-box > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; color: var(--ink-2); }
 .calc-box b { color: var(--ink); font-variant-numeric: tabular-nums; }
