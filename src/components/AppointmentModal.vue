@@ -2,12 +2,12 @@
 import { STATUSES } from '../lib/schema.js'
 import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import BaseModal from './BaseModal.vue'
+import OvertimeField from './OvertimeField.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { watch } from 'vue'
 import { serviceCatalog, liveVouchers } from '../store.js'
-import { OVERTIME_PCT_CHOICES, overtimeShare } from '../lib/payroll.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
 import { METHODS, businessMonth, monthRange, todayStr, fmt } from '../lib/format.js'
@@ -63,18 +63,6 @@ watch(() => [form.service, form.employeeId], ([svc, emp]) => {
   if (prices.length && prices.every((p) => p != null)) form.amount = prices.reduce((a, b) => a + b, 0)
   else if (!prices.length) form.amount = ''
 })
-
-/* Overtime: the share of the appointment that fell after hours, as a percentage. */
-const otPct = computed({
-  get: () => Math.round(overtimeShare(form) * 100),
-  set: (p) => {
-    p = Math.max(0, Math.min(100, Math.round(Number(p) || 0)))
-    form.length = 0 // the percentage model doesn't use minutes
-    form.overtime = p <= 0 ? 0 : p >= 100 ? 'all' : `${p}%`
-  },
-})
-const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
-const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 
 /*
  * Paying: one or more lines, each the money actually taken for that method. The first line opens by
@@ -220,22 +208,7 @@ async function remove() {
           >
         </div>
       </div>
-      <div class="field">
-        <label>How much was in overtime?</label>
-        <div class="chips inline" role="group" aria-label="Overtime share">
-          <button
-            v-for="o in OVERTIME_PCT_CHOICES" :key="o.label" type="button" class="chip small"
-            :class="{ active: otActive(o.value) }" :aria-pressed="otActive(o.value)" @click="setOt(o.value)"
-          >
-            {{ o.label }}
-          </button>
-        </div>
-        <div class="ot-length">
-          <label for="f-otpct">or exactly</label>
-          <input id="f-otpct" v-model.number="otPct" type="number" inputmode="numeric" min="0" max="100" style="max-width: 84px">
-          <span class="field-hint" style="margin: 0">% of the appointment</span>
-        </div>
-      </div>
+      <OvertimeField :form="form" prefix="f-ot" />
       <div class="field">
         <label>Paid with</label>
         <template v-for="(l, i) in tenders" :key="i">

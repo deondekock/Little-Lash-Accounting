@@ -13,6 +13,9 @@ import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, statusOf } from './lib/schema.js'
 import { toAppt, overtimeValue } from './lib/appt.js'
+
+/** Overtime minutes can never exceed the service duration (a percentage / 'all' passes through). */
+const clampOvertime = (ot, length) => (typeof ot === 'number' && Number(length) > 0 ? Math.min(ot, Math.round(Number(length))) : ot)
 import { clientKey } from './lib/stats.js'
 import { readLoadCache, writeLoadCache } from './lib/loadcache.js'
 
@@ -529,7 +532,7 @@ function validateAppointment(input) {
   return {
     date, employeeId: employee.id, employeeName: employee.name, client: clean(input.client), service: clean(input.service), amount,
     method: input.method, status: statusOf(input.status), notes: clean(input.notes),
-    overtime: overtimeValue(input.overtime), length: Number(input.length) > 0 ? Math.round(Number(input.length)) : 0,
+    overtime: clampOvertime(overtimeValue(input.overtime), input.length), length: Number(input.length) > 0 ? Math.round(Number(input.length)) : 0,
   }
 }
 

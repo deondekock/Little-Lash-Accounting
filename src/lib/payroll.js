@@ -114,15 +114,8 @@ export function rebateAge(idNumber, payDate) {
 
 /* ---------------- overtime ---------------- */
 
-// Overtime is now recorded as the share of the appointment that fell after hours (a percentage).
-// New entries store it as a "NN%" string; older entries kept minutes + length, still read below.
-export const OVERTIME_PCT_CHOICES = [
-  { value: 0, label: 'No' },
-  { value: 25, label: '25%' },
-  { value: 50, label: '50%' },
-  { value: 75, label: '75%' },
-  { value: 'all', label: 'All' },
-]
+// Overtime is recorded as minutes after hours (`overtime`) out of the service duration (`length`).
+// Entries from an earlier version hold a percentage ("NN%" / "all"); still read below.
 
 const pctOf = (v) => {
   const m = /^\s*(\d+(?:\.\d+)?)\s*%\s*$/.exec(String(v))
@@ -142,13 +135,13 @@ export function minutesLabel(min) {
 export function overtimeShare(a) {
   if (!a.overtime) return 0
   if (a.overtime === 'all') return 1
-  const pct = pctOf(a.overtime) // new "NN%" entries
+  const pct = pctOf(a.overtime) // older "NN%" entries
   if (pct != null) return Math.min(1, Math.max(0, pct / 100))
-  if (!a.length) return 1 // older entry, time not known: count it all
+  if (!a.length) return 1 // duration not known: count it all
   return Math.min(1, a.overtime / a.length)
 }
 
-/** Label for an appointment's overtime, e.g. "Overtime 50%" (or "Overtime 1 h of 2 h" for older ones). */
+/** Label for an appointment's overtime, e.g. "Overtime 30 min of 1½ h" (or "Overtime 50%" for older ones). */
 export function overtimeLabel(a) {
   if (!a.overtime) return ''
   if (a.overtime === 'all' || overtimeShare(a) === 1) return 'Overtime'

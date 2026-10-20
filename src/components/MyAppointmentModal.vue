@@ -1,12 +1,12 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
+import OvertimeField from './OvertimeField.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { state, serviceCatalog, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
 import { todayStr, shortDate } from '../lib/format.js'
-import { OVERTIME_PCT_CHOICES, overtimeShare } from '../lib/payroll.js'
 import { METHODS } from '../lib/schema.js'
 import { servicePrice } from '../lib/stats.js'
 import { splitServices, serviceKey } from '../lib/services.js'
@@ -36,17 +36,6 @@ function onPick(c) {
   suggestion.value = `Last visit ${shortDate(last.date)} ${last.date.slice(0, 4)}${last.service ? ' · ' + last.service : ''} · ${c.visits} visit${c.visits === 1 ? '' : 's'}`
 }
 
-/* Overtime — the share of the appointment that fell after hours (same as the owner's form). */
-const otPct = computed({
-  get: () => Math.round(overtimeShare(form) * 100),
-  set: (p) => {
-    p = Math.max(0, Math.min(100, Math.round(Number(p) || 0)))
-    form.length = 0
-    form.overtime = p <= 0 ? 0 : p >= 100 ? 'all' : `${p}%`
-  },
-})
-const setOt = (v) => { otPct.value = v === 'all' ? 100 : v }
-const otActive = (v) => (v === 'all' ? otPct.value === 100 : otPct.value === v)
 watch(changeAmount, (v) => !v && (form.amount = ''))
 
 // The amount follows the chosen services at her own price; she can still type her own (same as the owner's form).
@@ -123,17 +112,7 @@ async function remove() {
           <SegmentedControl v-model="form.status" :options="['Unpaid', 'Paid']" variant="status" />
           <div v-if="form.status === 'Written off'" class="field-hint">The owner wrote this one off (not paid, not owed). Tap Paid if the client paid after all.</div>
         </div>
-        <div class="field">
-          <label>How much was in overtime?</label>
-          <div class="chips inline" role="group" aria-label="Overtime share">
-            <button v-for="o in OVERTIME_PCT_CHOICES" :key="o.label" type="button" class="chip small" :class="{ active: otActive(o.value) }" @click="setOt(o.value)">{{ o.label }}</button>
-          </div>
-          <div class="ot-length">
-            <label for="s-otpct">or exactly</label>
-            <input id="s-otpct" v-model.number="otPct" type="number" inputmode="numeric" min="0" max="100" style="max-width: 84px">
-            <span class="field-hint" style="margin: 0">% of the appointment</span>
-          </div>
-        </div>
+        <OvertimeField :form="form" prefix="s-ot" />
         <div class="field">
           <label for="s-notes">Notes (optional)</label>
           <input id="s-notes" v-model="form.notes" maxlength="300">

@@ -729,9 +729,9 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .fold .chev { font-size: 20px; color: var(--brand); font-weight: 600; }
 .fold-body { padding: 4px 2px 6px; }
 .field textarea { font: inherit; resize: vertical; }
-.ot-length { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
-.ot-length label { margin: 0 !important; font-weight: 500 !important; }
-.ot-length select { width: auto !important; padding: 8px 10px !important; }
+.ot-toggle.active { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
+.ot-row { margin-top: 10px; }
+.ot-row > .field { margin-bottom: 0; }
 .calc-box { background: var(--card-2); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13.5px; }
 .calc-box > div { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; color: var(--ink-2); }
 .calc-box b { color: var(--ink); font-variant-numeric: tabular-nums; }
