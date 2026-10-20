@@ -13,7 +13,8 @@ const open = ref(!!props.form.overtime)
 const legacyPct = computed(() => (typeof props.form.overtime === 'string' ? Math.round(overtimeShare(props.form) * 100) : null))
 const minutes = computed(() => (typeof props.form.overtime === 'number' ? props.form.overtime : 0))
 
-const num = (v, max) => Math.max(0, Math.min(max, Math.round(Number(v) || 0)))
+// Typed minutes snap to the nearest quarter hour (0, 15, 30, …).
+const num = (v, max) => Math.max(0, Math.min(max, Math.round((Number(v) || 0) / 15) * 15))
 const length = computed({
   get: () => props.form.length || '',
   set: (v) => {
@@ -42,16 +43,16 @@ function toggle() {
       <div class="row2 ot-row">
         <div class="field">
           <label :for="prefix + '-len'">Service duration (min)</label>
-          <input :id="prefix + '-len'" v-model.lazy="length" type="number" inputmode="numeric" min="1" max="720" placeholder="e.g. 90" :required="minutes > 0">
+          <input :id="prefix + '-len'" v-model.lazy="length" type="number" inputmode="numeric" min="0" max="720" step="any" placeholder="e.g. 90" :required="minutes > 0">
         </div>
         <div class="field">
           <label :for="prefix + '-min'">Of which overtime (min)</label>
-          <input :id="prefix + '-min'" v-model.lazy="overtime" type="number" inputmode="numeric" min="0" :max="form.length || 720" placeholder="e.g. 30">
+          <input :id="prefix + '-min'" v-model.lazy="overtime" type="number" inputmode="numeric" min="0" :max="form.length || 720" step="any" placeholder="e.g. 30">
         </div>
       </div>
       <p v-if="legacyPct != null" class="field-hint">Saved earlier as {{ legacyPct }}% overtime — type the minutes to replace that.</p>
       <p v-else-if="share" class="field-hint">{{ minutesLabel(minutes) }} of {{ minutesLabel(form.length) }} · {{ share }}% of this appointment earns the overtime rate.</p>
-      <p v-else class="field-hint">Overtime can't be more than the service duration.</p>
+      <p v-else class="field-hint">In 15-minute steps. Overtime can't be more than the service duration.</p>
     </template>
   </div>
 </template>
