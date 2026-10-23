@@ -1066,3 +1066,12 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .owed-label { font-size: 12.5px; color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.04em; }
 .owed-amount { font-size: 28px; font-weight: 700; color: var(--unpaid); line-height: 1.2; margin: 2px 0; }
 .owed-sub { font-size: 13px; color: var(--ink-2); }
+
+/* Payments: the page follows a sideways swipe, slides out, and the next period slides in. */
+.swipe-page { transition: transform 0.18s ease, opacity 0.18s ease; will-change: transform; }
+.swipe-page.swipe-out-left { transform: translateX(-28%); opacity: 0; transition-duration: 0.16s; }
+.swipe-page.swipe-out-right { transform: translateX(28%); opacity: 0; transition-duration: 0.16s; }
+.swipe-page.swipe-in-right { animation: swipe-in-right 0.22s ease-out; }
+.swipe-page.swipe-in-left { animation: swipe-in-left 0.22s ease-out; }
+@keyframes swipe-in-right { from { transform: translateX(28%); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes swipe-in-left { from { transform: translateX(-28%); opacity: 0; } to { transform: none; opacity: 1; } }

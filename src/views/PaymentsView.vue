@@ -77,32 +77,57 @@ const emptyText = computed(() => {
 
 const add = () => openAppointment(null, mode.value === 'day' ? { date: day.value } : null)
 
-/* Swipe left/right anywhere on the page to move a day (or a month in Month view). */
+/*
+ * Swipe left/right anywhere on the page to move a day (or a month in Month view). The content follows
+ * the finger while dragging, slides out on release, and the new period slides in from the other side.
+ */
 let swipe = null
+const dragX = ref(0) // how far the content is pulled, in px
+const anim = ref('') // '' | 'out' | 'in'
+const pageStyle = computed(() => (anim.value ? {} : dragX.value ? { transform: `translateX(${dragX.value}px)`, opacity: 1 - Math.min(0.5, Math.abs(dragX.value) / 300) } : {}))
 function swipeStart(e) {
+  if (anim.value) return
   const t = e.touches[0]
   // Not when the finger is on something that scrolls sideways itself (the chip rows).
   for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
     const o = getComputedStyle(el).overflowX
     if ((o === 'auto' || o === 'scroll') && el.scrollWidth > el.clientWidth) return
   }
-  swipe = { x: t.clientX, y: t.clientY }
+  swipe = { x: t.clientX, y: t.clientY, horizontal: null }
+}
+function swipeMove(e) {
+  if (!swipe) return
+  const t = e.touches[0]
+  const dx = t.clientX - swipe.x
+  const dy = t.clientY - swipe.y
+  // Decide once whether this is a sideways swipe or a normal scroll.
+  if (swipe.horizontal === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) swipe.horizontal = Math.abs(dx) > Math.abs(dy) * 1.5
+  if (swipe.horizontal) dragX.value = dx * 0.6 // follow the finger, a little damped
 }
 function swipeEnd(e) {
   if (!swipe) return
   const t = e.changedTouches[0]
   const dx = t.clientX - swipe.x
-  const dy = t.clientY - swipe.y
+  const went = swipe.horizontal && Math.abs(dx) >= 60
   swipe = null
-  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+  if (!went) { dragX.value = 0; return } // springs back (transition on the wrapper)
   const dir = dx < 0 ? 1 : -1 // swipe left → forward
-  if (mode.value === 'day') shiftDay(dir)
-  else changeMonth(shiftMonth(state.month, dir))
+  anim.value = dir > 0 ? 'out-left' : 'out-right'
+  setTimeout(() => {
+    if (mode.value === 'day') shiftDay(dir)
+    else changeMonth(shiftMonth(state.month, dir))
+    dragX.value = 0
+    anim.value = dir > 0 ? 'in-right' : 'in-left'
+    setTimeout(() => { anim.value = '' }, 220)
+  }, 160)
 }
 </script>
 
 <template>
-  <div class="page" @touchstart.passive="swipeStart" @touchend.passive="swipeEnd" @touchcancel.passive="swipe = null">
+  <div
+    class="page swipe-page" :class="anim && 'swipe-' + anim" :style="pageStyle"
+    @touchstart.passive="swipeStart" @touchmove.passive="swipeMove" @touchend.passive="swipeEnd" @touchcancel.passive="swipe = null; dragX = 0"
+  >
     <div class="segmented view-toggle" role="tablist" aria-label="View" style="margin-bottom: 12px">
       <button role="tab" :aria-selected="mode === 'day'" :class="{ active: mode === 'day' }" @click="setMode('day')">Day</button>
       <button role="tab" :aria-selected="mode === 'month'" :class="{ active: mode === 'month' }" @click="setMode('month')">Month</button>
