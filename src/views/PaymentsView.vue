@@ -76,10 +76,33 @@ const emptyText = computed(() => {
 })
 
 const add = () => openAppointment(null, mode.value === 'day' ? { date: day.value } : null)
+
+/* Swipe left/right anywhere on the page to move a day (or a month in Month view). */
+let swipe = null
+function swipeStart(e) {
+  const t = e.touches[0]
+  // Not when the finger is on something that scrolls sideways itself (the chip rows).
+  for (let el = e.target; el && el !== e.currentTarget; el = el.parentElement) {
+    const o = getComputedStyle(el).overflowX
+    if ((o === 'auto' || o === 'scroll') && el.scrollWidth > el.clientWidth) return
+  }
+  swipe = { x: t.clientX, y: t.clientY }
+}
+function swipeEnd(e) {
+  if (!swipe) return
+  const t = e.changedTouches[0]
+  const dx = t.clientX - swipe.x
+  const dy = t.clientY - swipe.y
+  swipe = null
+  if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return
+  const dir = dx < 0 ? 1 : -1 // swipe left → forward
+  if (mode.value === 'day') shiftDay(dir)
+  else changeMonth(shiftMonth(state.month, dir))
+}
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" @touchstart.passive="swipeStart" @touchend.passive="swipeEnd" @touchcancel.passive="swipe = null">
     <div class="segmented view-toggle" role="tablist" aria-label="View" style="margin-bottom: 12px">
       <button role="tab" :aria-selected="mode === 'day'" :class="{ active: mode === 'day' }" @click="setMode('day')">Day</button>
       <button role="tab" :aria-selected="mode === 'month'" :class="{ active: mode === 'month' }" @click="setMode('month')">Month</button>
