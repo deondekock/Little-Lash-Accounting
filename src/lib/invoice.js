@@ -161,11 +161,6 @@ export async function invoiceImage(client, company = {}, nameOf = () => '') {
       y += 44
     }
     y += 16
-  } else {
-    ctx.fillStyle = INK
-    ctx.font = `400 30px ${SANS}`
-    ctx.fillText('You can pay at your next visit. Thank you!', PAD, y)
-    y += 70
   }
 
   // Footer.
