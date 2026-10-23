@@ -78,7 +78,7 @@ const emptyText = computed(() => {
 const add = () => openAppointment(null, mode.value === 'day' ? { date: day.value } : null)
 
 /*
- * Swipe left/right anywhere on the page to move a day (or a month in Month view). The content follows
+ * Swipe left/right on the appointments list to move a day (or a month in Month view). The content follows
  * the finger while dragging, slides out on release, and the new period slides in from the other side.
  */
 let swipe = null
@@ -124,10 +124,7 @@ function swipeEnd(e) {
 </script>
 
 <template>
-  <div
-    class="page swipe-page" :class="anim && 'swipe-' + anim" :style="pageStyle"
-    @touchstart.passive="swipeStart" @touchmove.passive="swipeMove" @touchend.passive="swipeEnd" @touchcancel.passive="swipe = null; dragX = 0"
-  >
+  <div class="page">
     <div class="segmented view-toggle" role="tablist" aria-label="View" style="margin-bottom: 12px">
       <button role="tab" :aria-selected="mode === 'day'" :class="{ active: mode === 'day' }" @click="setMode('day')">Day</button>
       <button role="tab" :aria-selected="mode === 'month'" :class="{ active: mode === 'month' }" @click="setMode('month')">Month</button>
@@ -170,7 +167,10 @@ function swipeEnd(e) {
       </div>
     </div>
 
-    <div class="card appt-card">
+    <div
+      class="card appt-card swipe-page" :class="anim && 'swipe-' + anim" :style="pageStyle"
+      @touchstart.passive="swipeStart" @touchmove.passive="swipeMove" @touchend.passive="swipeEnd" @touchcancel.passive="swipe = null; dragX = 0"
+    >
       <template v-if="list.length">
         <div class="date-head plain">
           <label class="select-all"><input v-model="allSelected" type="checkbox"> Select all</label>
