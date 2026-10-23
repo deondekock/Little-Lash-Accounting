@@ -1,8 +1,9 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
+import SwipeArea from '../components/SwipeArea.vue'
 import Sparkline from '../components/charts/Sparkline.vue'
-import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow, viewAs, visitDays } from '../store.js'
+import { all, state, monthAppts, employeeColor, openEmployee, setView, openPicker, monthFlow, openFlow, viewAs, visitDays, changeMonth } from '../store.js'
 import { recentRebooking, REBOOK_DAYS } from '../lib/rebook.js'
 import { BACKEND } from '../config.js'
 import { leaveBalance, payDefaults } from '../lib/payroll.js'
@@ -58,6 +59,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
       <button class="btn small soft" @click="openEmployee()"><Icon name="plus" :size="16" /> Add</button>
     </div>
 
+    <SwipeArea @swipe="(dir) => changeMonth(shiftMonth(state.month, dir))">
     <div class="team-grid">
       <div v-for="m in members" :key="m.id" class="card member" :class="{ inactive: !m.active }">
         <div class="head">
@@ -92,6 +94,7 @@ const inactiveCount = computed(() => state.employees.filter((e) => !e.active).le
         </div>
       </div>
     </div>
+    </SwipeArea>
 
     <button class="card list-row" style="margin-top: 14px; padding: 16px" @click="setView('payroll', { payrollTab: 'payslips' })">
       <div class="history-icon"><Icon name="wallet" :size="16" /></div>

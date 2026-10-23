@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
+import SwipeArea from '../components/SwipeArea.vue'
 import { all, state, clients, employeeColor, openClient, openAppointment, openMerge, openDismissQuiet } from '../store.js'
 import { findDuplicates, ordinal } from '../lib/stats.js'
 import WaButton from '../components/WaButton.vue'
@@ -18,6 +19,10 @@ const FILTERS = [
   { id: 'dupes', label: 'Possible duplicates' },
 ]
 const dupes = computed(() => findDuplicates(clients.value))
+// Swipe on the list: the next/previous filter chip.
+const filterAt = (dir) => FILTERS[FILTERS.findIndex((f) => f.id === state.clientFilter) + dir]
+const canSwipe = (dir) => !query.value && !!filterAt(dir)
+const onSwipe = (dir) => { state.clientFilter = filterAt(dir).id }
 
 const list = computed(() => {
   const q = query.value.trim().toLowerCase()
@@ -78,6 +83,7 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
       <div class="owed-sub">{{ counts.owing }} client{{ counts.owing === 1 ? '' : 's' }} with unpaid visits, biggest first. Tap 💬 for a friendly payment reminder.</div>
     </div>
 
+    <SwipeArea :can-go="canSwipe" @swipe="onSwipe">
     <template v-if="state.clientFilter === 'dupes' && !query">
       <p class="sub" style="color: var(--ink-2); margin: 0 0 12px; font-size: 13.5px">
         Names that only differ by spaces, accents or capitals. Tap Merge if it's the same person — you can undo it.
@@ -121,6 +127,7 @@ const ago = (d) => (d < 0 ? 'booked ahead' : d === 0 ? 'today' : d === 1 ? 'yest
       </div>
       <div v-else class="empty">No clients found.</div>
     </div>
+    </SwipeArea>
     <p v-if="list.length > shown" style="text-align: center; margin-top: 14px">
       <button class="btn ghost small" @click="shown += 50">Show more ({{ list.length - shown }} left)</button>
     </p>

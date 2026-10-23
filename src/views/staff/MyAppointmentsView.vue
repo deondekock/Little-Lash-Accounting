@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../../components/Icon.vue'
+import SwipeArea from '../../components/SwipeArea.vue'
 import { all, state, openMyAppointment } from '../../store.js'
 import { businessMonth, todayStr } from '../../lib/format.js'
 import { overtimeLabel } from '../../lib/payroll.js'
@@ -60,6 +61,7 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
     </button>
     <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
 
+    <SwipeArea :can-go="(dir) => dir < 0 || day < today" @swipe="shift">
     <div v-if="list.length" class="card" style="padding: 4px 16px">
       <button v-for="(a, i) in list" :key="a.id" class="list-row" @click="openMyAppointment(a)">
         <div class="appt-num">{{ i + 1 }}</div>
@@ -74,6 +76,7 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
       </button>
     </div>
     <div v-else class="card empty" style="padding: 22px">{{ day === today ? 'No appointments yet today. Tap Add after each client ✨' : 'No appointments on this day.' }}</div>
+    </SwipeArea>
   </div>
   <button v-if="!locked" class="fab" @click="openMyAppointment(null, { date: day })"><Icon name="plus" :stroke="2.4" /> Add</button>
 </template>

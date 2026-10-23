@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import Icon from '../../components/Icon.vue'
+import SwipeArea from '../../components/SwipeArea.vue'
 import { clients, openMyAppointment, state } from '../../store.js'
 import { shortDate } from '../../lib/format.js'
 import { looseKey, ordinal } from '../../lib/stats.js'
@@ -11,6 +12,11 @@ const query = ref('')
 const filter = ref(state.clientFilter === 'due' ? 'due' : 'all') // 'all' | 'due' | 'quiet' | 'regulars' | 'milestones'
 const open = ref('')
 const shown = ref(60)
+// Swipe on the list: the next/previous filter chip.
+const FILTERS = computed(() => ['all', 'due', 'quiet', ...(counts.value.milestones ? ['milestones'] : []), 'regulars'])
+const filterAt = (dir) => FILTERS.value[FILTERS.value.indexOf(filter.value) + dir]
+const canSwipe = (dir) => !!filterAt(dir)
+const onSwipe = (dir) => { filter.value = filterAt(dir) }
 const counts = computed(() => ({
   all: clients.value.length,
   due: clients.value.filter((c) => c.due).length,
@@ -51,6 +57,7 @@ const bookFor = (c) => openMyAppointment(null, { client: c.name, service: c.serv
 
     <p v-if="filter === 'quiet'" class="muted-note">Regulars who haven't been back to the salon in over twice their usual time.</p>
     <p v-if="filter === 'milestones'" class="muted-note">Their next visit is a milestone (10th, 25th, 50th…). Maybe plan a little treat 💕</p>
+    <SwipeArea :can-go="canSwipe" @swipe="onSwipe">
     <div v-if="list.length" class="card" style="padding: 4px 16px">
       <template v-for="c in list.slice(0, shown)" :key="c.key">
         <button class="list-row" :aria-expanded="open === c.key" @click="open = open === c.key ? '' : c.key">
@@ -75,5 +82,6 @@ const bookFor = (c) => openMyAppointment(null, { client: c.name, service: c.serv
       <p v-if="list.length > shown" style="text-align: center"><button class="link-btn" @click="shown += 60">Show more</button></p>
     </div>
     <div v-if="!list.length" class="card empty" style="padding: 18px">{{ filter === 'due' ? 'Nobody is due back right now 💕' : filter === 'quiet' ? 'Nobody has gone quiet 💕' : 'No clients found.' }}</div>
+    </SwipeArea>
   </div>
 </template>
