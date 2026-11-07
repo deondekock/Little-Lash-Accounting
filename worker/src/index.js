@@ -852,8 +852,16 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   const client = String(b.client || '').trim().slice(0, 80)
   const service = String(b.service || '').trim().slice(0, 200)
   if (!client) throw new HttpError(400, 'Please enter the client\'s name.')
-  if (!METHODS.includes(b.method)) throw new HttpError(400, 'Please choose Cash, Card or EFT.')
   const existing0 = b.id ? await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
+  // Split payments: the money taken per method (Cash / Card / EFT), summing to at most the amount.
+  const rows = Array.isArray(b.tenders)
+    ? b.tenders.map((t) => ({ amount: Math.round(Number(String(t?.amount ?? '').replace(',', '.')) * 100) / 100, method: t?.method }))
+      .filter((t) => t.amount > 0 && METHODS.includes(t.method))
+    : null
+  const method = rows?.length ? (rows.length > 1 ? 'Split' : rows[0].method)
+    : METHODS.includes(b.method) ? b.method
+      : existing0 && b.method === existing0.method ? existing0.method : null // an untouched Split visit keeps its rows
+  if (!method) throw new HttpError(400, 'Please choose Cash, Card or EFT.')
   // Only the owner writes visits off; a written-off visit stays that way unless she marks it paid.
   const status = b.status === 'Paid' ? 'Paid' : existing0?.status === 'Written off' ? 'Written off' : 'Unpaid'
   const notes = String(b.notes || '').trim().slice(0, 300)
@@ -872,13 +880,14 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   const amount = given ? Math.round(Number(String(b.amount).replace(',', '.')) * 100) / 100 : existing?.amount
   if (!existing && !given) throw new HttpError(400, 'Please enter the amount.')
   if (!(amount >= 0 && amount < 1e6)) throw new HttpError(400, 'Please enter a valid amount.')
+  if (rows?.length && rows.reduce((t, r) => t + r.amount, 0) > amount + 0.005) throw new HttpError(400, 'The payments add up to more than the amount.')
   const startDay = await checkMonths(db, me, [])
   const month = existing && existing.date === date ? existing.month : businessMonth(date, startDay)
   await checkMonths(db, me, [...new Set([month, existing?.month].filter(Boolean))])
   const now = new Date().toISOString()
   const rec = {
     id: existing?.id || crypto.randomUUID(), date, month, employee_id: me.employeeId, employee_name: me.name, client, service, amount,
-    method: b.method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
+    method, status, paid_on: status === 'Paid' ? (existing?.status === 'Paid' && existing.paid_on) || saToday() : '', notes, overtime, length,
     created_at: existing?.created_at || now, updated_at: now, created_by: existing ? existing.created_by : me.actor || me.email, updated_by: me.actor || me.email,
   }
   const cols = TABLES.appointments
@@ -886,13 +895,26 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
     ? [`${me.name} edited ${client} · ${ddmm(date)}`,
         existing.amount !== amount && `amount ${fmt0(existing.amount)} → ${fmt0(amount)}`,
         existing.status !== status && `${existing.status} → ${status}`,
-        existing.method !== b.method && `${existing.method} → ${b.method}`].filter(Boolean).join(' · ')
-    : `${me.name} added ${client} · ${fmt0(amount)} · ${b.method} · ${status} · ${ddmm(date)}`
-  await db.batch([
+        existing.method !== method && `${existing.method} → ${method}`].filter(Boolean).join(' · ')
+    : `${me.name} added ${client} · ${fmt0(amount)} · ${method} · ${status} · ${ddmm(date)}`
+  // Payment rows: written for a split or a part-payment (a plain single method needs none). Sending
+  // `tenders` (even empty) replaces the visit's rows; leaving it out keeps them as they were.
+  const partial = rows?.length === 1 && rows[0].amount < amount - 0.005
+  const keep = rows && (rows.length > 1 || partial) && (status === 'Paid' || partial) ? rows : []
+  const pcols = TABLES.payments
+  const stmts = [
     db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
       ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
     logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null } }),
-  ])
+  ]
+  if (rows) {
+    stmts.push(db.prepare('DELETE FROM payments WHERE appointment_id = ?1').bind(rec.id))
+    for (const t of keep) {
+      const pr = { id: crypto.randomUUID(), appointment_id: rec.id, date, amount: t.amount, method: t.method, voucher_id: null, note: '', created_at: now, updated_at: now, created_by: me.actor || me.email, updated_by: me.actor || me.email }
+      stmts.push(db.prepare(`INSERT INTO payments (${pcols.join(', ')}) VALUES (${pcols.map((_, i) => `?${i + 1}`).join(', ')})`).bind(...pcols.map((c) => pr[c] ?? null)))
+    }
+  }
+  await db.batch(stmts)
   if (!existing) onNew(rec)
   return JSON.stringify(withoutAmount(rec))
 }
