@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import ClientInput from './ClientInput.vue'
 import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail } from '../store.js'
 import { METHODS, fmt, fmt0, shortDate, todayStr } from '../lib/format.js'
 import { defaultExpiry, voucherExpired } from '../lib/vouchers.js'
@@ -77,7 +78,7 @@ async function confirmExtend() {
       </div>
       <div class="row2">
         <div class="field"><label for="v-exp">Expires on</label><input id="v-exp" v-model="form.expiresOn" type="date" :min="form.soldOn" @input="expiryTouched = true"></div>
-        <div class="field"><label for="v-buyer">Bought by (optional)</label><input id="v-buyer" v-model="form.buyer" placeholder="Who paid for it"></div>
+        <div class="field"><label for="v-buyer">Bought by (optional)</label><ClientInput id="v-buyer" v-model="form.buyer" :hide-amounts="state.role !== 'admin'" /></div>
       </div>
       <p class="field-hint" style="margin-top: -6px">Vouchers are good for a year unless you choose another date.</p>
       <div class="field"><label>Paid with</label><SegmentedControl v-model="form.method" :options="METHODS" /></div>
