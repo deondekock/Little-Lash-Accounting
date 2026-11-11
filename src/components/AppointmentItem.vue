@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import Icon from './Icon.vue'
-import { METHODS, fmt } from '../lib/format.js'
+import { METHODS, fmt, shortDate } from '../lib/format.js'
 import { overtimeLabel } from '../lib/payroll.js'
 import { state, updateMany, openAppointment, employeeColor, toastUndo } from '../store.js'
 
@@ -12,11 +12,13 @@ const staffName = (email) => (email ? state.employees.find((e) => e.pay?.loginEm
 const byStaff = computed(() => {
   const added = staffName(props.appt.createdBy)
   const changed = staffName(props.appt.updatedBy)
-  if (changed && props.appt.updatedBy !== props.appt.createdBy) return `✎ changed by ${changed}`
-  return added ? `✎ added by ${added}` : ''
+  if (changed && props.appt.updatedBy !== props.appt.createdBy) return `✎ edited · ${changed}`
+  return added ? `✎ ${added}` : ''
 })
+// Most useful first (the service), so anything that gets cut off at the end matters least.
 const meta = computed(() =>
-  [byStaff.value, overtimeLabel(props.appt) && '⏰ ' + overtimeLabel(props.appt), props.appt.service, props.appt.notes, props.appt.status === 'Paid' && props.appt.paidOn ? 'paid ' + props.appt.paidOn : '']
+  [props.appt.service, props.appt.notes, overtimeLabel(props.appt) && '⏰ ' + overtimeLabel(props.appt).replace(/^Overtime /, ''),
+    props.appt.status === 'Paid' && props.appt.paidOn && props.appt.paidOn !== props.appt.date ? 'paid ' + shortDate(props.appt.paidOn) : '', byStaff.value]
     .filter(Boolean)
     .join(' · '),
 )

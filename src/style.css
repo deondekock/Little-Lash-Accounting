@@ -409,18 +409,19 @@ button.list-row { cursor: pointer; }
 .item-body { cursor: pointer; min-width: 0; }
 .item .who { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
 .item .who-emp { color: var(--muted); font-weight: 500; font-size: 13px; }
-.item .meta { color: var(--muted); font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Up to two lines: the amount + buttons on the right already make the row that tall, so this costs no height. */
+.item .meta { color: var(--muted); font-size: 12.5px; line-height: 1.3; min-width: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .item .amount { font-weight: 600; text-align: right; font-size: 15.5px; }
 .item .actions { display: flex; gap: 6px; justify-content: flex-end; align-items: center; margin-top: 4px; }
 .pill {
-  border: 0; border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 600; min-width: 74px;
+  border: 0; border-radius: 999px; padding: 5px 10px; font-size: 12.5px; font-weight: 600; min-width: 66px;
   display: inline-flex; align-items: center; justify-content: center; gap: 4px;
 }
 .pill.Paid { background: var(--paid-soft); color: var(--paid); }
 .pill.Unpaid { background: var(--unpaid-soft); color: var(--unpaid); }
 .method {
   border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; font-weight: 600;
-  background: var(--card); color: var(--ink-2); appearance: none; -webkit-appearance: none; text-align: center; min-width: 58px;
+  background: var(--card); color: var(--ink-2); appearance: none; -webkit-appearance: none; text-align: center; min-width: 52px;
 }
 
 .empty { padding: 36px 18px; text-align: center; color: var(--muted); }
