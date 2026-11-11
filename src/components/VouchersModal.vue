@@ -62,11 +62,20 @@ const admin = computed(() => state.role === 'admin')
 
 /* Hold a voucher to get its actions as a row of round icon buttons (keeps the list itself uncluttered). */
 const menuFor = ref(null) // voucher id with the menu open
+const anchor = ref(null) // where the held row is, so the pill floats just above it
 let press = null
-function pressStart(v) {
-  pressEnd()
-  press = setTimeout(() => { menuFor.value = menuFor.value === v.id ? null : v.id; longPressed = true; navigator.vibrate?.(10); press = null }, 450)
+function openMenu(v, el) {
+  const r = el.getBoundingClientRect()
+  const above = r.top > 110 // enough room above? else sit below the row
+  anchor.value = { x: r.left + r.width / 2, y: above ? r.top - 8 : r.bottom + 8, above }
+  menuFor.value = menuFor.value === v.id ? null : v.id
 }
+function pressStart(v, e) {
+  pressEnd()
+  const el = e.currentTarget
+  press = setTimeout(() => { openMenu(v, el); longPressed = true; navigator.vibrate?.(10); press = null }, 450)
+}
+const pillStyle = computed(() => (anchor.value ? { left: anchor.value.x + 'px', top: anchor.value.y + 'px', transform: anchor.value.above ? 'translate(-50%, -100%)' : 'translate(-50%, 0)' } : {}))
 function pressEnd() { if (press) { clearTimeout(press); press = null } }
 const held = computed(() => list.value.find((v) => v.id === menuFor.value) || null)
 
@@ -269,8 +278,8 @@ async function confirmExtend() {
       <div v-for="v in list" :key="v.id" class="voucher-row" :class="{ faded: v.status !== 'active', open: menuFor === v.id }">
         <div
           class="list-row" style="padding-left: 0; padding-right: 0" :aria-expanded="menuFor === v.id"
-          @pointerdown="pressStart(v)" @pointerup="pressEnd" @pointerleave="pressEnd" @pointercancel="pressEnd" @pointermove="pressEnd"
-          @click="openVoucher(v)" @contextmenu.prevent="menuFor = menuFor === v.id ? null : v.id"
+          @pointerdown="pressStart(v, $event)" @pointerup="pressEnd" @pointerleave="pressEnd" @pointercancel="pressEnd" @pointermove="pressEnd"
+          @click="openVoucher(v)" @contextmenu.prevent="openMenu(v, $event.currentTarget)"
         >
           <div class="grow">
             <div class="title" style="font-weight: 600">
@@ -301,16 +310,16 @@ async function confirmExtend() {
     <div v-else class="empty" style="padding: 16px">{{ query ? 'No vouchers match that.' : 'No vouchers yet. Sell one above 🎁' }}</div>
 
     <Teleport to="body">
-      <div v-if="held" class="voucher-pill" role="menu" :aria-label="`Options for ${held.code}`">
+      <div v-if="held" class="voucher-pill" :class="{ below: anchor && !anchor.above }" :style="pillStyle" role="menu" :aria-label="`Options for ${held.code}`">
         <template v-if="held.status === 'active'">
           <button type="button" role="menuitem" @click="act(startShare, held)">
-            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.6 1.1 2.7.1.2 1.9 2.9 4.6 4 1.7.7 2.3.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3z"/></svg>
+            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.6 1.1 2.7.1.2 1.9 2.9 4.6 4 1.7.7 2.3.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3z"/></svg>
             <span>Send</span>
           </button>
-          <button type="button" role="menuitem" @click="act(startExtend, held)"><Icon name="calendar" :size="26" :stroke="1.7" /><span>{{ expired(held) ? 'Extend' : 'Expiry' }}</span></button>
-          <button type="button" role="menuitem" @click="act(remove, held)"><Icon name="ban" :size="26" :stroke="1.7" /><span>Void</span></button>
+          <button type="button" role="menuitem" @click="act(startExtend, held)"><Icon name="calendar" :size="22" :stroke="1.8" /><span>{{ expired(held) ? 'Extend' : 'Expiry' }}</span></button>
+          <button type="button" role="menuitem" @click="act(remove, held)"><Icon name="ban" :size="22" :stroke="1.8" /><span>Void</span></button>
         </template>
-        <button v-if="admin" type="button" role="menuitem" class="danger" @click="act(destroy, held)"><Icon name="trash" :size="26" :stroke="1.7" /><span>Delete</span></button>
+        <button v-if="admin" type="button" role="menuitem" class="danger" @click="act(destroy, held)"><Icon name="trash" :size="22" :stroke="1.8" /><span>Delete</span></button>
       </div>
     </Teleport>
 
