@@ -60,9 +60,11 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
       <span class="more">My stats →</span>
     </button>
     <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
-    <div class="report-actions" style="margin: 0 0 10px">
-      <button class="btn soft small" @click="openVouchers">🎁 Gift vouchers</button>
-    </div>
+    <button class="card list-row voucher-link" @click="openVouchers">
+      <div class="history-icon"><Icon name="gift" :size="16" /></div>
+      <div class="grow"><div class="title">Gift vouchers</div><div class="meta">Sell one, or take one as payment</div></div>
+      <Icon name="right" />
+    </button>
 
     <SwipeArea :can-go="(dir) => dir < 0 || day < today" @swipe="shift">
     <div v-if="list.length" class="card" style="padding: 4px 16px">

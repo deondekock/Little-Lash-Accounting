@@ -8,7 +8,7 @@ import StatCards from '../components/StatCards.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
 import { currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, todayStr, totals } from '../lib/format.js'
 import { holidayOn } from '../lib/holidays.js'
-import { all, state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment, openVouchers } from '../store.js'
+import { all, state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment, openVouchers, liveVouchers } from '../store.js'
 
 // Day or month view, remembered on this phone. The owner is a lash tech too and works day-to-day, so Day leads.
 const MODE_KEY = 'llp.payView'
@@ -77,6 +77,11 @@ const emptyText = computed(() => {
 })
 
 const add = () => openAppointment(null, mode.value === 'day' ? { date: day.value } : null)
+const voucherMeta = computed(() => {
+  const n = liveVouchers.value.length
+  if (!n) return 'Sell one, or take one as payment'
+  return `${n} with money on ${n === 1 ? 'it' : 'them'} · ${fmt(liveVouchers.value.reduce((t, v) => t + v.balance, 0))} still to redeem`
+})
 // Swipe on the list: a day in Day view, a month in Month view.
 const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shiftMonth(state.month, dir)))
 
@@ -113,9 +118,11 @@ const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shi
 
     <EmployeeChips />
     <StatCards :t="statTotals" />
-    <div class="report-actions" style="margin: -4px 0 10px">
-      <button class="btn soft small" @click="openVouchers">🎁 Gift vouchers</button>
-    </div>
+    <button class="card list-row voucher-link" @click="openVouchers">
+      <div class="history-icon"><Icon name="gift" :size="16" /></div>
+      <div class="grow"><div class="title">Gift vouchers</div><div class="meta">{{ voucherMeta }}</div></div>
+      <Icon name="right" />
+    </button>
 
     <div class="section-label">
       <span>Appointments</span>
