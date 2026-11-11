@@ -1099,4 +1099,3 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .round-act.wa { background: #1f9d55; }
 .round-act.warn { background: var(--unpaid); }
 .round-act.danger { background: var(--danger, #c0453f); }
-.round-act.plain { background: var(--card); color: var(--ink-2); border: 1px solid var(--line); box-shadow: none; }

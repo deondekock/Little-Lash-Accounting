@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
@@ -69,6 +69,10 @@ function pressStart(v) {
 }
 function pressEnd() { if (press) { clearTimeout(press); press = null } }
 function act(fn, v) { menuFor.value = null; fn(v) }
+// A tap anywhere outside the open row (and its buttons) closes the menu.
+const onDocDown = (e) => { if (menuFor.value && !e.target.closest?.('.voucher-row.open')) menuFor.value = null }
+onMounted(() => document.addEventListener('pointerdown', onDocDown, true))
+onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, true))
 const uses = (v) => state.voucherUses?.[v.id] || []
 
 /* Share: the voucher as an image, sent on WhatsApp (phones: the share sheet; computers: saved + WhatsApp opens). */
@@ -228,7 +232,6 @@ async function confirmExtend() {
             <button class="round-act warn" type="button" aria-label="Void" title="Void" @click="act(remove, v)"><Icon name="ban" :size="20" /></button>
           </template>
           <button v-if="admin" class="round-act danger" type="button" aria-label="Delete" title="Delete" @click="act(destroy, v)"><Icon name="trash" :size="20" /></button>
-          <button class="round-act plain" type="button" aria-label="Close" title="Close" @click="menuFor = null"><Icon name="close" :size="18" /></button>
         </div>
         <div v-if="extending?.id === v.id" class="voucher-extend">
           <label :for="'v-ext-' + v.id">New expiry for {{ v.code }}</label>
