@@ -6,6 +6,8 @@ import ClientInput from './ClientInput.vue'
 import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail } from '../store.js'
 import { METHODS, fmt, fmt0, shortDate, todayStr } from '../lib/format.js'
 import { defaultExpiry, voucherExpired } from '../lib/vouchers.js'
+import { looseKey } from '../lib/stats.js'
+import Icon from './Icon.vue'
 
 /** Sell gift vouchers (cash in now), see which still have money on them, and extend an expiry. */
 const today = todayStr()
@@ -16,7 +18,15 @@ watch(() => form.soldOn, (d) => { if (!expiryTouched.value && d) form.expiresOn 
 const saving = ref(false)
 const extending = ref(null) // { id, expiresOn } while a date is being picked
 const STATUS = { active: 'Active', redeemed: 'Used up', void: 'Void' }
-const list = computed(() => [...state.vouchers].sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)))
+const query = ref('')
+// Search by code, who bought it, or the note (loose: ignores case, spaces and punctuation).
+const list = computed(() => {
+  const q = looseKey(query.value)
+  return [...state.vouchers]
+    .filter((v) => !q || looseKey(`${v.code} ${v.buyer} ${v.note}`).includes(q))
+    .sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1))
+})
+const remaining = computed(() => list.value.filter((v) => v.status === 'active').reduce((t, v) => t + v.balance, 0))
 const ok = computed(() => Number(form.amount) > 0)
 const expired = (v) => v.status === 'active' && voucherExpired(v, today)
 const label = (v) => (expired(v) ? 'Expired' : STATUS[v.status] || v.status)
@@ -87,6 +97,13 @@ async function confirmExtend() {
     </form>
 
     <h4 class="section-label" style="margin-top: 18px">Vouchers</h4>
+    <label class="search" style="margin-bottom: 10px">
+      <Icon name="search" />
+      <input v-model="query" type="search" placeholder="Search code, who paid, or note…" aria-label="Search vouchers">
+    </label>
+    <p v-if="query" class="field-hint" style="margin: -4px 0 10px">
+      {{ list.length }} voucher{{ list.length === 1 ? '' : 's' }} · {{ fmt(remaining) }} still on {{ list.length === 1 ? 'it' : 'them' }}
+    </p>
     <div v-if="list.length" class="list">
       <div v-for="v in list" :key="v.id" class="voucher-row" :class="{ faded: v.status !== 'active' }">
         <div class="list-row" style="cursor: default; padding-left: 0; padding-right: 0">
@@ -120,7 +137,7 @@ async function confirmExtend() {
         </div>
       </div>
     </div>
-    <div v-else class="empty" style="padding: 16px">No vouchers yet. Sell one above 🎁</div>
+    <div v-else class="empty" style="padding: 16px">{{ query ? 'No vouchers match that.' : 'No vouchers yet. Sell one above 🎁' }}</div>
 
     <div class="modal-actions"><button class="btn ghost" @click="closeModal">Close</button></div>
   </BaseModal>
