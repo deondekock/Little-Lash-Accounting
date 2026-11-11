@@ -1059,6 +1059,7 @@ export async function staffLoad() {
   db.leave = data.leave.map((a) => toLeave(fromArray('leave', a)))
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
+  db.vouchers = (data.vouchers || []).map((a) => toVoucher(fromArray('vouchers', a)))
   const days = data.client_days || []
   db.clientDays = Object.fromEntries(days)
   db.clientStats = Object.fromEntries(days.map(([k, dates]) => [k, [dates.length, dates[dates.length - 1]]]))
@@ -1087,9 +1088,10 @@ export async function cancelLeave(id) {
 export async function saveMyAppointment(input) {
   const body = { ...input }
   if (body.amount === '' || body.amount == null) delete body.amount
-  const rec = await request('/api/staff/appointment', { method: 'POST', body })
+  const { vouchers, ...rec } = await request('/api/staff/appointment', { method: 'POST', body })
   applyLocal({ appointments: [rec] })
-  return publicAppt(db.appts.find((a) => a.id === rec.id))
+  if (vouchers) db.vouchers = vouchers.map((a) => toVoucher(fromArray('vouchers', a)))
+  return { ...publicAppt(db.appts.find((a) => a.id === rec.id)), ...(vouchers ? { vouchers: currentVouchers() } : {}) }
 }
 
 /** Staff: delete an appointment she added herself (within 24 hours). */

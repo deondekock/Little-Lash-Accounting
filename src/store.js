@@ -449,8 +449,9 @@ export async function decideLeave(id, status) {
   state.leave = await api('decideLeave', id, status)
 }
 export async function saveMyAppointment(input) {
-  const saved = await api('saveMyAppointment', input)
+  const { vouchers, ...saved } = await api('saveMyAppointment', input)
   upsertAppts([saved])
+  if (vouchers) state.vouchers = vouchers
   return saved
 }
 export async function deleteMyAppointment(id) {

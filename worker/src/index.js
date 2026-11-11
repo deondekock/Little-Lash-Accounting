@@ -444,11 +444,13 @@ async function staffLoad(db, me) {
     // Her own price per service (her override, else the general price) — so the amount can auto-fill.
     // Other staff's per-service prices are never sent (the prices map stays NULL).
     db.prepare(`SELECT json_group_array(json_array(id, name, COALESCE(CASE WHEN json_valid(prices) THEN json_extract(prices, '$."' || ?1 || '"') END, price), active, NULL, created_at, updated_at)) AS j FROM services`).bind(me.employeeId),
+    // Gift vouchers with money left on them, so she can take one as payment.
+    db.prepare(arraysOf('vouchers', "WHERE status = 'active' AND balance > 0")),
   ])
-  const [emps, leave, payslips, settings, appts, services] = res.map((r) => r.results[0]?.j || '[]')
+  const [emps, leave, payslips, settings, appts, services, vouchers] = res.map((r) => r.results[0]?.j || '[]')
   const { phones, stats } = await staffClients(db, me)
   return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts},` +
-    `"client_info":${JSON.stringify(phones)},"client_days":${JSON.stringify(stats)}}`
+    `"client_info":${JSON.stringify(phones)},"client_days":${JSON.stringify(stats)},"vouchers":${vouchers}}`
 }
 
 /** Name keys of the clients she has seen. */
@@ -853,15 +855,15 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   const service = String(b.service || '').trim().slice(0, 200)
   if (!client) throw new HttpError(400, 'Please enter the client\'s name.')
   const existing0 = b.id ? await recordOf(db, 'appointments', 'id = ?1 AND employee_id = ?2', String(b.id), me.employeeId) : null
-  // Split payments: the money taken per method (Cash / Card / EFT), summing to at most the amount.
+  // Split payments: the money taken per method (Cash / Card / EFT / a gift Voucher), summing to at most the amount.
   const rows = Array.isArray(b.tenders)
-    ? b.tenders.map((t) => ({ amount: Math.round(Number(String(t?.amount ?? '').replace(',', '.')) * 100) / 100, method: t?.method }))
-      .filter((t) => t.amount > 0 && METHODS.includes(t.method))
+    ? b.tenders.map((t) => ({ amount: Math.round(Number(String(t?.amount ?? '').replace(',', '.')) * 100) / 100, method: t?.method, voucherId: t?.method === 'Voucher' ? String(t?.voucherId || '') : null }))
+      .filter((t) => t.amount > 0 && (METHODS.includes(t.method) || (t.method === 'Voucher' && t.voucherId)))
     : null
   const method = rows?.length ? (rows.length > 1 ? 'Split' : rows[0].method)
     : METHODS.includes(b.method) ? b.method
-      : existing0 && b.method === existing0.method ? existing0.method : null // an untouched Split visit keeps its rows
-  if (!method) throw new HttpError(400, 'Please choose Cash, Card or EFT.')
+      : existing0 && b.method === existing0.method ? existing0.method : null // an untouched Split / Voucher visit keeps its rows
+  if (!method) throw new HttpError(400, 'Please choose Cash, Card, EFT or a voucher.')
   // Only the owner writes visits off; a written-off visit stays that way unless she marks it paid.
   const status = b.status === 'Paid' ? 'Paid' : existing0?.status === 'Written off' ? 'Written off' : 'Unpaid'
   const notes = String(b.notes || '').trim().slice(0, 300)
@@ -881,6 +883,23 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   if (!existing && !given) throw new HttpError(400, 'Please enter the amount.')
   if (!(amount >= 0 && amount < 1e6)) throw new HttpError(400, 'Please enter a valid amount.')
   if (rows?.length && rows.reduce((t, r) => t + r.amount, 0) > amount + 0.005) throw new HttpError(400, 'The payments add up to more than the amount.')
+  // Vouchers: the visit's old draw is handed back before its new draw is checked and taken.
+  const r2 = (n) => Math.round(n * 100) / 100
+  const oldUse = new Map()
+  if (rows && existing0) {
+    const old = await db.prepare('SELECT voucher_id, amount FROM payments WHERE appointment_id = ?1 AND voucher_id IS NOT NULL').bind(existing0.id).all()
+    for (const pr of old.results || []) oldUse.set(pr.voucher_id, r2((oldUse.get(pr.voucher_id) || 0) + Number(pr.amount)))
+  }
+  const newUse = new Map()
+  for (const t of rows || []) if (t.method === 'Voucher') newUse.set(t.voucherId, r2((newUse.get(t.voucherId) || 0) + t.amount))
+  const touched = new Map() // voucher id → its record, for every voucher this visit drew on before or draws on now
+  for (const vid of new Set([...oldUse.keys(), ...newUse.keys()])) {
+    const vch = await recordOf(db, 'vouchers', 'id = ?1', vid)
+    if (!vch || vch.status === 'void') { if (newUse.has(vid)) throw new HttpError(400, 'That voucher could not be found.'); continue }
+    const avail = r2(Number(vch.balance) + (oldUse.get(vid) || 0))
+    if ((newUse.get(vid) || 0) > avail + 0.005) throw new HttpError(400, `Voucher ${vch.code} only has ${fmt0(avail)} left.`)
+    touched.set(vid, vch)
+  }
   const startDay = await checkMonths(db, me, [])
   const month = existing && existing.date === date ? existing.month : businessMonth(date, startDay)
   await checkMonths(db, me, [...new Set([month, existing?.month].filter(Boolean))])
@@ -900,7 +919,7 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   // Payment rows: written for a split or a part-payment (a plain single method needs none). Sending
   // `tenders` (even empty) replaces the visit's rows; leaving it out keeps them as they were.
   const partial = rows?.length === 1 && rows[0].amount < amount - 0.005
-  const keep = rows && (rows.length > 1 || partial) && (status === 'Paid' || partial) ? rows : []
+  const keep = rows && (rows.length > 1 || partial || rows[0]?.method === 'Voucher') && (status === 'Paid' || partial) ? rows : []
   const pcols = TABLES.payments
   const stmts = [
     db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
@@ -910,13 +929,21 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   if (rows) {
     stmts.push(db.prepare('DELETE FROM payments WHERE appointment_id = ?1').bind(rec.id))
     for (const t of keep) {
-      const pr = { id: crypto.randomUUID(), appointment_id: rec.id, date, amount: t.amount, method: t.method, voucher_id: null, note: '', created_at: now, updated_at: now, created_by: me.actor || me.email, updated_by: me.actor || me.email }
+      const pr = { id: crypto.randomUUID(), appointment_id: rec.id, date, amount: t.amount, method: t.method, voucher_id: t.voucherId, note: '', created_at: now, updated_at: now, created_by: me.actor || me.email, updated_by: me.actor || me.email }
       stmts.push(db.prepare(`INSERT INTO payments (${pcols.join(', ')}) VALUES (${pcols.map((_, i) => `?${i + 1}`).join(', ')})`).bind(...pcols.map((c) => pr[c] ?? null)))
+    }
+    // Voucher balances: hand back the visit's old draw, then take the draw of the rows actually kept.
+    for (const [vid, vch] of touched) {
+      const drawn = keep.filter((t) => t.method === 'Voucher' && t.voucherId === vid).reduce((t, x) => t + x.amount, 0)
+      const balance = r2(Number(vch.balance) + (oldUse.get(vid) || 0) - drawn)
+      stmts.push(db.prepare('UPDATE vouchers SET balance = ?2, status = ?3, updated_at = ?4, updated_by = ?5 WHERE id = ?1').bind(vid, balance, balance <= 0.005 ? 'redeemed' : 'active', now, me.actor || me.email))
     }
   }
   await db.batch(stmts)
   if (!existing) onNew(rec)
-  return JSON.stringify(withoutAmount(rec))
+  // Her phone gets the vouchers back so the balances it shows stay right.
+  const vouchers = touched.size ? (await db.prepare(arraysOf('vouchers', "WHERE status = 'active' AND balance > 0")).first())?.j || '[]' : null
+  return JSON.stringify({ ...withoutAmount(rec), ...(vouchers ? { vouchers: JSON.parse(vouchers) } : {}) })
 }
 
 async function staffDeleteAppointment(db, me, b) {

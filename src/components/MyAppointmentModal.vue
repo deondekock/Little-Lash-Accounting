@@ -5,7 +5,7 @@ import OvertimeField from './OvertimeField.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
-import { state, serviceCatalog, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
+import { state, serviceCatalog, liveVouchers, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
 import { todayStr, shortDate } from '../lib/format.js'
 import { METHODS } from '../lib/schema.js'
 import { fmt } from '../lib/format.js'
@@ -37,7 +37,9 @@ const suggestion = ref('')
  * tapping Change on an edit); an existing split visit keeps its rows unless she redoes the payment.
  */
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100
-const tenders = reactive([{ amount: '', method: METHODS.includes(form.method) ? form.method : 'Card' }])
+const vouchers = liveVouchers
+const tenders = reactive([{ amount: '', method: METHODS.includes(form.method) ? form.method : 'Card', voucherId: '' }])
+const methodOptions = computed(() => (vouchers.value.length ? [...METHODS, 'Voucher'] : METHODS))
 const mirrorFirst = ref(true)
 const paymentsTouched = ref(false)
 const amountNum = computed(() => r2(form.amount))
@@ -51,12 +53,16 @@ function addMethod() {
   editAmount()
   const rest = Math.max(0, r2(amountNum.value - paidNum.value))
   const used = new Set(tenders.map((l) => l.method))
-  tenders.push({ amount: rest || '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash' })
+  tenders.push({ amount: rest || '', method: ['Card', 'Cash', 'EFT'].find((m) => !used.has(m)) || 'Cash', voucherId: '' })
 }
 function removeTender(i) {
   if (i === 0) return
   editAmount()
   tenders.splice(i, 1)
+}
+function onTenderMethod(l) {
+  paymentsTouched.value = true
+  if (l.method === 'Voucher') { if (!l.voucherId) l.voucherId = vouchers.value[0]?.id || '' } else l.voucherId = ''
 }
 
 function onPick(c) {
@@ -87,10 +93,11 @@ async function submit() {
       notes: form.notes, overtime: form.overtime, length: form.length, amount: changeAmount.value ? form.amount : '',
     }
     if (changeAmount.value) {
-      const rows = tenders.map((l) => ({ amount: r2(l.amount), method: l.method })).filter((l) => l.amount > 0 && METHODS.includes(l.method))
+      const rows = tenders.map((l) => ({ amount: r2(l.amount), method: l.method, voucherId: l.voucherId }))
+        .filter((l) => l.amount > 0 && (METHODS.includes(l.method) || (l.method === 'Voucher' && l.voucherId)))
       if (rows[0]) body.method = rows.length > 1 ? 'Split' : rows[0].method
-      // Rows are sent (replacing any old ones) when she split or part-paid, or whenever she redoes an edit's amount.
-      if (editing || rows.length > 1 || owing.value > 0.005) body.tenders = rows
+      // Rows are sent (replacing any old ones) for a split, a voucher or a part-payment, or whenever she redoes an edit's amount.
+      if (editing || rows.length > 1 || owing.value > 0.005 || rows.some((l) => l.method === 'Voucher')) body.tenders = rows
     }
     await saveMyAppointment(body)
     toast(editing ? 'Saved' : 'Appointment added')
@@ -147,9 +154,12 @@ async function remove() {
             <template v-for="(l, i) in tenders" :key="i">
               <div class="pay-line">
                 <input v-model="l.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount" @focus="selectAmount" @input="editAmount">
-                <SegmentedControl :model-value="l.method" :options="METHODS" @update:model-value="(m) => { l.method = m; paymentsTouched = true }" />
+                <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
                 <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
               </div>
+              <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
+                <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
+              </select>
             </template>
             <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
             <div v-if="tenders.length > 1 || owing > 0.005 || overPaid" class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
@@ -159,8 +169,8 @@ async function remove() {
             </div>
           </template>
           <template v-else>
-            <SegmentedControl v-if="form.method !== 'Split'" v-model="form.method" :options="METHODS" />
-            <div v-else class="field-hint" style="margin-top: 0">Paid with more than one method. Tap <b>•••• Change</b> above to redo the amount and payments.</div>
+            <SegmentedControl v-if="METHODS.includes(form.method)" v-model="form.method" :options="METHODS" />
+            <div v-else class="field-hint" style="margin-top: 0">Paid {{ form.method === 'Voucher' ? 'with a gift voucher' : 'with more than one method' }}. Tap <b>•••• Change</b> above to redo the amount and payments.</div>
           </template>
         </div>
         <div class="field">
