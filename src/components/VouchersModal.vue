@@ -59,6 +59,16 @@ async function remove(v) {
   }
 }
 const admin = computed(() => state.role === 'admin')
+
+/* Hold a voucher to get its actions as a row of round icon buttons (keeps the list itself uncluttered). */
+const menuFor = ref(null) // voucher id with the menu open
+let press = null
+function pressStart(v) {
+  pressEnd()
+  press = setTimeout(() => { menuFor.value = menuFor.value === v.id ? null : v.id; navigator.vibrate?.(10); press = null }, 450)
+}
+function pressEnd() { if (press) { clearTimeout(press); press = null } }
+function act(fn, v) { menuFor.value = null; fn(v) }
 const uses = (v) => state.voucherUses?.[v.id] || []
 
 /* Share: the voucher as an image, sent on WhatsApp (phones: the share sheet; computers: saved + WhatsApp opens). */
@@ -183,9 +193,14 @@ async function confirmExtend() {
     <p v-if="query" class="field-hint" style="margin: -4px 0 10px">
       {{ list.length }} voucher{{ list.length === 1 ? '' : 's' }} · {{ fmt(remaining) }} still on {{ list.length === 1 ? 'it' : 'them' }}
     </p>
+    <p class="field-hint" style="margin: -2px 0 8px">Hold a voucher for its options.</p>
     <div v-if="list.length" class="list">
-      <div v-for="v in list" :key="v.id" class="voucher-row" :class="{ faded: v.status !== 'active' }">
-        <div class="list-row" style="cursor: default; padding-left: 0; padding-right: 0">
+      <div v-for="v in list" :key="v.id" class="voucher-row" :class="{ faded: v.status !== 'active', open: menuFor === v.id }">
+        <div
+          class="list-row" style="padding-left: 0; padding-right: 0" :aria-expanded="menuFor === v.id"
+          @pointerdown="pressStart(v)" @pointerup="pressEnd" @pointerleave="pressEnd" @pointercancel="pressEnd" @pointermove="pressEnd"
+          @contextmenu.prevent="menuFor = menuFor === v.id ? null : v.id"
+        >
           <div class="grow">
             <div class="title" style="font-weight: 600">
               {{ v.code }} <span class="meta" style="font-weight: 400">· {{ label(v) }}</span>
@@ -202,15 +217,18 @@ async function confirmExtend() {
           </div>
           <div class="right">
             <div class="big">{{ fmt(v.balance) }}<template v-if="v.balance !== v.amount"> <span class="meta">/ {{ fmt0(v.amount) }}</span></template></div>
-            <div style="display: flex; gap: 10px; justify-content: flex-end">
-              <template v-if="v.status === 'active'">
-                <button class="link-btn" @click="startShare(v)">Send</button>
-                <button class="link-btn" @click="startExtend(v)">{{ expired(v) ? 'Extend' : 'Change expiry' }}</button>
-                <button class="link-btn" @click="remove(v)">Void</button>
-              </template>
-              <button v-if="admin" class="link-btn danger-link" @click="destroy(v)">Delete</button>
-            </div>
           </div>
+        </div>
+        <div v-if="menuFor === v.id" class="voucher-menu" role="menu">
+          <template v-if="v.status === 'active'">
+            <button class="round-act wa" type="button" aria-label="Send on WhatsApp" title="Send on WhatsApp" @click="act(startShare, v)">
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.6 1.1 2.7.1.2 1.9 2.9 4.6 4 1.7.7 2.3.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3z"/></svg>
+            </button>
+            <button class="round-act" type="button" :aria-label="expired(v) ? 'Extend' : 'Change expiry'" :title="expired(v) ? 'Extend' : 'Change expiry'" @click="act(startExtend, v)"><Icon name="calendar" :size="20" /></button>
+            <button class="round-act warn" type="button" aria-label="Void" title="Void" @click="act(remove, v)"><Icon name="ban" :size="20" /></button>
+          </template>
+          <button v-if="admin" class="round-act danger" type="button" aria-label="Delete" title="Delete" @click="act(destroy, v)"><Icon name="trash" :size="20" /></button>
+          <button class="round-act plain" type="button" aria-label="Close" title="Close" @click="menuFor = null"><Icon name="close" :size="18" /></button>
         </div>
         <div v-if="extending?.id === v.id" class="voucher-extend">
           <label :for="'v-ext-' + v.id">New expiry for {{ v.code }}</label>
