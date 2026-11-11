@@ -49,6 +49,7 @@ export const state = reactive({
   year: new Date().getFullYear(),
   employee: 'all', // employee filter: 'all' or an employee id
   status: 'all', // 'all' | 'Paid' | 'Unpaid' | 'Written off'
+  method: 'all', // 'all' | 'Cash' | 'Card' | 'EFT' | 'Voucher' | 'Split' — how the visit was paid
   modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
   toast: null, // { msg, error, action }
@@ -146,9 +147,12 @@ export const employeeAppts = computed(() =>
   state.employee === 'all' ? monthAppts.value : monthAppts.value.filter((a) => a.employeeId === state.employee),
 )
 
-/** Month appointments for the selected employee and status. */
+/** Paid with this method — the visit's own method, or one of its payment lines (so a split that took cash counts as Cash). */
+export const paidWith = (a, method) => method === 'all' || a.method === method || (a.tenders || []).some((t) => t.method === method)
+
+/** Month appointments for the selected employee, status and payment method. */
 export const visibleAppts = computed(() =>
-  state.status === 'all' ? employeeAppts.value : employeeAppts.value.filter((a) => a.status === state.status),
+  employeeAppts.value.filter((a) => (state.status === 'all' || a.status === state.status) && paidWith(a, state.method)),
 )
 
 /* ---------------- feedback ---------------- */
@@ -592,6 +596,9 @@ export function setEmployee(id) {
 
 export function setStatus(status) {
   state.status = status
+}
+export function setMethod(method) {
+  state.method = method
 }
 
 /* ---------------- appointments ---------------- */

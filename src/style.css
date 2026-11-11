@@ -1096,3 +1096,8 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .voucher-view-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
 .voucher-view-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
 .voucher-sell input[readonly] { color: var(--ink-2); background: var(--card-2); }
+
+/* Payments: the status / paid-with / team filter rows under the Appointments heading */
+.appt-filters { margin: -4px 0 6px; }
+.appt-filters .chips { padding-bottom: 6px; }
+.appt-filters .chips:last-child { padding-bottom: 10px; }

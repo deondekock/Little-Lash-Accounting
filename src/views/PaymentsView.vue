@@ -3,12 +3,11 @@ import { computed, ref } from 'vue'
 import Icon from '../components/Icon.vue'
 import SwipeArea from '../components/SwipeArea.vue'
 import PeriodNav from '../components/PeriodNav.vue'
-import EmployeeChips from '../components/EmployeeChips.vue'
 import StatCards from '../components/StatCards.vue'
 import AppointmentItem from '../components/AppointmentItem.vue'
 import { currentMonth, dayLabel, fmt, monthLabel, monthRange, shiftMonth, shortDate, todayStr, totals } from '../lib/format.js'
 import { holidayOn } from '../lib/holidays.js'
-import { all, state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, openAppointment, openVouchers, liveVouchers } from '../store.js'
+import { all, state, employeeAppts, visibleAppts, employeeById, changeMonth, setStatus, setMethod, setEmployee, paidWith, employeeColor, openAppointment, openVouchers, liveVouchers } from '../store.js'
 
 // Day or month view, remembered on this phone. The owner is a lash tech too and works day-to-day, so Day leads.
 const MODE_KEY = 'llp.payView'
@@ -37,7 +36,20 @@ const dayEmployeeAppts = computed(() => {
   const list = all.value.filter((a) => a.date === day.value)
   return state.employee === 'all' ? list : list.filter((a) => a.employeeId === state.employee)
 })
-const dayVisible = computed(() => (state.status === 'all' ? dayEmployeeAppts.value : dayEmployeeAppts.value.filter((a) => a.status === state.status)))
+const dayVisible = computed(() => dayEmployeeAppts.value.filter((a) => (state.status === 'all' || a.status === state.status) && paidWith(a, state.method)))
+
+/* The filter chips: only the statuses / methods / team members that actually occur in the period are offered. */
+const periodAppts = computed(() => (mode.value === 'day' ? all.value.filter((a) => a.date === day.value) : all.value.filter((a) => a.month === state.month)))
+const statusChoices = computed(() => ['all', 'Unpaid', 'Paid', ...(periodAppts.value.some((a) => a.status === 'Written off') ? ['Written off'] : [])])
+const methodChoices = computed(() => {
+  const seen = new Set()
+  for (const a of periodAppts.value) { seen.add(a.method); for (const t of a.tenders || []) seen.add(t.method) }
+  return ['all', ...['Cash', 'Card', 'EFT', 'Voucher', 'Split'].filter((m) => seen.has(m) || m === state.method)]
+})
+const teamChoices = computed(() => {
+  const inPeriod = new Set(periodAppts.value.map((a) => a.employeeId))
+  return state.employees.filter((e) => e.active || inPeriod.has(e.id) || e.id === state.employee)
+})
 
 // What the page shows depends on the mode.
 const list = computed(() => (mode.value === 'day' ? dayVisible.value : visibleAppts.value))
@@ -67,7 +79,8 @@ const groups = computed(() => {
 
 const emptyText = computed(() => {
   const kind = state.status === 'all' ? '' : state.status.toLowerCase() + ' '
-  const who = state.employee !== 'all' ? ' for ' + (employeeById(state.employee)?.name || '') : ''
+  const how = state.method === 'all' ? '' : ` paid by ${state.method.toLowerCase()}`
+  const who = (state.employee !== 'all' ? ' for ' + (employeeById(state.employee)?.name || '') : '') + how
   const when = mode.value === 'day' ? (day.value === today ? 'today' : `${dayTitle.value.toLowerCase()}, ${dayLong.value}`) : monthLabel(state.month)
   return `No ${kind}appointments ${mode.value === 'day' ? 'on' : 'in'} ${when}${who}.`
 })
@@ -112,7 +125,6 @@ const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shi
       <button v-if="state.month !== thisMonth" class="today-btn" @click="changeMonth(thisMonth)">Back to this month</button>
     </PeriodNav>
 
-    <EmployeeChips />
     <StatCards :t="statTotals" />
     <button class="card list-row voucher-link" @click="openVouchers">
       <div class="history-icon"><Icon name="gift" :size="16" /></div>
@@ -120,11 +132,18 @@ const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shi
       <Icon name="right" />
     </button>
 
-    <div class="section-label">
-      <span>Appointments</span>
-      <div class="segmented" role="tablist">
-        <button v-for="s in ['all', 'Unpaid', 'Paid', ...(statSource.some((a) => a.status === 'Written off') ? ['Written off'] : [])]" :key="s" :class="{ active: state.status === s }" @click="setStatus(s)">
-          {{ s === 'all' ? 'All' : s }}
+    <div class="section-label"><span>Appointments</span></div>
+    <div class="appt-filters">
+      <div class="chips" role="group" aria-label="Status">
+        <button v-for="s in statusChoices" :key="s" class="chip small" :class="{ active: state.status === s }" @click="setStatus(s)">{{ s === 'all' ? 'All' : s }}</button>
+      </div>
+      <div v-if="methodChoices.length > 2" class="chips" role="group" aria-label="Paid with">
+        <button v-for="m in methodChoices" :key="m" class="chip small" :class="{ active: state.method === m }" @click="setMethod(m)">{{ m === 'all' ? 'Any payment' : m }}</button>
+      </div>
+      <div class="chips" role="group" aria-label="Team member">
+        <button class="chip small" :class="{ active: state.employee === 'all' }" @click="setEmployee('all')">Everyone</button>
+        <button v-for="e in teamChoices" :key="e.id" class="chip small" :class="{ active: state.employee === e.id }" @click="setEmployee(e.id)">
+          <i class="swatch-dot" :style="{ background: employeeColor(e.id) }" />{{ e.name }}
         </button>
       </div>
     </div>
