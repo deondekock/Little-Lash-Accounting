@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
-import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail, senderName, phoneOf } from '../store.js'
+import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, updateVoucherNotes, closeModal, toast, toastUndo, fail, senderName, phoneOf } from '../store.js'
 import { voucherImage } from '../lib/voucherImage.js'
 import { MESSAGES, openWhatsApp } from '../lib/whatsapp.js'
 import { clientKey } from '../lib/stats.js'
@@ -65,10 +65,41 @@ const menuFor = ref(null) // voucher id with the menu open
 let press = null
 function pressStart(v) {
   pressEnd()
-  press = setTimeout(() => { menuFor.value = menuFor.value === v.id ? null : v.id; navigator.vibrate?.(10); press = null }, 450)
+  press = setTimeout(() => { menuFor.value = menuFor.value === v.id ? null : v.id; longPressed = true; navigator.vibrate?.(10); press = null }, 450)
 }
 function pressEnd() { if (press) { clearTimeout(press); press = null } }
 const held = computed(() => list.value.find((v) => v.id === menuFor.value) || null)
+
+/* Tap a voucher: the same form as New, filled in — only the expiry and the notes can be changed. */
+const viewing = ref(null) // the voucher open in the form
+const edit = reactive({ expiresOn: '', note: '', voucherNote: '' })
+let longPressed = false
+function openVoucher(v) {
+  if (longPressed) { longPressed = false; return } // the hold already opened the menu
+  viewing.value = v
+  edit.expiresOn = v.expiresOn || ''
+  edit.note = v.note || ''
+  edit.voucherNote = v.voucherNote || ''
+}
+const current = computed(() => (viewing.value ? state.vouchers.find((x) => x.id === viewing.value.id) || null : null))
+watch(current, (v) => { if (!v) viewing.value = null }) // deleted underneath us
+const dirty = computed(() => current.value && (edit.expiresOn !== (current.value.expiresOn || '') || edit.note !== (current.value.note || '') || edit.voucherNote !== (current.value.voucherNote || '')))
+async function saveView() {
+  const v = current.value
+  saving.value = true
+  try {
+    if (edit.note !== (v.note || '') || edit.voucherNote !== (v.voucherNote || '')) await updateVoucherNotes(v.id, edit.note, edit.voucherNote)
+    if (edit.expiresOn && edit.expiresOn !== (v.expiresOn || '')) await extendVoucher(v.id, edit.expiresOn)
+    toast('Voucher updated')
+    viewing.value = null
+  } catch (err) {
+    fail(err)
+  } finally {
+    saving.value = false
+  }
+}
+async function voidFromView() { await remove(current.value); if (current.value?.status !== 'active') viewing.value = null }
+async function deleteFromView() { const before = state.vouchers.length; await destroy(current.value); if (state.vouchers.length !== before) viewing.value = null }
 function act(fn, v) { menuFor.value = null; fn(v) }
 // A tap anywhere outside the held row and the floating menu closes it.
 const onDocDown = (e) => { if (menuFor.value && !e.target.closest?.('.voucher-row.open, .voucher-pill')) menuFor.value = null }
@@ -167,6 +198,41 @@ async function confirmExtend() {
       </div>
     </form>
 
+    <form v-else-if="current && !sharing" class="voucher-sell" autocomplete="off" @submit.prevent="saveView">
+      <p class="muted-note" style="margin-top: -6px !important">
+        <b>{{ current.code }}</b> · {{ label(current) }} · {{ fmt(current.balance) }} left<template v-if="current.balance !== current.amount"> of {{ fmt0(current.amount) }}</template>
+      </p>
+      <div class="field"><label>Bought by</label><input :value="current.buyer || '—'" readonly></div>
+      <div class="field"><label>Amount (R)</label><input :value="current.amount.toFixed(2)" readonly></div>
+      <div class="row2">
+        <div class="field"><label>Sold on</label><input type="date" :value="current.soldOn" readonly></div>
+        <div class="field"><label for="v-view-exp">Expires on</label><input id="v-view-exp" v-model="edit.expiresOn" type="date" :min="current.soldOn"></div>
+      </div>
+      <p v-if="edit.expiresOn !== (current.expiresOn || '')" class="field-hint" style="margin-top: -6px">The change is recorded on the voucher with your name and today's date.</p>
+      <div v-for="(n, i) in (current.expiryNote || '').split('\n').filter(Boolean)" :key="i" class="field-hint orange" style="margin-top: -6px">✎ {{ n }}</div>
+      <div class="field"><label>Paid with</label><input :value="current.method" readonly></div>
+      <div class="field">
+        <label for="v-view-vnote">On the voucher (optional)</label>
+        <input id="v-view-vnote" v-model="edit.voucherNote" maxlength="80" placeholder="e.g. Any full set of lash extensions">
+      </div>
+      <div class="field"><label for="v-view-note">Private note (optional)</label><input id="v-view-note" v-model="edit.note" maxlength="200" placeholder="Not shown on the voucher"></div>
+      <div v-if="uses(current).length" class="field">
+        <label>Used on</label>
+        <div v-for="(u, i) in uses(current)" :key="i" class="meta">↳ {{ fmt(u.amount) }} · {{ shortDate(u.date) }} {{ u.date.slice(0, 4) }}<template v-if="u.client"> · {{ u.client }}</template><template v-if="u.service"> · {{ u.service }}</template><template v-if="u.who"> · with {{ u.who }}</template></div>
+      </div>
+      <div class="voucher-view-actions">
+        <button v-if="current.status === 'active'" type="button" class="btn wa-send small" @click="startShare(current)">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg> WhatsApp
+        </button>
+        <button v-if="current.status === 'active'" type="button" class="btn ghost small" @click="voidFromView"><Icon name="ban" :size="16" /> Void</button>
+        <button v-if="admin" type="button" class="btn danger small" @click="deleteFromView"><Icon name="trash" :size="16" /> Delete</button>
+      </div>
+      <div class="modal-actions" style="margin-top: 4px">
+        <button class="btn ghost" type="button" @click="viewing = null">{{ dirty ? 'Cancel' : 'Back' }}</button>
+        <button class="btn" type="submit" :disabled="saving || !dirty">Save</button>
+      </div>
+    </form>
+
     <template v-else-if="sharing">
       <p class="muted-note" style="margin-top: -6px !important">Voucher {{ sharing.code }} · {{ fmt0(sharing.amount) }}<template v-if="sharing.buyer"> · for {{ sharing.buyer }}</template></p>
       <div class="invoice-preview">
@@ -204,7 +270,7 @@ async function confirmExtend() {
         <div
           class="list-row" style="padding-left: 0; padding-right: 0" :aria-expanded="menuFor === v.id"
           @pointerdown="pressStart(v)" @pointerup="pressEnd" @pointerleave="pressEnd" @pointercancel="pressEnd" @pointermove="pressEnd"
-          @contextmenu.prevent="menuFor = menuFor === v.id ? null : v.id"
+          @click="openVoucher(v)" @contextmenu.prevent="menuFor = menuFor === v.id ? null : v.id"
         >
           <div class="grow">
             <div class="title" style="font-weight: 600">

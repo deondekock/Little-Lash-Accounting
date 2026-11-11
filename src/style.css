@@ -1103,3 +1103,8 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .voucher-pill button { display: grid; justify-items: center; gap: 4px; min-width: 76px; padding: 10px 12px; border: 0; border-radius: 999px; background: transparent; color: #fff; font: 500 13px var(--font-sans); }
 .voucher-pill button:active { background: rgba(255, 255, 255, 0.16); }
 .voucher-pill button.danger { color: #ffb3ad; }
+
+/* Voucher view: the action buttons above Save */
+.voucher-view-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
+.voucher-view-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.voucher-sell input[readonly] { color: var(--ink-2); background: var(--card-2); }

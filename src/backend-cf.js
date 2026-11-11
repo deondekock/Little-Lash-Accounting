@@ -858,7 +858,17 @@ export async function extendVoucher({ id, expiresOn, by }) {
   return db.vouchers.map(strip)
 }
 
-/* Staff: the same three, through the Worker's staff endpoints (the Worker checks and logs them). */
+/** Change a voucher's notes (the line printed on it, and the private one). */
+export async function updateVoucherNotes({ id, note, voucherNote }) {
+  const v = db.vouchers.find((x) => x.id === id)
+  if (!v) throw new Error('That voucher could not be found.')
+  const rec = { ...v.rec, note: clean(note).slice(0, 200), voucher_note: clean(voucherNote).slice(0, 80), updated_at: new Date().toISOString(), updated_by: user || null }
+  if (rec.note === v.note && rec.voucher_note === v.voucherNote) return db.vouchers.map(strip)
+  await commit('voucher', `Edited the notes on voucher ${v.code}`, { put: { vouchers: [rec] }, before: { vchr: { [id]: v.rec } } })
+  return db.vouchers.map(strip)
+}
+
+/* Staff: the same, through the Worker's staff endpoints (the Worker checks and logs them). */
 const staffVoucherCall = async (path, body) => {
   const list = await request(path, { method: 'POST', body })
   db.vouchers = list.map((a) => toVoucher(fromArray('vouchers', a)))
@@ -867,6 +877,7 @@ const staffVoucherCall = async (path, body) => {
 export const staffSellVoucher = (input) => staffVoucherCall('/api/staff/voucher', input)
 export const staffVoidVoucher = (id) => staffVoucherCall('/api/staff/voucher/void', { id })
 export const staffExtendVoucher = (input) => staffVoucherCall('/api/staff/voucher/extend', input)
+export const staffUpdateVoucherNotes = (input) => staffVoucherCall('/api/staff/voucher/notes', input)
 
 export async function deleteAppointment(id) {
   const a = db.appts.find((x) => x.id === id)

@@ -103,6 +103,7 @@ export default {
         if (route === 'POST /api/staff/voucher') return json(await staffVoucher(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/voucher/void') return json(await staffVoucherVoid(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/voucher/extend') return json(await staffVoucherExtend(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/voucher/notes') return json(await staffVoucherNotes(env.DB, me, await request.json()), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
       if (route === 'GET /api/load') {
@@ -1001,6 +1002,16 @@ async function staffVoucherExtend(db, me, b) {
   const note = expiryChangeNote(me.name, saToday(), v.expires_on, to)
   const rec = { ...v, expires_on: to, expiry_note: [v.expiry_note, note].filter(Boolean).join('\n'), updated_at: new Date().toISOString(), updated_by: me.actor || me.email }
   await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} changed expiry of voucher ${v.code} to ${to}`, { vchr: { [v.id]: v } })])
+  return JSON.stringify(await allVouchers(db))
+}
+
+async function staffVoucherNotes(db, me, b) {
+  const v = await recordOf(db, 'vouchers', 'id = ?1', String(b.id || ''))
+  if (!v) throw new HttpError(404, 'That voucher could not be found.')
+  const rec = { ...v, note: String(b.note || '').trim().slice(0, 200), voucher_note: String(b.voucherNote || '').trim().slice(0, 80), updated_at: new Date().toISOString(), updated_by: me.actor || me.email }
+  if (rec.note !== (v.note || '') || rec.voucher_note !== (v.voucher_note || '')) {
+    await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} edited the notes on voucher ${v.code}`, { vchr: { [v.id]: v } })])
+  }
   return JSON.stringify(await allVouchers(db))
 }
 
