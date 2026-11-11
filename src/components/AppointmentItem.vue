@@ -21,11 +21,6 @@ const meta = computed(() =>
     .join(' · '),
 )
 
-const selected = computed({
-  get: () => state.selected.has(props.appt.id),
-  set: (v) => (v ? state.selected.add(props.appt.id) : state.selected.delete(props.appt.id)),
-})
-
 async function toggleStatus() {
   // Unpaid ⇄ Paid; a written-off visit goes back to unpaid.
   const status = props.appt.status === 'Unpaid' ? 'Paid' : 'Unpaid'
@@ -39,7 +34,6 @@ async function setMethod(e) {
 
 <template>
   <div class="item">
-    <input v-model="selected" type="checkbox" aria-label="Select">
     <div class="item-body" @click="openAppointment(appt)">
       <div class="who">
         <i class="swatch-dot" :style="{ background: employeeColor(appt.employeeId) }" />

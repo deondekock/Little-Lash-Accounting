@@ -64,10 +64,6 @@ const groups = computed(() => {
   return out.map((g) => ({ ...g, total: totals(g.items).total }))
 })
 
-const allSelected = computed({
-  get: () => list.value.length > 0 && list.value.every((a) => state.selected.has(a.id)),
-  set: (v) => list.value.forEach((a) => (v ? state.selected.add(a.id) : state.selected.delete(a.id))),
-})
 
 const emptyText = computed(() => {
   const kind = state.status === 'all' ? '' : state.status.toLowerCase() + ' '
@@ -137,8 +133,8 @@ const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shi
     <div class="card appt-card">
       <template v-if="list.length">
         <div class="date-head plain">
-          <label class="select-all"><input v-model="allSelected" type="checkbox"> Select all</label>
-          <span>{{ list.length }} · {{ fmt(totals(list).total) }}</span>
+          <span>{{ list.length }} appointment{{ list.length === 1 ? '' : 's' }}</span>
+          <span>{{ fmt(totals(list).total) }}</span>
         </div>
         <template v-if="mode === 'month'">
           <template v-for="g in groups" :key="g.date">
@@ -164,5 +160,5 @@ const onSwipe = (dir) => (mode.value === 'day' ? shiftDay(dir) : changeMonth(shi
     </SwipeArea>
   </div>
 
-  <button class="fab" :class="{ raised: state.selected.size }" @click="add"><Icon name="plus" :stroke="2.4" /> Add</button>
+  <button class="fab" @click="add"><Icon name="plus" :stroke="2.4" /> Add</button>
 </template>

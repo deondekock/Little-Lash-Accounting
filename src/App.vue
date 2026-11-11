@@ -35,7 +35,6 @@ import MoveModal from './components/MoveModal.vue'
 import ExportModal from './components/ExportModal.vue'
 import ServiceModal from './components/ServiceModal.vue'
 import ServiceMergeModal from './components/ServiceMergeModal.vue'
-import BulkBar from './components/BulkBar.vue'
 import AppointmentModal from './components/AppointmentModal.vue'
 import EmployeeModal from './components/EmployeeModal.vue'
 import ClientModal from './components/ClientModal.vue'
@@ -138,7 +137,6 @@ const logo = import.meta.env.BASE_URL + 'brand/logo.png'
   </main>
 
   <template v-if="state.phase === 'ready'">
-    <BulkBar v-if="state.view === 'payments' && state.selected.size" />
     <nav class="bottom-nav" aria-label="Main">
       <div class="wrap">
         <button v-for="t in tabs" :key="t.id" :class="{ active: state.view === t.id || (t.id === 'team' && (state.view === 'services' || state.view === 'payroll')) }" :aria-current="state.view === t.id ? 'page' : null" @click="setView(t.id)">

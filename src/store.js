@@ -49,7 +49,6 @@ export const state = reactive({
   year: new Date().getFullYear(),
   employee: 'all', // employee filter: 'all' or an employee id
   status: 'all', // 'all' | 'Paid' | 'Unpaid' | 'Written off'
-  selected: new Set(),
   modal: null, // { type: 'appointment' | 'employee' | 'client' | 'settings', data }
   clientFilter: 'all', // Clients view: 'all' | 'regulars' | 'due' | 'new'
   toast: null, // { msg, error, action }
@@ -321,7 +320,6 @@ export async function openSheet(idOrUrl) {
     state.month = currentMonth(state.monthStartDay)
     state.year = Number(state.month.slice(0, 4))
     all.value = await api('getAppointments', '')
-    state.selected.clear()
     if (BACKEND !== 'cloudflare') await markRev()
     state.loadedAt = Date.now()
     // Owner lands on today's Payments page (unless a deep link says otherwise).
@@ -515,7 +513,6 @@ async function markRev() {
 
 async function loadAll() {
   all.value = await api('getAppointments', '')
-  state.selected.clear()
   await markRev()
 }
 
@@ -538,7 +535,6 @@ async function backgroundSync() {
       applyData(data)
       state.spreadsheetUrl = data.spreadsheetUrl
       all.value = await api('getAppointments', '')
-      state.selected.clear()
       state.loadedAt = Date.now()
     }
     lastRev = await api('currentRev')
@@ -568,7 +564,6 @@ export async function maybeRefresh() {
 
 export function changeMonth(month) {
   state.month = month
-  state.selected.clear()
 }
 
 export function changeYear(delta) {
@@ -588,18 +583,15 @@ export function setView(view, opts = {}) {
   if (opts.clientFilter) state.clientFilter = opts.clientFilter
   if (opts.payrollTab) state.payrollTab = opts.payrollTab
   if (view === 'insights') state.year = Number(state.month.slice(0, 4))
-  state.selected.clear()
   window.scrollTo({ top: 0 })
 }
 
 export function setEmployee(id) {
   state.employee = id
-  state.selected.clear()
 }
 
 export function setStatus(status) {
   state.status = status
-  state.selected.clear()
 }
 
 /* ---------------- appointments ---------------- */
@@ -622,7 +614,6 @@ export async function saveAppointment(data) {
 export async function deleteAppointment(id) {
   await api('deleteAppointment', id)
   all.value = all.value.filter((x) => x.id !== id)
-  state.selected.delete(id)
 }
 
 /** Changes status and/or method on several appointments. Optimistic, so taps feel instant. */
@@ -864,7 +855,6 @@ if (typeof window !== 'undefined') {
     const view = e.state?.llpView
     if (pageOk(view) && view !== state.view) {
       state.view = view
-      state.selected.clear()
       window.scrollTo({ top: 0 })
     }
   })

@@ -219,7 +219,6 @@ svg { flex-shrink: 0; }
   background: var(--brand); color: var(--brand-ink); font-weight: 500; font-size: 14px; letter-spacing: .08em; text-transform: uppercase;
   display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 26px color-mix(in srgb, var(--brand) 40%, transparent);
 }
-.fab.raised { bottom: calc(var(--nav-h) + 86px + env(safe-area-inset-bottom)); }
 
 /* ---------- page furniture ---------- */
 .page { padding-top: 18px; }
@@ -402,14 +401,11 @@ button.list-row { cursor: pointer; }
   text-transform: uppercase; letter-spacing: .1em; display: flex; justify-content: space-between;
 }
 .date-head.plain { text-transform: none; letter-spacing: 0; padding-top: 12px; }
-.select-all { display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; }
-.select-all input { width: 18px; height: 18px; accent-color: var(--brand); }
 .appt-card { padding: 0; overflow: hidden; }
 .item {
-  display: grid; grid-template-columns: 26px 1fr auto; gap: 2px 10px; align-items: center;
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center;
   padding: 12px 16px; border-top: 1px solid var(--line);
 }
-.item input[type=checkbox] { width: 20px; height: 20px; accent-color: var(--brand); }
 .item-body { cursor: pointer; min-width: 0; }
 .item .who { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 6px; }
 .item .who-emp { color: var(--muted); font-weight: 500; font-size: 13px; }
@@ -443,19 +439,6 @@ button.list-row { cursor: pointer; }
 .btn.wide { width: 100%; padding: 14px; text-transform: uppercase; letter-spacing: .1em; font-size: 14px; }
 .btn:disabled { opacity: .5; cursor: default; }
 a.btn { text-decoration: none; }
-
-/* bulk bar */
-.bulk {
-  position: fixed; left: 12px; right: 12px; z-index: 32;
-  bottom: calc(var(--nav-h) + 12px + env(safe-area-inset-bottom));
-  background: var(--ink); color: var(--card); border-radius: 14px; padding: 10px 12px; box-shadow: var(--shadow-lg);
-  max-width: 956px; margin: 0 auto;
-}
-.bulk .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.bulk .count { font-weight: 600; margin-right: auto; padding-left: 4px; }
-.bulk .btn { background: var(--card); color: var(--ink); }
-.bulk .btn.paid { background: var(--paid); color: #fff; }
-.bulk select { border-radius: 11px; padding: 8px; border: 0; background: var(--card); color: var(--ink); font-weight: 600; }
 
 /* search */
 .search {
