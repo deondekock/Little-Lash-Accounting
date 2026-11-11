@@ -68,9 +68,10 @@ function pressStart(v) {
   press = setTimeout(() => { menuFor.value = menuFor.value === v.id ? null : v.id; navigator.vibrate?.(10); press = null }, 450)
 }
 function pressEnd() { if (press) { clearTimeout(press); press = null } }
+const held = computed(() => list.value.find((v) => v.id === menuFor.value) || null)
 function act(fn, v) { menuFor.value = null; fn(v) }
-// A tap anywhere outside the open row (and its buttons) closes the menu.
-const onDocDown = (e) => { if (menuFor.value && !e.target.closest?.('.voucher-row.open')) menuFor.value = null }
+// A tap anywhere outside the held row and the floating menu closes it.
+const onDocDown = (e) => { if (menuFor.value && !e.target.closest?.('.voucher-row.open, .voucher-pill')) menuFor.value = null }
 onMounted(() => document.addEventListener('pointerdown', onDocDown, true))
 onBeforeUnmount(() => document.removeEventListener('pointerdown', onDocDown, true))
 const uses = (v) => state.voucherUses?.[v.id] || []
@@ -223,16 +224,6 @@ async function confirmExtend() {
             <div class="big">{{ fmt(v.balance) }}<template v-if="v.balance !== v.amount"> <span class="meta">/ {{ fmt0(v.amount) }}</span></template></div>
           </div>
         </div>
-        <div v-if="menuFor === v.id" class="voucher-menu" role="menu">
-          <template v-if="v.status === 'active'">
-            <button class="round-act wa" type="button" aria-label="Send on WhatsApp" title="Send on WhatsApp" @click="act(startShare, v)">
-              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.6 1.1 2.7.1.2 1.9 2.9 4.6 4 1.7.7 2.3.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3z"/></svg>
-            </button>
-            <button class="round-act" type="button" :aria-label="expired(v) ? 'Extend' : 'Change expiry'" :title="expired(v) ? 'Extend' : 'Change expiry'" @click="act(startExtend, v)"><Icon name="calendar" :size="20" /></button>
-            <button class="round-act warn" type="button" aria-label="Void" title="Void" @click="act(remove, v)"><Icon name="ban" :size="20" /></button>
-          </template>
-          <button v-if="admin" class="round-act danger" type="button" aria-label="Delete" title="Delete" @click="act(destroy, v)"><Icon name="trash" :size="20" /></button>
-        </div>
         <div v-if="extending?.id === v.id" class="voucher-extend">
           <label :for="'v-ext-' + v.id">New expiry for {{ v.code }}</label>
           <input :id="'v-ext-' + v.id" v-model="extending.expiresOn" type="date" :min="today">
@@ -242,6 +233,20 @@ async function confirmExtend() {
       </div>
     </div>
     <div v-else class="empty" style="padding: 16px">{{ query ? 'No vouchers match that.' : 'No vouchers yet. Sell one above 🎁' }}</div>
+
+    <Teleport to="body">
+      <div v-if="held" class="voucher-pill" role="menu" :aria-label="`Options for ${held.code}`">
+        <template v-if="held.status === 'active'">
+          <button type="button" role="menuitem" @click="act(startShare, held)">
+            <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2c0 1.3.9 2.6 1.1 2.7.1.2 1.9 2.9 4.6 4 1.7.7 2.3.8 3.2.7.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2l-.5-.3z"/></svg>
+            <span>Send</span>
+          </button>
+          <button type="button" role="menuitem" @click="act(startExtend, held)"><Icon name="calendar" :size="26" :stroke="1.7" /><span>{{ expired(held) ? 'Extend' : 'Expiry' }}</span></button>
+          <button type="button" role="menuitem" @click="act(remove, held)"><Icon name="ban" :size="26" :stroke="1.7" /><span>Void</span></button>
+        </template>
+        <button v-if="admin" type="button" role="menuitem" class="danger" @click="act(destroy, held)"><Icon name="trash" :size="26" :stroke="1.7" /><span>Delete</span></button>
+      </div>
+    </Teleport>
 
     <div class="modal-actions"><button class="btn ghost" @click="closeModal">Close</button></div>
     </template>
