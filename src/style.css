@@ -1083,3 +1083,5 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .voucher-extend { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 0 0 12px; }
 .voucher-extend label { margin: 0 !important; font-size: 13px; font-weight: 500 !important; flex: 1 1 100%; }
 .voucher-extend input[type=date] { flex: 1 1 150px; }
+
+.link-btn.danger-link { color: var(--danger, #c0453f); }

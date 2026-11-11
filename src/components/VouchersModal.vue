@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
-import { state, sellVoucher, voidVoucher, extendVoucher, closeModal, toast, fail } from '../store.js'
+import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail } from '../store.js'
 import { METHODS, fmt, fmt0, shortDate, todayStr } from '../lib/format.js'
 import { defaultExpiry, voucherExpired } from '../lib/vouchers.js'
 
@@ -38,6 +38,16 @@ async function remove(v) {
   if (!confirm(`Void voucher ${v.code}? It can't be used after this.`)) return
   try {
     await voidVoucher(v.id)
+  } catch (err) {
+    fail(err)
+  }
+}
+const admin = computed(() => state.role === 'admin')
+async function destroy(v) {
+  if (!confirm(`Delete voucher ${v.code} (${fmt0(v.amount)}) completely? It disappears from the list and the books — void it instead if it was sold and refunded.`)) return
+  try {
+    await deleteVoucher(v.id)
+    toastUndo('Voucher deleted')
   } catch (err) {
     fail(err)
   }
@@ -92,9 +102,12 @@ async function confirmExtend() {
           </div>
           <div class="right">
             <div class="big">{{ fmt(v.balance) }}<template v-if="v.balance !== v.amount"> <span class="meta">/ {{ fmt0(v.amount) }}</span></template></div>
-            <div v-if="v.status === 'active'" style="display: flex; gap: 10px; justify-content: flex-end">
-              <button class="link-btn" @click="startExtend(v)">{{ expired(v) ? 'Extend' : 'Change expiry' }}</button>
-              <button class="link-btn" @click="remove(v)">Void</button>
+            <div style="display: flex; gap: 10px; justify-content: flex-end">
+              <template v-if="v.status === 'active'">
+                <button class="link-btn" @click="startExtend(v)">{{ expired(v) ? 'Extend' : 'Change expiry' }}</button>
+                <button class="link-btn" @click="remove(v)">Void</button>
+              </template>
+              <button v-if="admin" class="link-btn danger-link" @click="destroy(v)">Delete</button>
             </div>
           </div>
         </div>

@@ -906,6 +906,9 @@ export async function sellVoucher(input) {
 export async function extendVoucher(id, expiresOn) {
   state.vouchers = await api(staff() ? 'staffExtendVoucher' : 'extendVoucher', { id, expiresOn, by: myName() })
 }
+export async function deleteVoucher(id) {
+  state.vouchers = await api('deleteVoucher', id)
+}
 export async function voidVoucher(id) {
   state.vouchers = await api(staff() ? 'staffVoidVoucher' : 'voidVoucher', id)
 }

@@ -817,6 +817,15 @@ export async function voidVoucher(id) {
   return db.vouchers.map(strip)
 }
 
+/** Owner only: delete a voucher outright (a test entry or a mistake). Undo brings it back. */
+export async function deleteVoucher(id) {
+  const v = db.vouchers.find((x) => x.id === id)
+  if (!v) return db.vouchers.map(strip)
+  if (db.payments.some((pm) => pm.voucherId === id)) throw new Error(`Voucher ${v.code} has been used as payment, so it can't be deleted. Void it instead.`)
+  await commit('voucher', `Deleted voucher ${v.code} · ${fmt0(v.amount)}`, { del: { vouchers: [id] }, before: { vchr: { [id]: v.rec } } })
+  return db.vouchers.map(strip)
+}
+
 /** Change a voucher's expiry date (e.g. honour an expired one). The change is logged on the voucher itself. */
 export async function extendVoucher({ id, expiresOn, by }) {
   const v = db.vouchers.find((x) => x.id === id)
