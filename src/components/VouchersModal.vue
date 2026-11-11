@@ -16,6 +16,7 @@ const expiryTouched = ref(false)
 // The expiry follows "Sold on" (one year later) until she picks her own date.
 watch(() => form.soldOn, (d) => { if (!expiryTouched.value && d) form.expiresOn = defaultExpiry(d) })
 const saving = ref(false)
+const adding = ref(false) // the New form is open
 const extending = ref(null) // { id, expiresOn } while a date is being picked
 const STATUS = { active: 'Active', redeemed: 'Used up', void: 'Void' }
 const query = ref('')
@@ -39,6 +40,7 @@ async function sell() {
     await sellVoucher({ ...form })
     toast('Voucher sold 🎁')
     form.amount = ''; form.buyer = ''; form.note = ''
+    adding.value = false
   } catch (err) {
     fail(err)
   } finally {
@@ -81,22 +83,27 @@ async function confirmExtend() {
 
 <template>
   <BaseModal title="Gift vouchers" @close="closeModal">
-    <form class="voucher-sell" autocomplete="off" @submit.prevent="sell">
+    <form v-if="adding" class="voucher-sell" autocomplete="off" @submit.prevent="sell">
+      <div class="field"><label for="v-buyer">Bought by</label><ClientInput id="v-buyer" v-model="form.buyer" :hide-amounts="state.role !== 'admin'" /></div>
+      <div class="field"><label for="v-amt">Amount (R)</label><input id="v-amt" v-model="form.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
       <div class="row2">
-        <div class="field"><label for="v-amt">Amount (R)</label><input id="v-amt" v-model="form.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
         <div class="field"><label for="v-date">Sold on</label><input id="v-date" v-model="form.soldOn" type="date" :max="today"></div>
-      </div>
-      <div class="row2">
         <div class="field"><label for="v-exp">Expires on</label><input id="v-exp" v-model="form.expiresOn" type="date" :min="form.soldOn" @input="expiryTouched = true"></div>
-        <div class="field"><label for="v-buyer">Bought by (optional)</label><ClientInput id="v-buyer" v-model="form.buyer" :hide-amounts="state.role !== 'admin'" /></div>
       </div>
       <p class="field-hint" style="margin-top: -6px">Vouchers are good for a year unless you choose another date.</p>
       <div class="field"><label>Paid with</label><SegmentedControl v-model="form.method" :options="METHODS" /></div>
       <div class="field"><label for="v-note">Note (optional)</label><input id="v-note" v-model="form.note" placeholder="e.g. birthday gift for Sarah"></div>
-      <button class="btn wide" type="submit" :disabled="saving || !ok">Sell voucher {{ ok ? fmt0(Number(form.amount)) : '' }}</button>
+      <div class="modal-actions" style="margin-top: 4px">
+        <button class="btn ghost" type="button" @click="adding = false">Cancel</button>
+        <button class="btn" type="submit" :disabled="saving || !ok">Sell voucher {{ ok ? fmt0(Number(form.amount)) : '' }}</button>
+      </div>
     </form>
 
-    <h4 class="section-label" style="margin-top: 18px">Vouchers</h4>
+    <template v-else>
+    <div class="section-label" style="margin-top: 0">
+      <span>Vouchers</span>
+      <button class="btn small" type="button" @click="adding = true">+ New</button>
+    </div>
     <label class="search" style="margin-bottom: 10px">
       <Icon name="search" />
       <input v-model="query" type="search" placeholder="Search code, who paid, or note…" aria-label="Search vouchers">
@@ -140,5 +147,6 @@ async function confirmExtend() {
     <div v-else class="empty" style="padding: 16px">{{ query ? 'No vouchers match that.' : 'No vouchers yet. Sell one above 🎁' }}</div>
 
     <div class="modal-actions"><button class="btn ghost" @click="closeModal">Close</button></div>
+    </template>
   </BaseModal>
 </template>
