@@ -506,7 +506,7 @@ export function getInitialData() {
     employees: publicEmployees(), services: publicServices(), spreadsheetUrl: '', monthStartDay: db.startDay,
     leave: publicLeave(), payslips: publicPayslips(), company: { ...db.company },
     clientPhones: clientPhones(), clientQuiet: clientQuiet(), clientStats: db.clientStats, clientDays: db.clientDays,
-    vouchers: (db.vouchers || []).map(strip),
+    vouchers: (db.vouchers || []).map(strip), voucherUses: currentVoucherUses(),
   }
 }
 
@@ -616,7 +616,8 @@ export async function saveAppointment(input) {
       }
     }
   }
-  const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}`
+  const drew = (tenders || []).filter((t) => t.method === 'Voucher').map((t) => `voucher ${db.vouchers.find((x) => x.id === t.voucherId)?.code || ''} ${fmt0(t.amount)}`).join(', ')
+  const label = `${appt.client || 'client'} · ${fmt0(appt.amount)} · ${appt.employeeName} · ${appt.date.slice(8)}/${appt.date.slice(5, 7)}${drew ? ' · ' + drew : ''}`
   await commit(existing ? 'edit' : 'add', `${existing ? 'Edited' : 'Added'} ${label}`,
     { put, del, before, expect: existing ? expectOf('appointments', [existing]) : undefined })
   attachPayments()
@@ -625,6 +626,26 @@ export async function saveAppointment(input) {
 
 /** The current vouchers (after a split payment drew some down). */
 export const currentVouchers = () => db.vouchers.map(strip)
+
+/**
+ * What each voucher has paid for: { voucherId: [{ date, amount, client, who, service }] }. The owner has
+ * the payments ledger to work it out from; staff get the list from the Worker.
+ */
+export function currentVoucherUses() {
+  if (db.voucherUses) return db.voucherUses
+  const out = {}
+  const byId = new Map(db.appts.map((a) => [a.id, a]))
+  for (const p of [...(db.payments || [])].filter((x) => x.voucherId).sort((x, y) => (x.date < y.date ? -1 : 1))) {
+    const a = byId.get(p.appointmentId)
+    ;(out[p.voucherId] ||= []).push({ date: p.date, amount: p.amount, client: a?.client || '', who: a ? nameOf(a.employeeId) || a.employeeName : '', service: a?.service || '' })
+  }
+  return out
+}
+const usesFromArrays = (rows) => {
+  const out = {}
+  for (const [vid, date, amount, client, who, service] of rows || []) (out[vid] ||= []).push({ date, amount: Number(amount) || 0, client: clean(client), who: clean(who), service: clean(service) })
+  return out
+}
 
 /** Changes several appointments at once; `change(a)` edits a copy. Returns the new public objects. */
 async function changeAppts(items, change, action, summary, extra = null) {
@@ -1095,6 +1116,7 @@ export async function staffLoad() {
   db.payslips = data.payslips.map((a) => toPayslip(fromArray('payslips', a)))
   db.clientInfo = (data.client_info || []).map((a) => toClientInfo(fromArray('client_info', a)))
   db.vouchers = (data.vouchers || []).map((a) => toVoucher(fromArray('vouchers', a)))
+  db.voucherUses = usesFromArrays(data.voucher_uses)
   const days = data.client_days || []
   db.clientDays = Object.fromEntries(days)
   db.clientStats = Object.fromEntries(days.map(([k, dates]) => [k, [dates.length, dates[dates.length - 1]]]))
@@ -1123,10 +1145,10 @@ export async function cancelLeave(id) {
 export async function saveMyAppointment(input) {
   const body = { ...input }
   if (body.amount === '' || body.amount == null) delete body.amount
-  const { vouchers, ...rec } = await request('/api/staff/appointment', { method: 'POST', body })
+  const { vouchers, voucher_uses: uses, ...rec } = await request('/api/staff/appointment', { method: 'POST', body })
   applyLocal({ appointments: [rec] })
-  if (vouchers) db.vouchers = vouchers.map((a) => toVoucher(fromArray('vouchers', a)))
-  return { ...publicAppt(db.appts.find((a) => a.id === rec.id)), ...(vouchers ? { vouchers: currentVouchers() } : {}) }
+  if (vouchers) { db.vouchers = vouchers.map((a) => toVoucher(fromArray('vouchers', a))); db.voucherUses = usesFromArrays(uses) }
+  return { ...publicAppt(db.appts.find((a) => a.id === rec.id)), ...(vouchers ? { vouchers: currentVouchers(), voucherUses: currentVoucherUses() } : {}) }
 }
 
 /** Staff: delete an appointment she added herself (within 24 hours). */

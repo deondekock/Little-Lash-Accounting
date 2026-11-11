@@ -1,9 +1,12 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
-import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail } from '../store.js'
+import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, closeModal, toast, toastUndo, fail, senderName, phoneOf } from '../store.js'
+import { voucherImage } from '../lib/voucherImage.js'
+import { MESSAGES, openWhatsApp } from '../lib/whatsapp.js'
+import { clientKey } from '../lib/stats.js'
 import { METHODS, fmt, fmt0, shortDate, todayStr } from '../lib/format.js'
 import { defaultExpiry, voucherExpired } from '../lib/vouchers.js'
 import { looseKey } from '../lib/stats.js'
@@ -56,6 +59,51 @@ async function remove(v) {
   }
 }
 const admin = computed(() => state.role === 'admin')
+const uses = (v) => state.voucherUses?.[v.id] || []
+
+/* Share: the voucher as an image, sent on WhatsApp (phones: the share sheet; computers: saved + WhatsApp opens). */
+const sharing = ref(null) // the voucher being shared
+const shareUrl = ref('')
+let shareBlob = null
+const canShare = ref(false)
+const busy = ref(false)
+const shareMessage = computed(() => (sharing.value ? MESSAGES.voucher(sharing.value, senderName.value) : ''))
+const shareFile = () => new File([shareBlob], `${sharing.value.code}.png`, { type: 'image/png' })
+async function startShare(v) {
+  sharing.value = v
+  shareUrl.value = ''
+  try {
+    shareBlob = await voucherImage(v, state.company)
+    shareUrl.value = URL.createObjectURL(shareBlob)
+    canShare.value = !!navigator.canShare?.({ files: [shareFile()] })
+  } catch (err) {
+    fail(err)
+    sharing.value = null
+  }
+}
+function stopShare() { if (shareUrl.value) URL.revokeObjectURL(shareUrl.value); shareUrl.value = ''; sharing.value = null }
+onBeforeUnmount(() => shareUrl.value && URL.revokeObjectURL(shareUrl.value))
+function saveImage() {
+  const a = Object.assign(document.createElement('a'), { href: shareUrl.value, download: `${sharing.value.code}.png` })
+  document.body.append(a); a.click(); a.remove()
+}
+async function send() {
+  busy.value = true
+  navigator.clipboard?.writeText(shareMessage.value).catch(() => {})
+  try {
+    if (canShare.value) {
+      await navigator.share({ files: [shareFile()], text: shareMessage.value })
+    } else {
+      saveImage()
+      openWhatsApp(sharing.value.buyer ? phoneOf({ key: clientKey(sharing.value.buyer) }) : '', shareMessage.value)
+      toast('Voucher saved — attach it in WhatsApp (📎)')
+    }
+  } catch (err) {
+    if (err?.name !== 'AbortError') fail(err)
+  } finally {
+    busy.value = false
+  }
+}
 async function destroy(v) {
   if (!confirm(`Delete voucher ${v.code} (${fmt0(v.amount)}) completely? It disappears from the list and the books — void it instead if it was sold and refunded.`)) return
   try {
@@ -99,6 +147,25 @@ async function confirmExtend() {
       </div>
     </form>
 
+    <template v-else-if="sharing">
+      <p class="muted-note" style="margin-top: -6px !important">Voucher {{ sharing.code }} · {{ fmt0(sharing.amount) }}<template v-if="sharing.buyer"> · for {{ sharing.buyer }}</template></p>
+      <div class="invoice-preview">
+        <img v-if="shareUrl" :src="shareUrl" alt="Voucher preview">
+        <div v-else class="empty">Making the voucher…</div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" @click="stopShare">Back</button>
+        <button class="btn ghost" :disabled="!shareUrl" @click="saveImage">Save image</button>
+        <button class="btn wa-send" :disabled="!shareUrl || busy" @click="send">
+          <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg>
+          Send on WhatsApp
+        </button>
+      </div>
+      <p class="muted-note" style="text-align: center">
+        {{ canShare ? 'Choose WhatsApp, then the chat. The message is copied too, in case it needs pasting.' : 'The voucher is saved, and WhatsApp opens with the message — attach the image with 📎.' }}
+      </p>
+    </template>
+
     <template v-else>
     <div class="section-label" style="margin-top: 0">
       <span>Vouchers</span>
@@ -124,11 +191,15 @@ async function confirmExtend() {
               <template v-if="v.expiresOn"> · <span :class="{ orange: expired(v) }">{{ expired(v) ? 'expired' : 'expires' }} {{ long(v.expiresOn) }}</span></template>
             </div>
             <div v-for="(n, i) in (v.expiryNote || '').split('\n').filter(Boolean)" :key="i" class="meta orange">✎ {{ n }}</div>
+            <div v-for="(u, i) in uses(v)" :key="'u' + i" class="meta">
+              ↳ {{ fmt(u.amount) }} used {{ shortDate(u.date) }} {{ u.date.slice(0, 4) }}<template v-if="u.client"> · {{ u.client }}</template><template v-if="u.service"> · {{ u.service }}</template><template v-if="u.who"> · with {{ u.who }}</template>
+            </div>
           </div>
           <div class="right">
             <div class="big">{{ fmt(v.balance) }}<template v-if="v.balance !== v.amount"> <span class="meta">/ {{ fmt0(v.amount) }}</span></template></div>
             <div style="display: flex; gap: 10px; justify-content: flex-end">
               <template v-if="v.status === 'active'">
+                <button class="link-btn" @click="startShare(v)">Send</button>
                 <button class="link-btn" @click="startExtend(v)">{{ expired(v) ? 'Extend' : 'Change expiry' }}</button>
                 <button class="link-btn" @click="remove(v)">Void</button>
               </template>

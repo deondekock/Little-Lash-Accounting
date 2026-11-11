@@ -39,6 +39,10 @@ export const MESSAGES = {
     `Hi ${first(c.name)}, hope you're well! 😊 Here's a statement of your outstanding visit${c.history.filter((v) => v.status === 'Unpaid').length === 1 ? '' : 's'}: ${fmt0(c.unpaid)} in total. ` +
     `${bankOnIt ? 'EFT details are on the statement. ' : ''}Thank you!${sign(from)}`,
   hello: (c, from) => `Hi ${first(c.name)}!${sign(from)}`,
+  // Sent with the voucher image.
+  voucher: (v, from) =>
+    `Hi${v.buyer ? ' ' + first(v.buyer) : ''}! 🎁 Here's your Little Lash Lounge gift voucher ${v.code} for ${fmt0(v.amount)}` +
+    `${v.expiresOn ? `, valid until ${shortDate(v.expiresOn)} ${v.expiresOn.slice(0, 4)}` : ''}. Just show it at your visit — it can be used over more than one visit.${sign(from)}`,
 }
 
 /** Opens WhatsApp with the message (a new tab on computers, the WhatsApp app on phones). */

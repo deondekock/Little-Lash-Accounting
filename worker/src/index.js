@@ -454,7 +454,7 @@ async function staffLoad(db, me) {
   const [emps, leave, payslips, settings, appts, services, vouchers] = res.map((r) => r.results[0]?.j || '[]')
   const { phones, stats } = await staffClients(db, me)
   return `{"employees":${emps},"services":${services},"leave":${leave},"payslips":${payslips},"settings":${settings},"appointments":${appts},` +
-    `"client_info":${JSON.stringify(phones)},"client_days":${JSON.stringify(stats)},"vouchers":${vouchers}}`
+    `"client_info":${JSON.stringify(phones)},"client_days":${JSON.stringify(stats)},"vouchers":${vouchers},"voucher_uses":${await voucherUses(db)}}`
 }
 
 /** Name keys of the clients she has seen. */
@@ -921,6 +921,9 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
         existing.status !== status && `${existing.status} → ${status}`,
         existing.method !== method && `${existing.method} → ${method}`].filter(Boolean).join(' · ')
     : `${me.name} added ${client} · ${fmt0(amount)} · ${method} · ${status} · ${ddmm(date)}`
+  // Which voucher paid how much is part of the log line.
+  const drew = [...newUse].map(([vid, amt]) => `voucher ${touched.get(vid)?.code || vid} ${fmt0(amt)}`).join(', ')
+  const whatFull = drew ? `${what} · ${drew}` : what
   // Payment rows: written for a split or a part-payment (a plain single method needs none). Sending
   // `tenders` (even empty) replaces the visit's rows; leaving it out keeps them as they were.
   const partial = rows?.length === 1 && rows[0].amount < amount - 0.005
@@ -929,7 +932,7 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   const stmts = [
     db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
       ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null)),
-    logEntry(db, me, existing ? 'edit' : 'add', what, { appts: { [rec.id]: existing || null } }),
+    logEntry(db, me, existing ? 'edit' : 'add', whatFull, { appts: { [rec.id]: existing || null } }),
   ]
   if (rows) {
     stmts.push(db.prepare('DELETE FROM payments WHERE appointment_id = ?1').bind(rec.id))
@@ -948,8 +951,12 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   if (!existing) onNew(rec)
   // Her phone gets the vouchers back so the balances it shows stay right.
   const vouchers = touched.size ? (await db.prepare(arraysOf('vouchers')).first())?.j || '[]' : null
-  return JSON.stringify({ ...withoutAmount(rec), ...(vouchers ? { vouchers: JSON.parse(vouchers) } : {}) })
+  return JSON.stringify({ ...withoutAmount(rec), ...(vouchers ? { vouchers: JSON.parse(vouchers), voucher_uses: JSON.parse(await voucherUses(db)) } : {}) })
 }
+
+/** Every draw on a voucher: [voucher_id, date, amount, client, who, service] — what each voucher paid for. */
+const voucherUses = async (db) => (await db.prepare(`SELECT json_group_array(json_array(p.voucher_id, p.date, p.amount, a.client, a.employee_name, a.service)) AS j
+  FROM (SELECT * FROM payments WHERE voucher_id IS NOT NULL ORDER BY date, created_at) p LEFT JOIN appointments a ON a.id = p.appointment_id`).first())?.j || '[]'
 
 /* ---- Gift vouchers: staff sell, void and extend them (every change is logged in history) ---- */
 const allVouchers = async (db) => JSON.parse((await db.prepare(arraysOf('vouchers')).first())?.j || '[]')

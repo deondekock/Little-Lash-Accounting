@@ -60,6 +60,7 @@ export const state = reactive({
   clientPhones: {}, // { clientKey: cell number }
   clientQuiet: {}, // { clientKey: reason } — clients dismissed from the win-back list
   vouchers: [], // gift vouchers sold (with remaining balance)
+  voucherUses: {}, // { voucherId: [{ date, amount, client, who, service }] } — what each voucher paid for
   clientStats: null, // staff: her clients' visits at the whole salon { key: [visits, last] }
   clientDays: null, // staff: her clients' visit days at the whole salon { key: [dates…] }
 })
@@ -450,9 +451,9 @@ export async function decideLeave(id, status) {
   state.leave = await api('decideLeave', id, status)
 }
 export async function saveMyAppointment(input) {
-  const { vouchers, ...saved } = await api('saveMyAppointment', input)
+  const { vouchers, voucherUses, ...saved } = await api('saveMyAppointment', input)
   upsertAppts([saved])
-  if (vouchers) state.vouchers = vouchers
+  if (vouchers) { state.vouchers = vouchers; state.voucherUses = voucherUses || {} }
   return saved
 }
 export async function deleteMyAppointment(id) {
@@ -501,6 +502,7 @@ function applyData(data) {
   state.clientPhones = data.clientPhones || {}
   state.clientQuiet = data.clientQuiet || {}
   state.vouchers = data.vouchers || []
+  state.voucherUses = data.voucherUses || {}
   state.clientStats = data.clientStats || null
   state.clientDays = data.clientDays || null
 }
@@ -612,7 +614,7 @@ function upsertAppts(list) {
 export async function saveAppointment(data) {
   const saved = await api('saveAppointment', data)
   upsertAppts([saved])
-  if (data.tenders?.some?.((t) => t.method === 'Voucher')) state.vouchers = await api('currentVouchers')
+  if (data.tenders?.some?.((t) => t.method === 'Voucher')) { state.vouchers = await api('currentVouchers'); state.voucherUses = await api('currentVoucherUses') }
   if (saved.month !== state.month) changeMonth(saved.month)
   return saved
 }
@@ -887,7 +889,7 @@ export async function dismissQuiet(client, note) {
 export async function recordPayment(key, payload) {
   const res = await api('recordPayment', key, payload)
   if (res.appts?.length) upsertAppts(res.appts)
-  if (res.vouchers) state.vouchers = res.vouchers
+  if (res.vouchers) { state.vouchers = res.vouchers; state.voucherUses = await api('currentVoucherUses') }
   return res
 }
 
