@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import OvertimeField from './OvertimeField.vue'
 import SegmentedControl from './SegmentedControl.vue'
+import VoucherPicker from './VoucherPicker.vue'
 import ClientInput from './ClientInput.vue'
 import ServicePicker from './ServicePicker.vue'
 import { state, serviceCatalog, liveVouchers, closeModal, saveMyAppointment, deleteMyAppointment, toast, fail } from '../store.js'
@@ -157,9 +158,7 @@ async function remove() {
                 <SegmentedControl :model-value="l.method" :options="methodOptions" @update:model-value="(m) => { l.method = m; onTenderMethod(l) }" />
                 <button v-if="i > 0" type="button" class="icon-btn" aria-label="Remove" @click="removeTender(i)">✕</button>
               </div>
-              <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onTenderMethod(l)">
-                <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}{{ v.expiresOn ? ` · exp ${v.expiresOn.slice(8)}/${v.expiresOn.slice(5, 7)}/${v.expiresOn.slice(2, 4)}` : '' }}</option>
-              </select>
+              <VoucherPicker v-if="l.method === 'Voucher'" v-model="l.voucherId" @pick="onTenderMethod(l)" />
             </template>
             <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addMethod">+ Add payment method</button>
             <div v-if="tenders.length > 1 || owing > 0.005 || overPaid" class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
