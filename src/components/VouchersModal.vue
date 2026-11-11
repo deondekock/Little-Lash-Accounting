@@ -84,7 +84,7 @@ async function confirmExtend() {
 <template>
   <BaseModal title="Gift vouchers" @close="closeModal">
     <form v-if="adding" class="voucher-sell" autocomplete="off" @submit.prevent="sell">
-      <div class="field"><label for="v-buyer">Bought by</label><ClientInput id="v-buyer" v-model="form.buyer" :hide-amounts="state.role !== 'admin'" /></div>
+      <div class="field"><label for="v-buyer">Bought by</label><ClientInput id="v-buyer" v-model="form.buyer" hide-amounts /></div>
       <div class="field"><label for="v-amt">Amount (R)</label><input id="v-amt" v-model="form.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
       <div class="row2">
         <div class="field"><label for="v-date">Sold on</label><input id="v-date" v-model="form.soldOn" type="date" :max="today"></div>
