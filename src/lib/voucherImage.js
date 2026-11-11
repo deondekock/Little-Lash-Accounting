@@ -77,7 +77,14 @@ export async function voucherImage(v, company = {}) {
   ctx.fillText(v.code, W / 2, y + 90)
   y += 180
 
-  // Valid until. No name or note: it may be a gift for someone else, and the note is the salon's own.
+  // The line meant for the voucher (e.g. "Any full set of lash extensions"), then how long it's good for.
+  // No buyer name or private note: it may be a gift for someone else.
+  if (v.voucherNote) {
+    ctx.fillStyle = INK
+    ctx.font = `40px ${SERIF}`
+    ctx.fillText(fit(ctx, v.voucherNote, W - PAD * 2), W / 2, y)
+    y += 58
+  }
   ctx.fillStyle = MUTED
   ctx.font = `400 28px ${SANS}`
   ctx.fillText(v.expiresOn ? `Valid until ${longDate(v.expiresOn)}` : `Sold ${longDate(v.soldOn)}`, W / 2, y)

@@ -179,7 +179,7 @@ const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
 const toVoucher = (r) => ({
   id: r.id, code: clean(r.code), amount: Number(r.amount) || 0, balance: Number(r.balance) || 0,
   buyer: clean(r.buyer), buyerKey: clean(r.buyer_key) || null, soldOn: r.sold_on, method: clean(r.method),
-  status: clean(r.status) || 'active', note: clean(r.note), expiresOn: clean(r.expires_on) || null, expiryNote: clean(r.expiry_note), rec: r,
+  status: clean(r.status) || 'active', note: clean(r.note), expiresOn: clean(r.expires_on) || null, expiryNote: clean(r.expiry_note), voucherNote: clean(r.voucher_note), rec: r,
 })
 function toPayment(r) {
   return { id: r.id, appointmentId: clean(r.appointment_id), date: r.date, amount: Number(r.amount) || 0, method: clean(r.method), voucherId: clean(r.voucher_id) || null, note: clean(r.note), rec: r }
@@ -813,7 +813,7 @@ const voucherCode = () => 'LL-' + Math.random().toString(36).slice(2, 6).toUpper
 const publicVoucher = (id) => strip(db.vouchers.find((v) => v.id === id))
 
 /** Sell a gift voucher — cash in now, redeemable later (possibly by someone else). Expires a year on unless chosen. */
-export async function sellVoucher({ amount, buyer, method, soldOn, code, note, expiresOn }) {
+export async function sellVoucher({ amount, buyer, method, soldOn, code, note, expiresOn, voucherNote }) {
   amount = round2(Number(amount) || 0)
   if (!(amount > 0)) throw new Error('Please enter the voucher amount.')
   const now = new Date().toISOString()
@@ -822,7 +822,7 @@ export async function sellVoucher({ amount, buyer, method, soldOn, code, note, e
     id: uuid(), code: clean(code) || voucherCode(), amount, balance: amount,
     buyer: clean(buyer), buyer_key: buyer ? clientKey(buyer) : null, sold_on: sold,
     method: METHODS.includes(clean(method)) ? clean(method) : 'Cash', status: 'active', note: clean(note),
-    expires_on: /^\d{4}-\d{2}-\d{2}$/.test(clean(expiresOn)) ? clean(expiresOn) : defaultExpiry(sold), expiry_note: '',
+    expires_on: /^\d{4}-\d{2}-\d{2}$/.test(clean(expiresOn)) ? clean(expiresOn) : defaultExpiry(sold), expiry_note: '', voucher_note: clean(voucherNote).slice(0, 80),
     created_at: now, updated_at: now, created_by: user || null, updated_by: user || null,
   }
   await commit('voucher', `Sold voucher ${rec.code} · ${fmt0(amount)}${rec.buyer ? ' · ' + rec.buyer : ''}`, { put: { vouchers: [rec] }, before: { vchr: { [rec.id]: null } } })

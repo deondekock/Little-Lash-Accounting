@@ -978,6 +978,7 @@ async function staffVoucher(db, me, b) {
     buyer, buyer_key: buyer ? buyer.toLowerCase().replace(/\s+/g, ' ') : null, sold_on: soldOn,
     method: METHODS.includes(b.method) ? b.method : 'Cash', status: 'active', note: String(b.note || '').trim().slice(0, 200),
     expires_on: DATE_RE.test(String(b.expiresOn || '')) ? String(b.expiresOn) : defaultExpiry(soldOn), expiry_note: '',
+    voucher_note: String(b.voucherNote || '').trim().slice(0, 80),
     created_at: now, updated_at: now, created_by: me.actor || me.email, updated_by: me.actor || me.email,
   }
   await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} sold voucher ${rec.code} · ${fmt0(amount)}${buyer ? ' · ' + buyer : ''}`, { vchr: { [rec.id]: null } })])

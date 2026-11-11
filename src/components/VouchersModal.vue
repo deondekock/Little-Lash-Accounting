@@ -14,7 +14,7 @@ import Icon from './Icon.vue'
 
 /** Sell gift vouchers (cash in now), see which still have money on them, and extend an expiry. */
 const today = todayStr()
-const form = reactive({ amount: '', buyer: '', method: 'Card', soldOn: today, note: '', expiresOn: defaultExpiry(today) })
+const form = reactive({ amount: '', buyer: '', method: 'Card', soldOn: today, note: '', voucherNote: '', expiresOn: defaultExpiry(today) })
 const expiryTouched = ref(false)
 // The expiry follows "Sold on" (one year later) until she picks her own date.
 watch(() => form.soldOn, (d) => { if (!expiryTouched.value && d) form.expiresOn = defaultExpiry(d) })
@@ -27,7 +27,7 @@ const query = ref('')
 const list = computed(() => {
   const q = looseKey(query.value)
   return [...state.vouchers]
-    .filter((v) => !q || looseKey(`${v.code} ${v.buyer} ${v.note}`).includes(q))
+    .filter((v) => !q || looseKey(`${v.code} ${v.buyer} ${v.note} ${v.voucherNote}`).includes(q))
     .sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1))
 })
 const remaining = computed(() => list.value.filter((v) => v.status === 'active').reduce((t, v) => t + v.balance, 0))
@@ -42,7 +42,7 @@ async function sell() {
   try {
     await sellVoucher({ ...form })
     toast('Voucher sold 🎁')
-    form.amount = ''; form.buyer = ''; form.note = ''
+    form.amount = ''; form.buyer = ''; form.note = ''; form.voucherNote = ''
     adding.value = false
   } catch (err) {
     fail(err)
@@ -140,7 +140,12 @@ async function confirmExtend() {
       </div>
       <p class="field-hint" style="margin-top: -6px">Vouchers are good for a year unless you choose another date.</p>
       <div class="field"><label>Paid with</label><SegmentedControl v-model="form.method" :options="METHODS" /></div>
-      <div class="field"><label for="v-note">Note (optional)</label><input id="v-note" v-model="form.note" placeholder="e.g. birthday gift for Sarah"></div>
+      <div class="field">
+        <label for="v-vnote">On the voucher (optional)</label>
+        <input id="v-vnote" v-model="form.voucherNote" maxlength="80" placeholder="e.g. Any full set of lash extensions">
+        <div class="field-hint">Printed on the voucher image, under the amount.</div>
+      </div>
+      <div class="field"><label for="v-note">Private note (optional)</label><input id="v-note" v-model="form.note" placeholder="e.g. birthday gift for Sarah — not shown on the voucher"></div>
       <div class="modal-actions" style="margin-top: 4px">
         <button class="btn ghost" type="button" @click="adding = false">Cancel</button>
         <button class="btn" type="submit" :disabled="saving || !ok">Sell voucher {{ ok ? fmt0(Number(form.amount)) : '' }}</button>
@@ -187,7 +192,7 @@ async function confirmExtend() {
               <span v-if="v.expiryNote" class="badge quiet" title="The expiry date was changed">✎ expiry changed</span>
             </div>
             <div class="meta">
-              {{ shortDate(v.soldOn) }}<template v-if="v.buyer"> · {{ v.buyer }}</template><template v-if="v.note"> · {{ v.note }}</template>
+              {{ shortDate(v.soldOn) }}<template v-if="v.buyer"> · {{ v.buyer }}</template><template v-if="v.voucherNote"> · “{{ v.voucherNote }}”</template><template v-if="v.note"> · {{ v.note }}</template>
               <template v-if="v.expiresOn"> · <span :class="{ orange: expired(v) }">{{ expired(v) ? 'expired' : 'expires' }} {{ long(v.expiresOn) }}</span></template>
             </div>
             <div v-for="(n, i) in (v.expiryNote || '').split('\n').filter(Boolean)" :key="i" class="meta orange">✎ {{ n }}</div>

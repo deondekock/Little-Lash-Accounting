@@ -16,7 +16,7 @@ export const TABLES = {
   // Payments toward an appointment (partial settlements, split tenders, voucher redemptions).
   payments: ['id', 'appointment_id', 'date', 'amount', 'method', 'voucher_id', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by'],
   // Gift vouchers: sold for cash now, redeemed later (maybe by someone else) as a "Voucher" tender.
-  vouchers: ['id', 'code', 'amount', 'balance', 'buyer', 'buyer_key', 'sold_on', 'method', 'status', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by', 'expires_on', 'expiry_note'],
+  vouchers: ['id', 'code', 'amount', 'balance', 'buyer', 'buyer_key', 'sold_on', 'method', 'status', 'note', 'created_at', 'updated_at', 'created_by', 'updated_by', 'expires_on', 'expiry_note', 'voucher_note'],
 }
 
 /** History entries keep the records as they were before each change, by kind. */
