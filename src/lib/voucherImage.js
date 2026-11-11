@@ -1,6 +1,6 @@
 /**
- * A gift voucher as a PNG image (for WhatsApp): the logo, the amount, the code, who it's for, how long
- * it's good for. Drawn on a canvas in the salon's fonts — nothing leaves the phone.
+ * A gift voucher as a PNG image (for WhatsApp): the logo, the amount, the code and how long it's good
+ * for — no name or note, so it can be passed on as a gift. Drawn on a canvas in the salon's fonts — nothing leaves the phone.
  */
 import { fmt } from './format.js'
 
@@ -77,16 +77,11 @@ export async function voucherImage(v, company = {}) {
   ctx.fillText(v.code, W / 2, y + 90)
   y += 180
 
-  // For whom, valid until, note.
-  ctx.fillStyle = INK
-  ctx.font = `400 32px ${SANS}`
-  if (v.buyer) { ctx.fillText(fit(ctx, `For ${v.buyer}`, W - PAD * 2), W / 2, y); y += 50 }
+  // Valid until. No name or note: it may be a gift for someone else, and the note is the salon's own.
   ctx.fillStyle = MUTED
   ctx.font = `400 28px ${SANS}`
   ctx.fillText(v.expiresOn ? `Valid until ${longDate(v.expiresOn)}` : `Sold ${longDate(v.soldOn)}`, W / 2, y)
-  y += 44
-  if (v.note) { ctx.font = `italic 28px ${SERIF}`; ctx.fillStyle = INK; ctx.fillText(fit(ctx, v.note, W - PAD * 2), W / 2, y); y += 50 }
-  y += 10
+  y += 54
   ctx.fillStyle = MUTED
   ctx.font = `400 25px ${SANS}`
   ctx.fillText('Show this at your visit — it can be used over more than one visit.', W / 2, y)
