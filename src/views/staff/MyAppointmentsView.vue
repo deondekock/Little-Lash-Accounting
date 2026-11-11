@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import Icon from '../../components/Icon.vue'
 import SwipeArea from '../../components/SwipeArea.vue'
-import { all, state, openMyAppointment } from '../../store.js'
+import { all, state, openMyAppointment, openVouchers } from '../../store.js'
 import { businessMonth, todayStr } from '../../lib/format.js'
 import { overtimeLabel } from '../../lib/payroll.js'
 import { lockedReason } from '../../lib/staffRules.js'
@@ -60,6 +60,9 @@ const added = (a) => (a.createdAt ? new Date(a.createdAt).toLocaleTimeString('en
       <span class="more">My stats →</span>
     </button>
     <p v-if="locked" class="field-hint orange" style="margin: 0 0 10px">🔒 {{ locked }}</p>
+    <div class="report-actions" style="margin: 0 0 10px">
+      <button class="btn soft small" @click="openVouchers">🎁 Gift vouchers</button>
+    </div>
 
     <SwipeArea :can-go="(dir) => dir < 0 || day < today" @swipe="shift">
     <div v-if="list.length" class="card" style="padding: 4px 16px">

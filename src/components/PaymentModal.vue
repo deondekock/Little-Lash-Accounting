@@ -90,7 +90,7 @@ async function submit() {
             <button v-if="lines.length > 1" type="button" class="icon-btn" aria-label="Remove" @click="removeLine(i)">✕</button>
           </div>
           <select v-if="l.method === 'Voucher'" v-model="l.voucherId" class="voucher-pick" @change="onMethod(l)">
-            <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}</option>
+            <option v-for="v in vouchers" :key="v.id" :value="v.id">{{ v.code }} · {{ fmt(v.balance) }} left{{ v.buyer ? ` · ${v.buyer}` : '' }}{{ v.expiresOn ? ` · exp ${v.expiresOn.slice(8)}/${v.expiresOn.slice(5, 7)}/${v.expiresOn.slice(2, 4)}` : '' }}</option>
           </select>
         </template>
         <button type="button" class="btn small ghost" style="margin-top: 8px" @click="addLine">+ Split into another method</button>

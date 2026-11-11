@@ -8,6 +8,7 @@ import { buildClients, buildServices, clientFlow, followUp, nextMilestone, daysB
 import { salonDays } from './lib/rebook.js'
 import { isIos } from './lib/push.js'
 import { clearLoadCache } from './lib/loadcache.js'
+import { voucherUsable } from './lib/vouchers.js'
 import { CLIENT_ID, DEFAULT_SHEET_ID, FAKE_API, BACKEND } from './config.js'
 import * as auth from './google/auth.js'
 import { AuthError } from './google/sheets.js'
@@ -893,14 +894,20 @@ export async function recordPayment(key, payload) {
 /* ---------------- gift vouchers ---------------- */
 export const openVouchers = () => (state.modal = { type: 'vouchers', data: null })
 /** Vouchers with money still on them, newest first — for the payment picker and the list. */
-export const liveVouchers = computed(() => state.vouchers.filter((v) => v.status === 'active' && v.balance > 0.005).sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)))
+export const liveVouchers = computed(() => state.vouchers.filter((v) => voucherUsable(v, todayStr())).sort((a, b) => (a.soldOn < b.soldOn ? 1 : -1)))
+const staff = () => state.role === 'staff'
+const myName = () => (state.me?.name || state.email || 'owner').split(' ')[0]
 export async function sellVoucher(input) {
+  if (staff()) { state.vouchers = await api('staffSellVoucher', input); return }
   const v = await api('sellVoucher', input)
   state.vouchers = [...state.vouchers, v]
   return v
 }
+export async function extendVoucher(id, expiresOn) {
+  state.vouchers = await api(staff() ? 'staffExtendVoucher' : 'extendVoucher', { id, expiresOn, by: myName() })
+}
 export async function voidVoucher(id) {
-  state.vouchers = await api('voidVoucher', id)
+  state.vouchers = await api(staff() ? 'staffVoidVoucher' : 'voidVoucher', id)
 }
 export const openSettings = () => (state.modal = { type: 'settings', data: null })
 export const openHistory = () => {

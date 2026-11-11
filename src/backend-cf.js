@@ -13,6 +13,7 @@ import { businessMonth, todayStr, fmt0, monthLabel } from './lib/format.js'
 import { splitServices, joinServices, serviceKey } from './lib/services.js'
 import { TABLES, KIND_TABLE, PAY_FIELDS, COMPANY_FIELDS, MONTH_START_SETTING, LEAVE_TYPES, statusOf } from './lib/schema.js'
 import { toAppt, overtimeValue } from './lib/appt.js'
+import { defaultExpiry, voucherExpired, expiryChangeNote } from './lib/vouchers.js'
 
 /** Overtime minutes can never exceed the service duration (a percentage / 'all' passes through). */
 const clampOvertime = (ot, length) => (typeof ot === 'number' && Number(length) > 0 ? Math.min(ot, Math.round(Number(length))) : ot)
@@ -178,7 +179,7 @@ const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100
 const toVoucher = (r) => ({
   id: r.id, code: clean(r.code), amount: Number(r.amount) || 0, balance: Number(r.balance) || 0,
   buyer: clean(r.buyer), buyerKey: clean(r.buyer_key) || null, soldOn: r.sold_on, method: clean(r.method),
-  status: clean(r.status) || 'active', note: clean(r.note), rec: r,
+  status: clean(r.status) || 'active', note: clean(r.note), expiresOn: clean(r.expires_on) || null, expiryNote: clean(r.expiry_note), rec: r,
 })
 function toPayment(r) {
   return { id: r.id, appointmentId: clean(r.appointment_id), date: r.date, amount: Number(r.amount) || 0, method: clean(r.method), voucherId: clean(r.voucher_id) || null, note: clean(r.note), rec: r }
@@ -552,6 +553,7 @@ function normalizeTenders(raw, amount, restore = null) {
   for (const [vid, used] of use) {
     const vch = db.vouchers.find((x) => x.id === vid && x.status !== 'void')
     if (!vch) throw new Error('That voucher could not be found.')
+    if (voucherExpired(vch, todayStr())) throw new Error(`Voucher ${vch.code} expired on ${vch.expiresOn}. Extend it under Gift vouchers first.`)
     // On an edit, the draw this visit already made against the voucher is freed up before re-charging it.
     const avail = round2(vch.balance + (restore?.get(vid) || 0))
     if (used > avail + 0.005) throw new Error(`That voucher only has ${fmt0(avail)} left.`)
@@ -735,6 +737,7 @@ export async function recordPayment(key, { date, lines }) {
   for (const [vid, used] of voucherUse) {
     const v = db.vouchers.find((x) => x.id === vid && x.status !== 'void')
     if (!v) throw new Error('That voucher could not be found.')
+    if (voucherExpired(v, todayStr())) throw new Error(`Voucher ${v.code} expired on ${v.expiresOn}. Extend it under Gift vouchers first.`)
     if (used > v.balance + 0.005) throw new Error(`That voucher only has ${fmt0(v.balance)} left.`)
   }
   const visits = db.appts
@@ -788,15 +791,17 @@ export async function recordPayment(key, { date, lines }) {
 const voucherCode = () => 'LL-' + Math.random().toString(36).slice(2, 6).toUpperCase()
 const publicVoucher = (id) => strip(db.vouchers.find((v) => v.id === id))
 
-/** Sell a gift voucher — cash in now, redeemable later (possibly by someone else). */
-export async function sellVoucher({ amount, buyer, method, soldOn, code, note }) {
+/** Sell a gift voucher — cash in now, redeemable later (possibly by someone else). Expires a year on unless chosen. */
+export async function sellVoucher({ amount, buyer, method, soldOn, code, note, expiresOn }) {
   amount = round2(Number(amount) || 0)
   if (!(amount > 0)) throw new Error('Please enter the voucher amount.')
   const now = new Date().toISOString()
+  const sold = clean(soldOn) || todayStr()
   const rec = {
     id: uuid(), code: clean(code) || voucherCode(), amount, balance: amount,
-    buyer: clean(buyer), buyer_key: buyer ? clientKey(buyer) : null, sold_on: clean(soldOn) || todayStr(),
+    buyer: clean(buyer), buyer_key: buyer ? clientKey(buyer) : null, sold_on: sold,
     method: METHODS.includes(clean(method)) ? clean(method) : 'Cash', status: 'active', note: clean(note),
+    expires_on: /^\d{4}-\d{2}-\d{2}$/.test(clean(expiresOn)) ? clean(expiresOn) : defaultExpiry(sold), expiry_note: '',
     created_at: now, updated_at: now, created_by: user || null, updated_by: user || null,
   }
   await commit('voucher', `Sold voucher ${rec.code} · ${fmt0(amount)}${rec.buyer ? ' · ' + rec.buyer : ''}`, { put: { vouchers: [rec] }, before: { vchr: { [rec.id]: null } } })
@@ -811,6 +816,27 @@ export async function voidVoucher(id) {
   await commit('voucher', `Voided voucher ${v.code}`, { put: { vouchers: [rec] }, before: { vchr: { [id]: v.rec } } })
   return db.vouchers.map(strip)
 }
+
+/** Change a voucher's expiry date (e.g. honour an expired one). The change is logged on the voucher itself. */
+export async function extendVoucher({ id, expiresOn, by }) {
+  const v = db.vouchers.find((x) => x.id === id)
+  if (!v) throw new Error('That voucher could not be found.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(clean(expiresOn))) throw new Error('Please choose the new expiry date.')
+  const note = expiryChangeNote(clean(by) || user || 'owner', todayStr(), v.expiresOn, clean(expiresOn))
+  const rec = { ...v.rec, expires_on: clean(expiresOn), expiry_note: [v.expiryNote, note].filter(Boolean).join('\n'), updated_at: new Date().toISOString(), updated_by: user || null }
+  await commit('voucher', `Changed expiry of voucher ${v.code} to ${clean(expiresOn)}`, { put: { vouchers: [rec] }, before: { vchr: { [id]: v.rec } } })
+  return db.vouchers.map(strip)
+}
+
+/* Staff: the same three, through the Worker's staff endpoints (the Worker checks and logs them). */
+const staffVoucherCall = async (path, body) => {
+  const list = await request(path, { method: 'POST', body })
+  db.vouchers = list.map((a) => toVoucher(fromArray('vouchers', a)))
+  return db.vouchers.map(strip)
+}
+export const staffSellVoucher = (input) => staffVoucherCall('/api/staff/voucher', input)
+export const staffVoidVoucher = (id) => staffVoucherCall('/api/staff/voucher/void', { id })
+export const staffExtendVoucher = (input) => staffVoucherCall('/api/staff/voucher/extend', input)
 
 export async function deleteAppointment(id) {
   const a = db.appts.find((x) => x.id === id)

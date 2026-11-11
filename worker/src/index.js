@@ -52,6 +52,7 @@
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING, MILESTONES } from '../../src/lib/schema.js'
 import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
+import { defaultExpiry, expiryChangeNote } from '../../src/lib/vouchers.js'
 import { clientKey } from '../../src/lib/stats.js'
 import { gmailSetUp, connectUrl, handleCallback, gmailStatus, disconnectGmail, gmailCanSend } from './gmail.js'
 import { notify, vapid, getConfig, setConfig, relayScript, b64url, unb64url } from './notify.js'
@@ -99,6 +100,9 @@ export default {
         if (route === 'POST /api/staff/client-phone') return json(await staffClientPhone(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
+        if (route === 'POST /api/staff/voucher') return json(await staffVoucher(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/voucher/void') return json(await staffVoucherVoid(env.DB, me, await request.json()), cors)
+        if (route === 'POST /api/staff/voucher/extend') return json(await staffVoucherExtend(env.DB, me, await request.json()), cors)
         throw new HttpError(403, 'Only the owner can do that.')
       }
       if (route === 'GET /api/load') {
@@ -444,8 +448,8 @@ async function staffLoad(db, me) {
     // Her own price per service (her override, else the general price) — so the amount can auto-fill.
     // Other staff's per-service prices are never sent (the prices map stays NULL).
     db.prepare(`SELECT json_group_array(json_array(id, name, COALESCE(CASE WHEN json_valid(prices) THEN json_extract(prices, '$."' || ?1 || '"') END, price), active, NULL, created_at, updated_at)) AS j FROM services`).bind(me.employeeId),
-    // Gift vouchers with money left on them, so she can take one as payment.
-    db.prepare(arraysOf('vouchers', "WHERE status = 'active' AND balance > 0")),
+    // Gift vouchers (all of them: staff sell, extend and take them as payment).
+    db.prepare(arraysOf('vouchers')),
   ])
   const [emps, leave, payslips, settings, appts, services, vouchers] = res.map((r) => r.results[0]?.j || '[]')
   const { phones, stats } = await staffClients(db, me)
@@ -896,6 +900,7 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   for (const vid of new Set([...oldUse.keys(), ...newUse.keys()])) {
     const vch = await recordOf(db, 'vouchers', 'id = ?1', vid)
     if (!vch || vch.status === 'void') { if (newUse.has(vid)) throw new HttpError(400, 'That voucher could not be found.'); continue }
+    if (newUse.has(vid) && vch.expires_on && vch.expires_on < saToday()) throw new HttpError(400, `Voucher ${vch.code} expired on ${vch.expires_on}. Extend it under Gift vouchers first.`)
     const avail = r2(Number(vch.balance) + (oldUse.get(vid) || 0))
     if ((newUse.get(vid) || 0) > avail + 0.005) throw new HttpError(400, `Voucher ${vch.code} only has ${fmt0(avail)} left.`)
     touched.set(vid, vch)
@@ -942,8 +947,53 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   await db.batch(stmts)
   if (!existing) onNew(rec)
   // Her phone gets the vouchers back so the balances it shows stay right.
-  const vouchers = touched.size ? (await db.prepare(arraysOf('vouchers', "WHERE status = 'active' AND balance > 0")).first())?.j || '[]' : null
+  const vouchers = touched.size ? (await db.prepare(arraysOf('vouchers')).first())?.j || '[]' : null
   return JSON.stringify({ ...withoutAmount(rec), ...(vouchers ? { vouchers: JSON.parse(vouchers) } : {}) })
+}
+
+/* ---- Gift vouchers: staff sell, void and extend them (every change is logged in history) ---- */
+const allVouchers = async (db) => JSON.parse((await db.prepare(arraysOf('vouchers')).first())?.j || '[]')
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+const upsert = (db, table, rec) => {
+  const cols = TABLES[table]
+  return db.prepare(`INSERT INTO ${table} (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
+    ON CONFLICT(id) DO UPDATE SET ${cols.filter((c) => c !== 'id').map((c) => `${c} = excluded.${c}`).join(', ')}`).bind(...cols.map((c) => rec[c] ?? null))
+}
+
+async function staffVoucher(db, me, b) {
+  const amount = Math.round(Number(String(b.amount ?? '').replace(',', '.')) * 100) / 100
+  if (!(amount > 0 && amount < 1e6)) throw new HttpError(400, 'Please enter the voucher amount.')
+  const soldOn = DATE_RE.test(String(b.soldOn || '')) ? String(b.soldOn) : saToday()
+  const buyer = String(b.buyer || '').trim().slice(0, 80)
+  const now = new Date().toISOString()
+  const rec = {
+    id: crypto.randomUUID(), code: 'LL-' + Math.random().toString(36).slice(2, 6).toUpperCase(), amount, balance: amount,
+    buyer, buyer_key: buyer ? buyer.toLowerCase().replace(/\s+/g, ' ') : null, sold_on: soldOn,
+    method: METHODS.includes(b.method) ? b.method : 'Cash', status: 'active', note: String(b.note || '').trim().slice(0, 200),
+    expires_on: DATE_RE.test(String(b.expiresOn || '')) ? String(b.expiresOn) : defaultExpiry(soldOn), expiry_note: '',
+    created_at: now, updated_at: now, created_by: me.actor || me.email, updated_by: me.actor || me.email,
+  }
+  await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} sold voucher ${rec.code} · ${fmt0(amount)}${buyer ? ' · ' + buyer : ''}`, { vchr: { [rec.id]: null } })])
+  return JSON.stringify(await allVouchers(db))
+}
+
+async function staffVoucherVoid(db, me, b) {
+  const v = await recordOf(db, 'vouchers', 'id = ?1', String(b.id || ''))
+  if (!v) throw new HttpError(404, 'That voucher could not be found.')
+  const rec = { ...v, status: 'void', updated_at: new Date().toISOString(), updated_by: me.actor || me.email }
+  await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} voided voucher ${v.code}`, { vchr: { [v.id]: v } })])
+  return JSON.stringify(await allVouchers(db))
+}
+
+async function staffVoucherExtend(db, me, b) {
+  const v = await recordOf(db, 'vouchers', 'id = ?1', String(b.id || ''))
+  if (!v) throw new HttpError(404, 'That voucher could not be found.')
+  const to = String(b.expiresOn || '')
+  if (!DATE_RE.test(to)) throw new HttpError(400, 'Please choose the new expiry date.')
+  const note = expiryChangeNote(me.name, saToday(), v.expires_on, to)
+  const rec = { ...v, expires_on: to, expiry_note: [v.expiry_note, note].filter(Boolean).join('\n'), updated_at: new Date().toISOString(), updated_by: me.actor || me.email }
+  await db.batch([upsert(db, 'vouchers', rec), logEntry(db, me, 'voucher', `${me.name} changed expiry of voucher ${v.code} to ${to}`, { vchr: { [v.id]: v } })])
+  return JSON.stringify(await allVouchers(db))
 }
 
 async function staffDeleteAppointment(db, me, b) {
