@@ -164,7 +164,7 @@ async function remove() {
             <div v-if="tenders.length > 1 || owing > 0.005 || overPaid" class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
               <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
               <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
-              <template v-else>Paid in full</template>
+              <template v-else>Paid in full<template v-if="form.status === 'Unpaid'"> · tap <b>Paid</b> below once the money is in</template></template>
             </div>
           </template>
           <template v-else>

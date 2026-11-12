@@ -140,8 +140,9 @@ async function submit() {
     const isSplit = rows.length > 1
     const hasVoucher = rows.some((l) => l.method === 'Voucher')
     // A plain single method paying the whole amount needs no payment row (the status already says it all).
-    // Record rows only for a split, a voucher, or a part-payment — and only when money was actually taken.
-    const record = paid > 0.005 && (isSplit || hasVoucher || partial) && (form.status === 'Paid' || partial)
+    // Record rows for a split, a voucher, or a part-payment whenever money was actually taken — whatever
+    // the status toggle says (a voucher is drawn down the moment it's used; Unpaid can still mean "EFT not in yet").
+    const record = paid > 0.005 && (isSplit || hasVoucher || partial) && form.status !== 'Written off'
     // Only rewrite payment rows when the owner actually touched them (untouched edits leave rows as they were).
     if (paymentsTouched.value) {
       payload.replaceTenders = true
@@ -224,7 +225,7 @@ async function remove() {
         <div v-if="tenders.length > 1 || owing > 0.005 || overPaid" class="pay-total" :class="{ orange: overPaid || owing > 0.005 }">
           <template v-if="overPaid">{{ fmt(-owing) }} more than the amount</template>
           <template v-else-if="owing > 0.005">Paid {{ fmt(paidNum) }} · {{ fmt(owing) }} still owing</template>
-          <template v-else>Paid in full</template>
+          <template v-else>Paid in full<template v-if="form.status === 'Unpaid'"> · tap <b>Paid</b> below once the money is in</template></template>
         </div>
       </div>
       <div class="field">

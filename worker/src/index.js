@@ -928,7 +928,8 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
   // Payment rows: written for a split or a part-payment (a plain single method needs none). Sending
   // `tenders` (even empty) replaces the visit's rows; leaving it out keeps them as they were.
   const partial = rows?.length === 1 && rows[0].amount < amount - 0.005
-  const keep = rows && (rows.length > 1 || partial || rows[0]?.method === 'Voucher') && (status === 'Paid' || partial) ? rows : []
+  // Rows are kept for a split, a voucher or a part-payment whatever the status says (a voucher is drawn the moment it's used).
+  const keep = rows && (rows.length > 1 || partial || rows[0]?.method === 'Voucher') && status !== 'Written off' ? rows : []
   const pcols = TABLES.payments
   const stmts = [
     db.prepare(`INSERT INTO appointments (${cols.join(', ')}) VALUES (${cols.map((_, i) => `?${i + 1}`).join(', ')})
