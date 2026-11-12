@@ -57,8 +57,8 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
               <span class="lf-left"><b>{{ f.hours }} h</b> <small>{{ f.days }} d</small></span>
             </div>
             <div class="lf-meta">
-              <template v-if="i === 0">now {{ annual.hours }} h · </template>
-              <template v-if="f.earned != null">+{{ f.earned }} h earned</template>
+              <template v-if="i === 0">now {{ annual.hours }} h<template v-if="f.hours !== annual.hours"> · +{{ Math.round((f.hours - annual.hours + f.approved) * 100) / 100 }} h earned by month end</template></template>
+              <template v-else-if="f.earned != null">+{{ f.earned }} h earned</template>
               <template v-if="f.approved"> · −{{ f.approved }} h booked</template>
               <template v-if="f.waiting"> · <span class="orange">{{ f.waiting }} h waiting</span></template>
               <template v-if="f.pending"> · <span class="orange">{{ f.ifApproved }} h if approved</span></template>
