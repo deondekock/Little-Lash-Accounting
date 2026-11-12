@@ -71,7 +71,7 @@ const showLines = ref(false)
           <div v-for="e in preview.earnings" :key="'e' + e.label"><span>{{ e.label }}</span><b>{{ fmt(e.amount) }}</b></div>
           <div v-for="x in preview.deductions" :key="'d' + x.label"><span>{{ x.label }}</span><b>− {{ fmt(x.amount) }}</b></div>
         </div>
-        <p class="meta" style="margin: 8px 0 0">If today were payday. Every appointment you add before {{ shortDate(period.to) }} pushes it up 🥳 Your final payslip may differ a little (bonuses, deductions, unpaid visits).</p>
+        <p class="meta" style="margin: 8px 0 0">If today were payday. Every appointment you add before {{ shortDate(period.to) }} pushes it up 🥳 Your final payslip may differ a little.</p>
       </template>
       <p v-else-if="preview?.done" class="meta" style="margin: 8px 0 0">This month's payslip is done — it's in the list below.</p>
     </div>
