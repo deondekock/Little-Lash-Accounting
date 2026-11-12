@@ -231,7 +231,7 @@ async function remove() {
       <div class="field">
         <label>Status</label>
         <SegmentedControl v-model="form.status" :options="STATUSES" variant="status" />
-        <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It stays on record but counts as R0 in takings, money owed and commission.</div>
+        <div v-if="form.status === 'Written off'" class="field-hint">Not paid, and not owed any more. It counts as R0 in takings and money owed — but she still earns her commission on it (the salon takes the knock).</div>
       </div>
       <div class="field">
         <label for="f-notes">Notes (optional)</label>

@@ -93,6 +93,7 @@ const editPay = () => openEmployee(emp.value)
     <div class="calc-box">
       <div><span>{{ c.count }} appointments</span><b>{{ fmt(c.takings) }}</b></div>
       <div v-if="c.overtime"><span>⏰ of which overtime ({{ c.otCount }} appts)</span><b>{{ fmt(c.overtime) }}</b></div>
+      <div v-if="c.writtenOff"><span>incl. {{ c.writtenOffCount }} written off (she still earns on {{ c.writtenOffCount === 1 ? 'it' : 'them' }})</span><b>{{ fmt(c.writtenOff) }}</b></div>
       <div v-if="c.threshold"><span>Commission starts above</span><b>{{ fmt(c.threshold) }}</b></div>
       <div><span>Commission {{ pct(c.rate) }} of {{ fmt(Math.max(0, c.normal - c.threshold)) }}</span><b>{{ fmt(c.normalCommission) }}</b></div>
       <div v-if="c.overtime"><span>Overtime {{ pct(c.otRate) }} of {{ fmt(c.overtime) }}</span><b>{{ fmt(c.overtimeCommission) }}</b></div>

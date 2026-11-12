@@ -158,17 +158,23 @@ export function overtimeLabel(a) {
  * the rest earns the normal rate, on takings above the threshold (if any).
  */
 export function commission(appts, pay, { onlyPaid = false } = {}) {
-  const list = onlyPaid ? appts.filter((a) => a.status === 'Paid') : appts
+  // A written-off visit still earns her commission on its real amount: she did the work, the salon
+  // takes the knock. (It counts as R0 everywhere else.) So it stays in even with "only paid" ticked.
+  const worth = (a) => (a.status === 'Written off' ? a.writtenOff || 0 : a.amount)
+  const list = onlyPaid ? appts.filter((a) => a.status === 'Paid' || a.status === 'Written off') : appts
   let normal = 0
   let overtime = 0
   let unpaid = 0
   let otCount = 0
+  let writtenOff = 0
+  let writtenOffCount = 0
   for (const a of appts) if (a.status === 'Unpaid') unpaid += a.amount
   for (const a of list) {
     const share = overtimeShare(a)
-    overtime += a.amount * share
-    normal += a.amount * (1 - share)
+    overtime += worth(a) * share
+    normal += worth(a) * (1 - share)
     if (share) otCount++
+    if (a.status === 'Written off') { writtenOff += worth(a); writtenOffCount++ }
   }
   const threshold = pay.commissionOn === 'aboveBasic' ? Number(pay.basic) || 0 : pay.commissionOn === 'above' ? Number(pay.threshold) || 0 : 0
   const rate = (Number(pay.commissionPct) || 0) / 100
@@ -180,6 +186,8 @@ export function commission(appts, pay, { onlyPaid = false } = {}) {
     overtime: round2(overtime),
     otCount,
     unpaid: round2(unpaid),
+    writtenOff: round2(writtenOff),
+    writtenOffCount,
     threshold,
     rate,
     otRate,
