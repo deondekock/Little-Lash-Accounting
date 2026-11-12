@@ -51,7 +51,9 @@
  * The Worker hardly parses anything: SQLite builds the JSON, so big loads stay cheap.
  */
 import { TABLES, LEAVE_TYPES, STAFF_EDITABLE, METHODS, STAFF_DELETE_HOURS, MONTH_START_SETTING, MILESTONES } from '../../src/lib/schema.js'
-import { businessMonth, shiftMonth, fmt0 } from '../../src/lib/format.js'
+import { businessMonth, shiftMonth, fmt0, monthRange } from '../../src/lib/format.js'
+import { draftPayslip } from '../../src/lib/payroll.js'
+import { toAppt } from '../../src/lib/appt.js'
 import { defaultExpiry, expiryChangeNote } from '../../src/lib/vouchers.js'
 import { clientKey } from '../../src/lib/stats.js'
 import { gmailSetUp, connectUrl, handleCallback, gmailStatus, disconnectGmail, gmailCanSend } from './gmail.js'
@@ -100,6 +102,7 @@ export default {
         if (route === 'POST /api/staff/client-phone') return json(await staffClientPhone(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/appointment/delete') return json(await staffDeleteAppointment(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/profile') return json(await staffProfile(env.DB, me, await request.json(), (m) => tell(owners, m)), cors)
+        if (route === 'GET /api/staff/pay-preview') return json(await staffPayPreview(env.DB, me), cors)
         if (route === 'POST /api/staff/voucher') return json(await staffVoucher(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/voucher/void') return json(await staffVoucherVoid(env.DB, me, await request.json()), cors)
         if (route === 'POST /api/staff/voucher/extend') return json(await staffVoucherExtend(env.DB, me, await request.json()), cors)
@@ -959,6 +962,31 @@ async function staffAppointment(db, me, b, onNew = () => {}) {
 /** Every draw on a voucher: [voucher_id, date, amount, client, who, service] — what each voucher paid for. */
 const voucherUses = async (db) => (await db.prepare(`SELECT json_group_array(json_array(p.voucher_id, p.date, p.amount, a.client, a.employee_name, a.service)) AS j
   FROM (SELECT * FROM payments WHERE voucher_id IS NOT NULL ORDER BY date, created_at) p LEFT JOIN appointments a ON a.id = p.appointment_id`).first())?.j || '[]'
+
+/**
+ * Her payslip as it stands for the current pay month, worked out here so only the totals reach her
+ * phone (what each visit cost stays owner-only). Null once the month's real payslip has been saved.
+ */
+async function staffPayPreview(db, me) {
+  const startDay = parseInt((await db.prepare('SELECT value FROM settings WHERE key = ?1').bind(MONTH_START_SETTING).first())?.value, 10) || 1
+  const month = businessMonth(saToday(), startDay)
+  const period = monthRange(month, startDay)
+  const saved = await db.prepare('SELECT 1 AS x FROM payslips WHERE employee_id = ?1 AND month = ?2').bind(me.employeeId, month).first()
+  if (saved) return JSON.stringify({ month, period, done: true })
+  const emp = await recordOf(db, 'employees', 'id = ?1', me.employeeId)
+  let pay = {}
+  try { pay = JSON.parse(emp?.pay || '{}') || {} } catch { pay = {} }
+  if (!(Number(pay.basic) > 0) && !(Number(pay.commissionPct) > 0)) return JSON.stringify({ month, period, setUp: false })
+  const appts = ((await db.prepare(`SELECT ${cols('appointments')} FROM appointments WHERE employee_id = ?1 AND month = ?2`).bind(me.employeeId, month).all()).results || []).map(toAppt)
+  const leave = ((await db.prepare('SELECT * FROM leave WHERE employee_id = ?1').bind(me.employeeId).all()).results || [])
+    .map((r) => ({ id: r.id, employeeId: r.employee_id, type: r.type, from: r.from_date, to: r.to_date || r.from_date, hours: Number(r.hours) || 0, status: r.status || 'approved' }))
+  const d = draftPayslip({ emp: { id: me.employeeId, name: me.name, pay }, appts, leave, month, startDay, payDate: period.to })
+  const line = (x) => ({ label: x.label, amount: x.amount })
+  return JSON.stringify({
+    month, period, setUp: true, count: d.appts.count, gross: d.gross, totalDeductions: d.totalDeductions, net: d.net,
+    earnings: d.earnings.map(line), deductions: d.deductions.map(line),
+  })
+}
 
 /* ---- Gift vouchers: staff sell, void and extend them (every change is logged in history) ---- */
 const allVouchers = async (db) => JSON.parse((await db.prepare(arraysOf('vouchers')).first())?.j || '[]')

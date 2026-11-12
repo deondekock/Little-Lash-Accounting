@@ -458,6 +458,7 @@ export async function saveMyAppointment(input) {
   if (vouchers) { state.vouchers = vouchers; state.voucherUses = voucherUses || {} }
   return saved
 }
+export const loadPayPreview = () => api('staffPayPreview')
 export async function deleteMyAppointment(id) {
   const res = await api('deleteMyAppointment', id)
   all.value = all.value.filter((a) => a.id !== id)

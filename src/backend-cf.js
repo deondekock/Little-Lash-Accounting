@@ -1157,6 +1157,9 @@ export async function staffLoad() {
   return getInitialData()
 }
 
+/** Staff: her payslip so far this pay month (totals only, worked out by the Worker). */
+export const staffPayPreview = () => request('/api/staff/pay-preview')
+
 /** Staff: ask for leave, or change a request that's still waiting. */
 export async function requestLeave(input) {
   const rec = await request('/api/staff/leave', { method: 'POST', body: input })
