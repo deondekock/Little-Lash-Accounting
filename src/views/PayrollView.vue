@@ -9,6 +9,7 @@ import { all, state, employeeColor, openPicker, openPayslip, openLeave, openEmpl
 import { LEAVE_STATUS } from '../lib/schema.js'
 import { fmt, fmt0, initials, monthLabel, monthRange, shortDate, todayStr } from '../lib/format.js'
 import { draftPayslip, leaveBalance, sickBalance, familyBalance, leaveText, payDefaults } from '../lib/payroll.js'
+import { holidaysIn } from '../lib/holidays.js'
 
 const tab = computed({
   get: () => (state.payrollTab === 'leave' ? 'Leave' : 'Payslips'),
@@ -56,6 +57,9 @@ const savedSlips = computed(() => rows.value.filter((r) => r.slip).map((r) => r.
 
 /* ---------------- leave ---------------- */
 const today = todayStr()
+// The next few public holidays (same list the staff see).
+const holidays = [...holidaysIn(Number(today.slice(0, 4))), ...holidaysIn(Number(today.slice(0, 4)) + 1)].filter((h) => h.date >= today).slice(0, 5)
+const weekday = (d) => new Date(d + 'T12:00').toLocaleDateString('en-ZA', { weekday: 'short' })
 const balances = computed(() =>
   state.employees
     .filter((e) => e.active)
@@ -208,6 +212,14 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
         </button>
       </div>
       <div v-else class="card empty" style="padding: 18px">No leave booked ahead.</div>
+
+      <h4 class="section-label">Public holidays coming up</h4>
+      <div class="list card" style="padding: 4px 16px">
+        <div v-for="h in holidays" :key="h.date" class="list-row">
+          <div class="history-icon">🇿🇦</div>
+          <div class="grow"><div class="title">{{ h.name }}</div><div class="meta">{{ weekday(h.date) }} {{ shortDate(h.date) }} {{ h.date.slice(0, 4) }}</div></div>
+        </div>
+      </div>
 
       <template v-if="past.length">
         <h4 class="section-label">Taken</h4>
