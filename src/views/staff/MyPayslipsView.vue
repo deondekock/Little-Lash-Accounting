@@ -49,7 +49,7 @@ const showLines = ref(false)
       <div class="pp-head">
         <div>
           <div class="pp-title">{{ monthLabel(month) }}</div>
-          <div class="meta">{{ shortDate(period.from) }} – {{ shortDate(period.to) }} · day {{ Math.min(working.length, doneCount + (leftCount ? 1 : 0)) }} of {{ working.length }}</div>
+          <div class="meta">{{ shortDate(period.from) }} – {{ shortDate(period.to) }}</div>
         </div>
         <div v-if="preview?.setUp" class="pp-net"><b>{{ fmt(preview.net) }}</b><small>nett so far</small></div>
       </div>
@@ -57,13 +57,13 @@ const showLines = ref(false)
         <i v-for="d in days" :key="d.date" :class="d.state" :title="`${shortDate(d.date)}${d.leave ? ' · ' + d.leave : ''}`" />
       </div>
       <div class="meta">
-        {{ doneCount }} done · {{ leftCount }} to go<template v-if="leaveCount"> · {{ leaveCount }} on leave</template>
+        Day {{ Math.min(working.length, doneCount + (leftCount ? 1 : 0)) }} of {{ working.length }} · {{ doneCount }} done · {{ leftCount }} to go<template v-if="leaveCount"> · {{ leaveCount }} on leave</template>
       </div>
 
       <template v-if="preview?.setUp">
         <div class="pp-figs">
           <div><span>Earned so far</span><b>{{ fmt(preview.gross) }}</b></div>
-          <div><span>Tax &amp; UIF</span><b>− {{ fmt(preview.totalDeductions) }}</b></div>
+          <div><span>Tax &amp; UIF</span><b>−{{ fmt(preview.totalDeductions) }}</b></div>
           <div><span>From</span><b>{{ preview.count }} appt{{ preview.count === 1 ? '' : 's' }}</b></div>
         </div>
         <button class="link-btn" :aria-expanded="showLines" @click="showLines = !showLines">{{ showLines ? 'Hide' : 'See' }} how it adds up {{ showLines ? '▴' : '▾' }}</button>
