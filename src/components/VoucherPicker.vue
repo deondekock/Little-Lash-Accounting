@@ -14,8 +14,8 @@ const active = ref(0)
 const label = (v) => `${v.code}${v.buyer ? ' · ' + v.buyer : ''}`
 const exp = (v) => (v.expiresOn ? `exp ${v.expiresOn.slice(8)}/${v.expiresOn.slice(5, 7)}/${v.expiresOn.slice(2, 4)}` : '')
 const chosen = computed(() => liveVouchers.value.find((v) => v.id === model.value) || null)
-// The box shows the chosen voucher until she starts typing again.
-watch(chosen, (v) => { query.value = v ? label(v) : '' }, { immediate: true })
+// The box shows the chosen voucher; typing again un-picks it but must keep what she typed.
+watch(chosen, (v) => { if (v) query.value = label(v) }, { immediate: true })
 
 const suggestions = computed(() => {
   const q = looseKey(query.value)

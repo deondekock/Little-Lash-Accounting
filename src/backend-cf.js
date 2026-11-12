@@ -882,9 +882,28 @@ export const staffUpdateVoucherNotes = (input) => staffVoucherCall('/api/staff/v
 export async function deleteAppointment(id) {
   const a = db.appts.find((x) => x.id === id)
   if (!a) return true
-  await commit('delete', `Deleted ${a.client || 'client'} · ${fmt0(a.amount)} · ${a.date.slice(8)}/${a.date.slice(5, 7)}`, {
-    del: { appointments: [id] }, before: { appts: { [id]: a.rec } },
-  })
+  const now = new Date().toISOString()
+  const del = { appointments: [id] }
+  const put = {}
+  const before = { appts: { [id]: a.rec } }
+  // Its payment rows go too, and any voucher it drew on gets that money back (undo restores both).
+  const tenders = a.tenders || []
+  if (tenders.length) {
+    del.payments = tenders.map((t) => t.id)
+    before.pmts = Object.fromEntries(tenders.map((t) => [t.id, t.rec]))
+    const back = new Map()
+    for (const t of tenders) if (t.method === 'Voucher' && t.voucherId) back.set(t.voucherId, round2((back.get(t.voucherId) || 0) + t.amount))
+    for (const [vid, amt] of back) {
+      const vch = db.vouchers.find((x) => x.id === vid)
+      if (!vch) continue
+      const balance = round2(Math.min(vch.amount, vch.balance + amt))
+      ;(put.vouchers ||= []).push({ ...vch.rec, balance, status: vch.status === 'void' ? 'void' : balance > 0.005 ? 'active' : 'redeemed', updated_at: now, updated_by: user || null })
+      ;(before.vchr ||= {})[vid] = vch.rec
+    }
+  }
+  const drew = tenders.filter((t) => t.method === 'Voucher').map((t) => `voucher ${db.vouchers.find((x) => x.id === t.voucherId)?.code || ''} ${fmt0(t.amount)} returned`).join(', ')
+  await commit('delete', `Deleted ${a.client || 'client'} · ${fmt0(a.amount)} · ${a.date.slice(8)}/${a.date.slice(5, 7)}${drew ? ' · ' + drew : ''}`, { put, del, before })
+  attachPayments()
   return true
 }
 
@@ -1164,9 +1183,10 @@ export async function saveMyAppointment(input) {
 
 /** Staff: delete an appointment she added herself (within 24 hours). */
 export async function deleteMyAppointment(id) {
-  await request('/api/staff/appointment/delete', { method: 'POST', body: { id } })
+  const res = await request('/api/staff/appointment/delete', { method: 'POST', body: { id } })
   applyLocal({}, { appointments: [id] })
-  return true
+  if (res?.vouchers) { db.vouchers = res.vouchers.map((a) => toVoucher(fromArray('vouchers', a))); db.voucherUses = usesFromArrays(res.voucher_uses) }
+  return res?.vouchers ? { vouchers: currentVouchers(), voucherUses: currentVoucherUses() } : true
 }
 
 /** Owner: every change to one appointment (who, when, and how it was before). */

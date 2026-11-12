@@ -1022,11 +1022,31 @@ async function staffDeleteAppointment(db, me, b) {
   const fresh = Date.now() - Date.parse(existing.created_at || 0) < STAFF_DELETE_HOURS * 3600e3
   if (existing.created_by !== (me.actor || me.email) || !fresh) throw new HttpError(403, `You can only delete appointments you added in the last ${STAFF_DELETE_HOURS} hours. Ask the owner.`)
   await checkMonths(db, me, [existing.month])
-  await db.batch([
-    db.prepare('DELETE FROM appointments WHERE id = ?1').bind(existing.id),
-    logEntry(db, me, 'delete', `${me.name} deleted ${existing.client || 'client'} · ${fmt0(existing.amount)} · ${ddmm(existing.date)}`, { appts: { [existing.id]: existing } }),
-  ])
-  return JSON.stringify({ ok: true })
+  // Its payment rows go too, and any voucher it drew on gets that money back.
+  const pays = (await db.prepare(`SELECT ${cols('payments')} FROM payments WHERE appointment_id = ?1`).bind(existing.id).all()).results || []
+  const back = new Map()
+  for (const pr of pays) if (pr.voucher_id) back.set(pr.voucher_id, Math.round(((back.get(pr.voucher_id) || 0) + Number(pr.amount)) * 100) / 100)
+  const stmts = [db.prepare('DELETE FROM appointments WHERE id = ?1').bind(existing.id)]
+  const before = { appts: { [existing.id]: existing } }
+  if (pays.length) {
+    stmts.push(db.prepare('DELETE FROM payments WHERE appointment_id = ?1').bind(existing.id))
+    before.pmts = Object.fromEntries(pays.map((pr) => [pr.id, pr]))
+  }
+  const now = new Date().toISOString()
+  const returned = []
+  for (const [vid, amt] of back) {
+    const vch = await recordOf(db, 'vouchers', 'id = ?1', vid)
+    if (!vch) continue
+    const balance = Math.round(Math.min(Number(vch.amount), Number(vch.balance) + amt) * 100) / 100
+    stmts.push(db.prepare('UPDATE vouchers SET balance = ?2, status = ?3, updated_at = ?4, updated_by = ?5 WHERE id = ?1')
+      .bind(vid, balance, vch.status === 'void' ? 'void' : balance > 0.005 ? 'active' : 'redeemed', now, me.actor || me.email))
+    ;(before.vchr ||= {})[vid] = vch
+    returned.push(`voucher ${vch.code} ${fmt0(amt)} returned`)
+  }
+  stmts.push(logEntry(db, me, 'delete', `${me.name} deleted ${existing.client || 'client'} · ${fmt0(existing.amount)} · ${ddmm(existing.date)}${returned.length ? ' · ' + returned.join(', ') : ''}`, before))
+  await db.batch(stmts)
+  const vouchers = back.size ? JSON.parse(await (async () => (await db.prepare(arraysOf('vouchers')).first())?.j || '[]')()) : null
+  return JSON.stringify({ ok: true, ...(vouchers ? { vouchers, voucher_uses: JSON.parse(await voucherUses(db)) } : {}) })
 }
 
 /** Owners: every change to one appointment, newest first, with how it was before each change. */

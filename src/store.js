@@ -459,8 +459,9 @@ export async function saveMyAppointment(input) {
   return saved
 }
 export async function deleteMyAppointment(id) {
-  await api('deleteMyAppointment', id)
+  const res = await api('deleteMyAppointment', id)
   all.value = all.value.filter((a) => a.id !== id)
+  if (res?.vouchers) { state.vouchers = res.vouchers; state.voucherUses = res.voucherUses || {} }
 }
 export const openMyAppointment = (appt, prefill = null) => (state.modal = { type: 'myAppointment', data: appt ? { ...appt } : null, prefill })
 
@@ -619,8 +620,10 @@ export async function saveAppointment(data) {
 }
 
 export async function deleteAppointment(id) {
+  const hadVoucher = all.value.find((x) => x.id === id)?.tenders?.some((t) => t.method === 'Voucher')
   await api('deleteAppointment', id)
   all.value = all.value.filter((x) => x.id !== id)
+  if (hadVoucher) { state.vouchers = await api('currentVouchers'); state.voucherUses = await api('currentVoucherUses') }
 }
 
 /** Changes status and/or method on several appointments. Optimistic, so taps feel instant. */
