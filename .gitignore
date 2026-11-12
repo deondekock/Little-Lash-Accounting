@@ -9,3 +9,8 @@ dist/
 *.csv
 undefined/
 /*.png
+
+# Local Worker testing only (wrangler dev with a throwaway D1)
+worker/wrangler.local.toml
+worker/.dev.vars
+worker/.wrangler/
