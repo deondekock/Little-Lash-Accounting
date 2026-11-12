@@ -291,6 +291,35 @@ export function leaveBalance(emp, leave, onDate) {
   }
 }
 
+/**
+ * Annual leave month by month from `fromMonth` ('YYYY-MM'): the balance at each month's end after that
+ * month's accrual and the approved leave in it, plus any still-waiting requests (shown, not deducted).
+ * So she can see whether the leave she has in mind for a future month will be covered.
+ */
+export function leaveForecast(emp, leave, fromMonth, months = 12) {
+  const pay = emp.pay || {}
+  const { perDay } = leaveSettings(pay)
+  const mine = leave.filter((l) => l.employeeId === emp.id && l.type === 'Annual')
+  const out = []
+  let prev = null
+  let pending = 0 // waiting requests so far, carried forward
+  for (let i = 0; i < months; i++) {
+    const [y, m] = fromMonth.split('-').map(Number)
+    const d = new Date(Date.UTC(y, m - 1 + i, 1))
+    const month = d.toISOString().slice(0, 7)
+    const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).toISOString().slice(0, 10)
+    const b = leaveBalance(emp, leave, end) // accrued to the month's end, approved leave up to then deducted
+    const inMonth = mine.filter((l) => l.from.slice(0, 7) === month)
+    const approved = inMonth.filter((l) => l.status === 'approved').reduce((t, l) => t + l.hours, 0)
+    const waiting = inMonth.filter((l) => l.status === 'requested').reduce((t, l) => t + l.hours, 0)
+    const earned = prev ? round2(b.hours - prev + approved) : null // what this month added (null for the first row)
+    pending = round2(pending + waiting)
+    out.push({ month, end, hours: b.hours, days: b.days, earned, approved: round2(approved), waiting: round2(waiting), pending, ifApproved: round2(b.hours - pending), perDay })
+    prev = b.hours
+  }
+  return out
+}
+
 /** The owner has no set sick or family leave: just what she took in the last 12 months. */
 function ownerTaken(emp, leave, onDate, type, set) {
   const from = addMonths(onDate, -12)

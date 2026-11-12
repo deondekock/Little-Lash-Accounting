@@ -1,8 +1,9 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { state, openMyLeave } from '../../store.js'
 import { shortDate, todayStr } from '../../lib/format.js'
-import { leaveBalance, sickBalance, familyBalance, payDefaults } from '../../lib/payroll.js'
+import { leaveBalance, sickBalance, familyBalance, leaveForecast, payDefaults } from '../../lib/payroll.js'
+import { monthLabel } from '../../lib/format.js'
 import { LEAVE_STATUS } from '../../lib/schema.js'
 import { holidaysIn } from '../../lib/holidays.js'
 
@@ -14,6 +15,9 @@ const annual = computed(() => withPay.value && leaveBalance(withPay.value, state
 const sick = computed(() => withPay.value && sickBalance(withPay.value, state.leave, today))
 const family = computed(() => withPay.value && familyBalance(withPay.value, state.leave, today))
 const first = computed(() => (me.value?.name || '').split(' ')[0])
+// The next 12 months of annual leave: balance at each month's end, what's booked in it, what's still waiting.
+const forecast = computed(() => (annual.value?.start ? leaveForecast(withPay.value, state.leave, today.slice(0, 7), 12) : []))
+const showForecast = ref(false)
 
 const sorted = computed(() => [...state.leave].sort((a, b) => (a.from < b.from ? 1 : -1)))
 const waiting = computed(() => sorted.value.filter((l) => l.status === 'requested'))
@@ -44,6 +48,25 @@ const TAG = { requested: 'orange-tag', approved: 'green-tag', declined: 'red-tag
         <div class="meta">You earn {{ annual.perMonth }} days a month<template v-if="annual.bookedHours"> · {{ annual.bookedHours }} h booked ahead</template></div>
       </template>
       <div v-else class="meta">Your annual leave balance hasn't been set up yet.</div>
+      <template v-if="forecast.length">
+        <button class="link-btn" style="margin-top: 8px" :aria-expanded="showForecast" @click="showForecast = !showForecast">{{ showForecast ? 'Hide' : 'See' }} your leave month by month {{ showForecast ? '▴' : '▾' }}</button>
+        <table v-if="showForecast" class="leave-forecast">
+          <thead><tr><th>Month</th><th>Earned</th><th>Booked</th><th>Left at month end</th></tr></thead>
+          <tbody>
+            <tr v-for="(f, i) in forecast" :key="f.month" :class="{ waiting: f.pending, short: f.hours < 0 }">
+              <td>{{ monthLabel(f.month).replace(/ 20/, ' ’') }}<small v-if="i === 0"> · now {{ annual.hours }} h</small></td>
+              <td>{{ f.earned == null ? '' : '+' + f.earned + ' h' }}</td>
+              <td>
+                <template v-if="f.approved">−{{ f.approved }} h</template>
+                <small v-if="f.waiting" class="orange">{{ f.approved ? ' · ' : '' }}{{ f.waiting }} h waiting</small>
+                <template v-if="!f.approved && !f.waiting">—</template>
+              </td>
+              <td><b>{{ f.hours }} h</b> <small>({{ f.days }} d)</small><small v-if="f.pending" class="orange"> · {{ f.ifApproved }} h if approved</small></td>
+            </tr>
+          </tbody>
+        </table>
+        <div v-if="showForecast" class="meta" style="margin-top: 6px">Each month end includes that month's accrual. Public holidays aren't leave days.</div>
+      </template>
       <div v-if="sick && !sick.owner" class="leave-others">
         <div><span>🤒 Sick</span><b>{{ sick.hours }} h</b><small>of {{ sick.entitled }} h · until {{ shortDate(sick.to) }} {{ sick.to.slice(0, 4) }}</small></div>
         <div><span>👨‍👩‍👧 Family</span><b>{{ family.hours }} h</b><small>{{ family.eligible ? `of ${family.entitled} h · until ${shortDate(family.to)} ${family.to.slice(0, 4)}` : 'after 4 months' }}</small></div>

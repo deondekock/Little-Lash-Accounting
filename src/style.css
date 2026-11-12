@@ -1114,3 +1114,13 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .appt-filters { margin: -4px 0 6px; }
 .appt-filters .chips { padding-bottom: 6px; }
 .appt-filters .chips:last-child { padding-bottom: 10px; }
+
+/* Staff leave: month-by-month forecast */
+.leave-forecast { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+.leave-forecast th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 4px 6px 6px 0; border-bottom: 1px solid var(--line); }
+.leave-forecast td { padding: 7px 6px 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.leave-forecast tr:last-child td { border-bottom: 0; }
+.leave-forecast td:nth-child(2), .leave-forecast td:nth-child(3) { white-space: nowrap; }
+.leave-forecast small { color: var(--muted); font-size: 11.5px; }
+.leave-forecast tr.short b { color: var(--unpaid); }
+.leave-forecast tr.waiting td:last-child { color: var(--ink); }
