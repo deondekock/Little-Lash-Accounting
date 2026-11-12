@@ -97,6 +97,7 @@ const editPay = () => openEmployee(emp.value)
       <div><span>Commission {{ pct(c.rate) }} of {{ fmt(Math.max(0, c.normal - c.threshold)) }}</span><b>{{ fmt(c.normalCommission) }}</b></div>
       <div v-if="c.overtime"><span>Overtime {{ pct(c.otRate) }} of {{ fmt(c.overtime) }}</span><b>{{ fmt(c.overtimeCommission) }}</b></div>
       <label v-if="c.unpaid" class="calc-check"><input v-model="inputs.onlyPaid" type="checkbox"> Only count paid appointments ({{ fmt(c.unpaid) }} still unpaid)</label>
+      <div v-if="slip.unpaidLeave" class="orange"><span>Unpaid leave: {{ slip.unpaidLeave.days }} of {{ slip.unpaidLeave.workDays }} work days ({{ fmt(slip.unpaidLeave.full) }} ÷ {{ slip.unpaidLeave.workDays }} × {{ slip.unpaidLeave.days }})</span><b>− {{ fmt(slip.unpaidLeave.cut) }}</b></div>
     </div>
 
     <h4 class="section-label" style="margin-top: 18px">Earnings</h4>

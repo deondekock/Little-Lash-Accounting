@@ -4,7 +4,6 @@
  * deductions table, the totals. One page per payslip; several payslips make one file.
  */
 import { fmt, monthLabel, shortDate } from './format.js'
-import { salaryLabel } from './payroll.js'
 
 const ROSE = [0.627, 0.333, 0.361] // --brand
 const INK = [0.13, 0.11, 0.12]
@@ -122,7 +121,7 @@ export async function payslipPdf(slips) {
     for (let i = 0; i < n; i++) {
       const e = s.earnings[i]
       const d = s.deductions[i]
-      if (e) { text(i === 0 ? salaryLabel(e.label) : e.label, PAD, y, { size: 10, max: colW - 90 }); text(fmt(e.amount), mid - 12, y, { size: 10, align: 'right' }) }
+      if (e) { text(e.label, PAD, y, { size: 10, max: colW - 90 }); text(fmt(e.amount), mid - 12, y, { size: 10, align: 'right' }) }
       if (d) { text(d.label, mid + 12, y, { size: 10, max: colW - 90 }); text(fmt(d.amount), right, y, { size: 10, align: 'right' }) }
       y -= 16
       rule(y + 11)

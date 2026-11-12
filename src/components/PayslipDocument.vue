@@ -1,7 +1,6 @@
 <script setup>
 import { computed } from 'vue'
 import { fmt, monthLabel, shortDate } from '../lib/format.js'
-import { salaryLabel } from '../lib/payroll.js'
 
 /** A printable payslip (same layout as the salon's old Google Sheets payslip). */
 const props = defineProps({ slip: { type: Object, required: true } })
@@ -76,7 +75,7 @@ const rows = computed(() => {
       <thead><tr><th>Earnings</th><th /><th>Deductions</th><th /></tr></thead>
       <tbody>
         <tr v-for="([e, d], i) in rows" :key="i">
-          <td>{{ i === 0 && e ? salaryLabel(e.label) : e?.label }}</td><td class="n">{{ e ? fmt(e.amount) : '' }}</td>
+          <td>{{ e?.label }}</td><td class="n">{{ e ? fmt(e.amount) : '' }}</td>
           <td>{{ d?.label }}</td><td class="n">{{ d ? fmt(d.amount) : '' }}</td>
         </tr>
       </tbody>

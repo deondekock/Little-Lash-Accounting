@@ -155,6 +155,9 @@ async function remove() {
       <p v-else-if="form.type === 'Maternity'" class="muted-note">
         🤱 4 months in a row, from up to 4 weeks before the due date. You don't have to pay her for it: she claims from UIF.
       </p>
+      <p v-else-if="form.type === 'Unpaid'" class="muted-note">
+        💸 Her payslip for that month pays the basic salary for the work days she was there: basic ÷ work days in the pay period × days worked. Commission is unaffected.
+      </p>
       <p v-else-if="(form.type === 'Sick' || form.type === 'Family') && !emp?.pay?.engaged" class="muted-note orange">
         Add {{ emp?.name }}'s date engaged (Team → Edit → Payslip details) to see how much she has left.
       </p>

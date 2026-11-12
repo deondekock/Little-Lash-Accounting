@@ -397,7 +397,16 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
   const mine = appts.filter((a) => a.employeeId === emp.id && a.month === month)
   const c = commission(mine, pay, { onlyPaid })
   const num = (v) => (v === '' || v == null ? null : Number(v))
-  const basic = Number(pay.basic) || 0
+  const taken = leaveInMonth(emp.id, leave, month, startDay)
+  // Unpaid leave costs a day's share of the basic for each work day away: basic ÷ work days in the
+  // period × work days actually paid.
+  const set = leaveSettings(pay)
+  const periodWorkDays = workDays(period.from, period.to, weekDays(set.perWeek))
+  const unpaidHours = taken.filter((l) => l.type === 'Unpaid').reduce((s, l) => s + l.hours, 0)
+  const unpaidDays = Math.min(periodWorkDays, round2(unpaidHours / set.perDay))
+  const basicFull = Number(pay.basic) || 0
+  const unpaidCut = periodWorkDays > 0 && unpaidDays > 0 ? round2((basicFull / periodWorkDays) * unpaidDays) : 0
+  const basic = round2(basicFull - unpaidCut)
   const comm = num(over.commission) ?? c.normalCommission
   const ot = num(over.overtime) ?? c.overtimeCommission
   const extraTotal = extras.reduce((s, x) => s + (Number(x.amount) || 0), 0)
@@ -411,7 +420,6 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
   const otherDed = deductions.reduce((s, x) => s + (Number(x.amount) || 0), 0)
   const totalDed = round2(paye + uif + otherDed)
   const lb = leaveBalance({ ...emp, pay }, leave, period.to)
-  const taken = leaveInMonth(emp.id, leave, month, startDay)
   return {
     employeeId: emp.id,
     name: pay.fullName || emp.name,
@@ -420,8 +428,9 @@ export function draftPayslip({ emp, appts, leave, month, startDay, payDate, only
     payDate,
     pay,
     appts: c,
+    unpaidLeave: unpaidCut ? { days: unpaidDays, workDays: periodWorkDays, full: basicFull, cut: unpaidCut } : null,
     earnings: [
-      { label: salaryLabel(pay.salaryLabel), amount: basic },
+      { label: unpaidCut ? `${salaryLabel(pay.salaryLabel)} (${round2(periodWorkDays - unpaidDays)} of ${periodWorkDays} days)` : salaryLabel(pay.salaryLabel), amount: basic },
       { label: 'Commission', amount: comm, calc: c.normalCommission },
       { label: 'Overtime Commission', amount: ot, calc: c.overtimeCommission },
       ...extras.map((x) => ({ label: x.label || 'Other', amount: Number(x.amount) || 0 })),
