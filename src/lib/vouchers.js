@@ -1,13 +1,21 @@
 /** Gift voucher rules shared by the app and the Worker. */
 
-/** Default expiry: one year after the day it was sold. */
-export function defaultExpiry(soldOn) {
-  const [y, m, d] = String(soldOn).split('-').map(Number)
-  const end = new Date(Date.UTC(y + 1, m - 1, d))
-  // 29 Feb → 28 Feb the next year
-  if (end.getUTCMonth() !== m - 1) end.setUTCDate(0)
-  return end.toISOString().slice(0, 10)
+/**
+ * The same day of the month, `n` months on. A day the target month doesn't have (the 31st, or the
+ * 29th–31st for February) becomes that month's last day.
+ */
+export function addMonths(date, n) {
+  const [y, m, d] = String(date).split('-').map(Number)
+  const first = new Date(Date.UTC(y, m - 1 + n, 1))
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate()
+  first.setUTCDate(Math.min(d, last))
+  return first.toISOString().slice(0, 10)
 }
+
+export const DEFAULT_EXPIRY_MONTHS = 4
+
+/** Default expiry: four months after the day it was sold. */
+export const defaultExpiry = (soldOn) => addMonths(soldOn, DEFAULT_EXPIRY_MONTHS)
 
 /** Expired on `today` (a voucher is still good on its expiry day). */
 export const voucherExpired = (v, today) => !!(v.expiresOn && v.expiresOn < today)

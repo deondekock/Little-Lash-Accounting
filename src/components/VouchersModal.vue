@@ -3,12 +3,13 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import BaseModal from './BaseModal.vue'
 import SegmentedControl from './SegmentedControl.vue'
 import ClientInput from './ClientInput.vue'
+import ExpiryMonthSelect from './ExpiryMonthSelect.vue'
 import { state, sellVoucher, voidVoucher, deleteVoucher, extendVoucher, updateVoucherNotes, closeModal, toast, toastUndo, fail, senderName, phoneOf } from '../store.js'
 import { voucherImage } from '../lib/voucherImage.js'
 import { MESSAGES, openWhatsApp } from '../lib/whatsapp.js'
 import { clientKey } from '../lib/stats.js'
 import { METHODS, fmt, fmt0, shortDate, todayStr } from '../lib/format.js'
-import { defaultExpiry, voucherExpired } from '../lib/vouchers.js'
+import { defaultExpiry, voucherExpired, addMonths } from '../lib/vouchers.js'
 import { looseKey } from '../lib/stats.js'
 import Icon from './Icon.vue'
 
@@ -177,8 +178,10 @@ async function destroy(v) {
   }
 }
 function startExtend(v) {
-  const base = v.expiresOn && v.expiresOn > today ? v.expiresOn : today
-  extending.value = { id: v.id, code: v.code, expiresOn: defaultExpiry(base) }
+  // Suggest the first month-step after the current expiry (or after today, if it has lapsed) that is still in the future.
+  let n = 1
+  while (n < 36 && addMonths(v.soldOn, n) <= (v.expiresOn > today ? v.expiresOn : today)) n++
+  extending.value = { id: v.id, code: v.code, expiresOn: addMonths(v.soldOn, n) }
 }
 async function confirmExtend() {
   const { id, expiresOn } = extending.value
@@ -199,9 +202,9 @@ async function confirmExtend() {
       <div class="field"><label for="v-amt">Amount (R)</label><input id="v-amt" v-model="form.amount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00"></div>
       <div class="row2">
         <div class="field"><label for="v-date">Sold on</label><input id="v-date" v-model="form.soldOn" type="date" :max="today"></div>
-        <div class="field"><label for="v-exp">Expires on</label><input id="v-exp" v-model="form.expiresOn" type="date" :min="form.soldOn" @input="expiryTouched = true"></div>
+        <div class="field"><label for="v-exp">Expires after</label><ExpiryMonthSelect id="v-exp" v-model="form.expiresOn" :sold-on="form.soldOn" @change="expiryTouched = true" /></div>
       </div>
-      <p class="field-hint" style="margin-top: -6px">Vouchers are good for a year unless you choose another date.</p>
+      <p class="field-hint" style="margin-top: -6px">Vouchers are good for 4 months unless you choose otherwise. The day stays the same as the purchase day (or the month's last day).</p>
       <div class="field"><label>Paid with</label><SegmentedControl v-model="form.method" :options="METHODS" /></div>
       <div class="field">
         <label for="v-vnote">On the voucher (optional)</label>
@@ -241,8 +244,8 @@ async function confirmExtend() {
       </div>
 
       <div class="field">
-        <label for="v-view-exp">Expires on</label>
-        <input id="v-view-exp" v-model="edit.expiresOn" type="date" :min="current.soldOn">
+        <label for="v-view-exp">Expires after</label>
+        <ExpiryMonthSelect id="v-view-exp" v-model="edit.expiresOn" :sold-on="current.soldOn" />
         <div v-if="edit.expiresOn !== (current.expiresOn || '')" class="field-hint">The change is recorded on the voucher with your name and today's date.</div>
       </div>
       <div class="field">
@@ -319,7 +322,7 @@ async function confirmExtend() {
         </div>
         <div v-if="extending?.id === v.id" class="voucher-extend">
           <label :for="'v-ext-' + v.id">New expiry for {{ v.code }}</label>
-          <input :id="'v-ext-' + v.id" v-model="extending.expiresOn" type="date" :min="today">
+          <ExpiryMonthSelect :id="'v-ext-' + v.id" v-model="extending.expiresOn" :sold-on="v.soldOn" :months="36" />
           <button class="btn small" type="button" @click="confirmExtend">Save</button>
           <button class="btn small ghost" type="button" @click="extending = null">Cancel</button>
         </div>
