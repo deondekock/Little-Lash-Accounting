@@ -284,10 +284,6 @@ async function confirmExtend() {
     </template>
 
     <template v-else>
-    <div class="section-label" style="margin-top: 0">
-      <span>Vouchers</span>
-      <button class="btn small" type="button" @click="adding = true">+ New</button>
-    </div>
     <label class="search" style="margin-bottom: 10px">
       <Icon name="search" />
       <input v-model="query" type="search" placeholder="Search code, who paid, or note…" aria-label="Search vouchers">
@@ -345,7 +341,10 @@ async function confirmExtend() {
       </div>
     </Teleport>
 
-    <div class="modal-actions"><button class="btn ghost" @click="closeModal">Close</button></div>
+    <div class="modal-actions">
+      <button class="btn ghost" type="button" @click="closeModal">Close</button>
+      <button class="btn" type="button" @click="adding = true">+ New voucher</button>
+    </div>
     </template>
   </BaseModal>
 </template>
