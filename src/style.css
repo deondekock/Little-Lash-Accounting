@@ -1092,10 +1092,23 @@ code { background: var(--brand-soft); padding: 1px 5px; border-radius: 5px; }
 .voucher-pill button:active { background: rgba(255, 255, 255, 0.16); }
 .voucher-pill button.danger { color: #ffb3ad; }
 
-/* Voucher view: the action buttons above Save */
-.voucher-view-actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 8px; }
-.voucher-view-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
-.voucher-sell input[readonly] { color: var(--ink-2); background: var(--card-2); }
+/* Voucher view: a summary card of the fixed facts, then only the editable fields as inputs */
+.voucher-head { background: var(--card-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin-bottom: 16px; }
+.vh-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.vh-code { font-family: var(--font-serif); font-size: 22px; letter-spacing: .04em; }
+.vh-balance { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.vh-balance b { font-family: var(--font-serif); font-weight: 400; font-size: 30px; font-variant-numeric: tabular-nums; }
+.vh-balance span { color: var(--ink-2); font-size: 13px; }
+.vh-meter { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; margin: 8px 0 12px; }
+.vh-meter i { display: block; height: 100%; background: var(--brand); border-radius: 999px; }
+.vh-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 0; }
+.vh-facts dt { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.vh-facts dd { margin: 1px 0 0; font-size: 14.5px; }
+.vh-uses { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.vh-uses-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.voucher-view-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 6px 0 10px; }
+.voucher-view-actions .btn { padding: 10px 8px; font-size: 14px; display: inline-flex; align-items: center; gap: 6px; }
+.btn.danger-text { color: var(--danger, #c0453f); }
 
 /* Payments: the status / paid-with / team filter rows under the Appointments heading */
 .appt-filters { margin: -4px 0 6px; }
