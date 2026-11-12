@@ -112,7 +112,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
       </button>
 
       <p class="muted-note" style="margin: 0 0 10px">Commission on takings {{ shortDate(period.from) }} – {{ shortDate(period.to) }}</p>
-      <div class="list card" style="padding: 4px 0">
+      <div class="list card" style="padding: 4px 16px">
         <button v-for="r in rows" :key="r.e.id" class="list-row" @click="r.setUp || r.slip ? openPayslip(r.e.id) : openEmployee(r.e)">
           <div class="avatar sm" :style="{ background: employeeColor(r.e.id) }">{{ initials(r.e.name) }}</div>
           <div class="grow">
@@ -156,7 +156,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
     <template v-else>
       <template v-if="requests.length">
         <h4 class="section-label" style="margin-top: 0">Leave requests</h4>
-        <div class="list card" style="padding: 4px 0">
+        <div class="list card" style="padding: 4px 16px">
           <div v-for="l in requests" :key="l.id" class="list-row request-row">
             <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
             <div class="grow" @click="openLeave(l)">
@@ -204,7 +204,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
       </div>
 
       <h4 class="section-label">Coming up</h4>
-      <div v-if="upcoming.length" class="list card" style="padding: 4px 0">
+      <div v-if="upcoming.length" class="list card" style="padding: 4px 16px">
         <button v-for="l in upcoming" :key="l.id" class="list-row" @click="openLeave(l)">
           <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
           <div class="grow"><div class="title">{{ nameOf(l.employeeId) }} · {{ l.type }}</div><div class="meta">{{ range(l) }}{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
@@ -223,7 +223,7 @@ const TYPE_EMOJI = { Annual: '🌴', Sick: '🤒', Family: '👨‍👩‍👧',
 
       <template v-if="past.length">
         <h4 class="section-label">Taken</h4>
-        <div class="list card" style="padding: 4px 0">
+        <div class="list card" style="padding: 4px 16px">
           <button v-for="l in past" :key="l.id" class="list-row" @click="openLeave(l)">
             <div class="history-icon">{{ TYPE_EMOJI[l.type] }}</div>
             <div class="grow"><div class="title">{{ nameOf(l.employeeId) }} · {{ l.type }}</div><div class="meta">{{ range(l) }} {{ l.from.slice(0, 4) }}{{ l.notes ? ' · ' + l.notes : '' }}</div></div>
